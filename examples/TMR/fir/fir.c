@@ -75,7 +75,7 @@ int main(){
     int output[INPUTSIZE];
     int i;
     unsigned int total = 0;
-    for (i = 1; i <= INPUTSIZE; i++){
+    loop: for (i = 1; i <= INPUTSIZE; i++){
         output[i-1] = FIRFilterStreaming (i, coefficients, previous);
         total += output[i-1];
     }

@@ -1,8 +1,12 @@
-source ../../legup.tcl
-set_project CycloneII DE2 Tiger_SDRAM
+source ../config.tcl
+
+#set_parameter CLOCK_PERIOD 5
+
+set_parameter LOCAL_RAMS 1
+loop_pipeline "loop"
 
 set_parameter TMR 1
-set_parameter VOTER_MODE 1
+set_parameter VOTER_MODE 2
 # VOTER_MODE 0=output only,
 #            1=all reigisters,
 #            2=dest signal(fanin, phi),

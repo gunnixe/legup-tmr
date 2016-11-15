@@ -5,9 +5,9 @@
 #include <stdio.h>
 
 #define INPUTSIZE 1024
-#define EXPECTED_TOTAL 2048
+#define EXPECTED_TOTAL 2051
 
-int a[INPUTSIZE] = {[0 ... 1023] = 2};
+int a[INPUTSIZE] = {2,3,4,[3 ... 1023] = 2};
 
 int main(){
 
@@ -15,7 +15,7 @@ int main(){
     int i;
 	unsigned int r = 0;
 
-    loop: for (i = 0; i < INPUTSIZE; i++) {
+    loop: for (i = 0; i < INPUTSIZE; i++){
 		r += a[i];
     }
 	
