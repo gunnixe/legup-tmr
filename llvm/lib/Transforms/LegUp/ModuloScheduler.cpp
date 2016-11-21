@@ -757,10 +757,10 @@ int ModuloScheduler::getCycleRecMII(std::list<Instruction *> &path) {
         // operations is 0 then the recMII for that path will be 0...
         if (isa<PHINode>(I)) {
             cycleDelay++;
-			//// TMR - registered voter
-			//if (LEGUP_CONFIG->getParameterInt("TMR") && 
-			//    LEGUP_CONFIG->getParameterInt("VOTER_MODE")==4)
-			//	cycleDelay++;
+			// TMR - registered voter
+			if (LEGUP_CONFIG->getParameterInt("TMR") && 
+			    LEGUP_CONFIG->getParameterInt("VOTER_MODE")==4)
+				cycleDelay++;
         }
         File() << "delay: " << cycleDelay << " I: " << *I << "\n";
     }
