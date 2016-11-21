@@ -1,0 +1,37 @@
+Depth = 30;
+Width = 32;
+Address_radix = dec;
+Data_radix = hex;
+Content
+Begin
+0: 00000118;	-- decis_levl[0] = 280
+1: 00000240;	-- decis_levl[1] = 576
+2: 00000370;	-- decis_levl[2] = 880
+3: 000004B0;	-- decis_levl[3] = 1200
+4: 000005F0;	-- decis_levl[4] = 1520
+5: 00000748;	-- decis_levl[5] = 1864
+6: 000008A0;	-- decis_levl[6] = 2208
+7: 00000A18;	-- decis_levl[7] = 2584
+8: 00000B90;	-- decis_levl[8] = 2960
+9: 00000D30;	-- decis_levl[9] = 3376
+10: 00000EC8;	-- decis_levl[10] = 3784
+11: 00001090;	-- decis_levl[11] = 4240
+12: 00001258;	-- decis_levl[12] = 4696
+13: 00001450;	-- decis_levl[13] = 5200
+14: 00001650;	-- decis_levl[14] = 5712
+15: 00001890;	-- decis_levl[15] = 6288
+16: 00001AD0;	-- decis_levl[16] = 6864
+17: 00001D60;	-- decis_levl[17] = 7520
+18: 00001FF8;	-- decis_levl[18] = 8184
+19: 00002308;	-- decis_levl[19] = 8968
+20: 00002618;	-- decis_levl[20] = 9752
+21: 000029D8;	-- decis_levl[21] = 10712
+22: 00002D90;	-- decis_levl[22] = 11664
+23: 00003260;	-- decis_levl[23] = 12896
+24: 00003728;	-- decis_levl[24] = 14120
+25: 00003DE0;	-- decis_levl[25] = 15840
+26: 00004498;	-- decis_levl[26] = 17560
+27: 00004FE8;	-- decis_levl[27] = 20456
+28: 00005B38;	-- decis_levl[28] = 23352
+29: 00007FFF;	-- decis_levl[29] = 32767
+End;

@@ -1,0 +1,23 @@
+Depth = 16;
+Width = 32;
+Address_radix = dec;
+Data_radix = hex;
+Content
+Begin
+0: 00000000;	-- qq4_code4_table[0] = 0
+1: FFFFB018;	-- qq4_code4_table[1] = -20456
+2: FFFFCDA0;	-- qq4_code4_table[2] = -12896
+3: FFFFDCF8;	-- qq4_code4_table[3] = -8968
+4: FFFFE770;	-- qq4_code4_table[4] = -6288
+5: FFFFEF70;	-- qq4_code4_table[5] = -4240
+6: FFFFF5E8;	-- qq4_code4_table[6] = -2584
+7: FFFFFB50;	-- qq4_code4_table[7] = -1200
+8: 00004FE8;	-- qq4_code4_table[8] = 20456
+9: 00003260;	-- qq4_code4_table[9] = 12896
+10: 00002308;	-- qq4_code4_table[10] = 8968
+11: 00001890;	-- qq4_code4_table[11] = 6288
+12: 00001090;	-- qq4_code4_table[12] = 4240
+13: 00000A18;	-- qq4_code4_table[13] = 2584
+14: 000004B0;	-- qq4_code4_table[14] = 1200
+15: 00000000;	-- qq4_code4_table[15] = 0
+End;

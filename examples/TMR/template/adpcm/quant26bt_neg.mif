@@ -1,0 +1,38 @@
+Depth = 31;
+Width = 32;
+Address_radix = dec;
+Data_radix = hex;
+Content
+Begin
+0: 0000003F;	-- quant26bt_neg[0] = 63
+1: 0000003E;	-- quant26bt_neg[1] = 62
+2: 0000001F;	-- quant26bt_neg[2] = 31
+3: 0000001E;	-- quant26bt_neg[3] = 30
+4: 0000001D;	-- quant26bt_neg[4] = 29
+5: 0000001C;	-- quant26bt_neg[5] = 28
+6: 0000001B;	-- quant26bt_neg[6] = 27
+7: 0000001A;	-- quant26bt_neg[7] = 26
+8: 00000019;	-- quant26bt_neg[8] = 25
+9: 00000018;	-- quant26bt_neg[9] = 24
+10: 00000017;	-- quant26bt_neg[10] = 23
+11: 00000016;	-- quant26bt_neg[11] = 22
+12: 00000015;	-- quant26bt_neg[12] = 21
+13: 00000014;	-- quant26bt_neg[13] = 20
+14: 00000013;	-- quant26bt_neg[14] = 19
+15: 00000012;	-- quant26bt_neg[15] = 18
+16: 00000011;	-- quant26bt_neg[16] = 17
+17: 00000010;	-- quant26bt_neg[17] = 16
+18: 0000000F;	-- quant26bt_neg[18] = 15
+19: 0000000E;	-- quant26bt_neg[19] = 14
+20: 0000000D;	-- quant26bt_neg[20] = 13
+21: 0000000C;	-- quant26bt_neg[21] = 12
+22: 0000000B;	-- quant26bt_neg[22] = 11
+23: 0000000A;	-- quant26bt_neg[23] = 10
+24: 00000009;	-- quant26bt_neg[24] = 9
+25: 00000008;	-- quant26bt_neg[25] = 8
+26: 00000007;	-- quant26bt_neg[26] = 7
+27: 00000006;	-- quant26bt_neg[27] = 6
+28: 00000005;	-- quant26bt_neg[28] = 5
+29: 00000004;	-- quant26bt_neg[29] = 4
+30: 00000004;	-- quant26bt_neg[30] = 4
+End;

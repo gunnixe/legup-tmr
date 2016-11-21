@@ -1,0 +1,11 @@
+Depth = 4;
+Width = 32;
+Address_radix = dec;
+Data_radix = hex;
+Content
+Begin
+0: 0000031E;	-- wh_code_table[0] = 798
+1: FFFFFF2A;	-- wh_code_table[1] = -214
+2: 0000031E;	-- wh_code_table[2] = 798
+3: FFFFFF2A;	-- wh_code_table[3] = -214
+End;

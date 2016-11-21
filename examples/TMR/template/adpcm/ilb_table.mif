@@ -1,0 +1,39 @@
+Depth = 32;
+Width = 32;
+Address_radix = dec;
+Data_radix = hex;
+Content
+Begin
+0: 00000800;	-- ilb_table[0] = 2048
+1: 0000082D;	-- ilb_table[1] = 2093
+2: 0000085B;	-- ilb_table[2] = 2139
+3: 0000088A;	-- ilb_table[3] = 2186
+4: 000008B9;	-- ilb_table[4] = 2233
+5: 000008EA;	-- ilb_table[5] = 2282
+6: 0000091C;	-- ilb_table[6] = 2332
+7: 0000094F;	-- ilb_table[7] = 2383
+8: 00000983;	-- ilb_table[8] = 2435
+9: 000009B9;	-- ilb_table[9] = 2489
+10: 000009EF;	-- ilb_table[10] = 2543
+11: 00000A27;	-- ilb_table[11] = 2599
+12: 00000A60;	-- ilb_table[12] = 2656
+13: 00000A9A;	-- ilb_table[13] = 2714
+14: 00000AD6;	-- ilb_table[14] = 2774
+15: 00000B12;	-- ilb_table[15] = 2834
+16: 00000B50;	-- ilb_table[16] = 2896
+17: 00000B90;	-- ilb_table[17] = 2960
+18: 00000BD1;	-- ilb_table[18] = 3025
+19: 00000C13;	-- ilb_table[19] = 3091
+20: 00000C56;	-- ilb_table[20] = 3158
+21: 00000C9C;	-- ilb_table[21] = 3228
+22: 00000CE2;	-- ilb_table[22] = 3298
+23: 00000D2B;	-- ilb_table[23] = 3371
+24: 00000D74;	-- ilb_table[24] = 3444
+25: 00000DC0;	-- ilb_table[25] = 3520
+26: 00000E0D;	-- ilb_table[26] = 3597
+27: 00000E5C;	-- ilb_table[27] = 3676
+28: 00000EAC;	-- ilb_table[28] = 3756
+29: 00000EFE;	-- ilb_table[29] = 3838
+30: 00000F52;	-- ilb_table[30] = 3922
+31: 00000FA8;	-- ilb_table[31] = 4008
+End;

@@ -1,0 +1,13 @@
+Depth = 6;
+Width = 32;
+Address_radix = dec;
+Data_radix = hex;
+Content
+Begin
+0: 00000000;	-- dec_del_dhx[0] = 0
+1: 00000000;	-- dec_del_dhx[1] = 0
+2: 00000000;	-- dec_del_dhx[2] = 0
+3: 00000000;	-- dec_del_dhx[3] = 0
+4: 00000000;	-- dec_del_dhx[4] = 0
+5: 00000000;	-- dec_del_dhx[5] = 0
+End;

@@ -1,0 +1,23 @@
+Depth = 16;
+Width = 32;
+Address_radix = dec;
+Data_radix = hex;
+Content
+Begin
+0: FFFFFFC4;	-- wl_code_table[0] = -60
+1: 00000BE2;	-- wl_code_table[1] = 3042
+2: 000004AE;	-- wl_code_table[2] = 1198
+3: 0000021A;	-- wl_code_table[3] = 538
+4: 0000014E;	-- wl_code_table[4] = 334
+5: 000000AC;	-- wl_code_table[5] = 172
+6: 0000003A;	-- wl_code_table[6] = 58
+7: FFFFFFE2;	-- wl_code_table[7] = -30
+8: 00000BE2;	-- wl_code_table[8] = 3042
+9: 000004AE;	-- wl_code_table[9] = 1198
+10: 0000021A;	-- wl_code_table[10] = 538
+11: 0000014E;	-- wl_code_table[11] = 334
+12: 000000AC;	-- wl_code_table[12] = 172
+13: 0000003A;	-- wl_code_table[13] = 58
+14: FFFFFFE2;	-- wl_code_table[14] = -30
+15: FFFFFFC4;	-- wl_code_table[15] = -60
+End;

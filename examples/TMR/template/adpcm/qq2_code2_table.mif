@@ -1,0 +1,11 @@
+Depth = 4;
+Width = 32;
+Address_radix = dec;
+Data_radix = hex;
+Content
+Begin
+0: FFFFE310;	-- qq2_code2_table[0] = -7408
+1: FFFFF9B0;	-- qq2_code2_table[1] = -1616
+2: 00001CF0;	-- qq2_code2_table[2] = 7408
+3: 00000650;	-- qq2_code2_table[3] = 1616
+End;

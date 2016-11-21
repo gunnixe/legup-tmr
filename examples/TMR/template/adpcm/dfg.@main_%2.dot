@@ -1,0 +1,12 @@
+digraph {
+Node0x3ae0470[label="  %3 = shl i64 %indvar13, 2"];
+Node0x3ae0470 -> Node0x3ae0470[label="D:0.00ns L:0",color=blue];
+Node0x3ae05b0[label="  %4 = add i64 %3, zext (i32 ptrtoint ([..."];
+Node0x3ae05b0 -> Node0x3ae05b0[label="D:6.40ns L:0",color=blue];
+Node0x3ae06f0[label="  %5 = trunc i64 %4 to i32"];
+Node0x3ae06f0 -> Node0x3ae06f0[label="D:0.00ns L:0",color=blue];
+Node0x3ae0830[label="  %s.i.0 = inttoptr i32 %5 to i32*"];
+Node0x3ae0830 -> Node0x3ae0830[label="D:0.00ns L:0",color=blue];
+Node0x3ae0ab0[label="  %indvar.next14 = add i64 %indvar13, 1"];
+Node0x3ae0ab0 -> Node0x3ae0ab0[label="D:6.40ns L:0",color=blue];
+}
