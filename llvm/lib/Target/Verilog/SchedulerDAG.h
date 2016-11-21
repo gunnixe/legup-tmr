@@ -177,6 +177,9 @@ public:
 	bool foundBackwardDependency(const Instruction *use, const Instruction *def,
                const BasicBlock* predBB, const BasicBlock* succBB,
                unsigned siIdx, unsigned piIdx);
+	void findSCCBBs(Function &F);
+	void findTopologicalBBList(Function &F);
+	unsigned getInstructionArea(Instruction *instr);
 
 private:
     void regDataDeps(InstructionNode *iNode);

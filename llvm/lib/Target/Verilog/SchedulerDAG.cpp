@@ -23,6 +23,7 @@
 #include "llvm/Pass.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/CFG.h"
+#include "llvm/ADT/SCCIterator.h"
 
 using namespace llvm;
 using namespace legup;
@@ -238,13 +239,13 @@ void SchedulerDAG::updateDAGwithInst(Instruction *instr) {
     // set delay
     std::string opName = LEGUP_CONFIG->getOpNameFromInst(instr, alloc);
 	//if (isa<PHINode>(instr)) { // add voter delay to 'phi' instruction
-	if (LEGUP_CONFIG->getParameterInt("TMR") &&
-	   (LEGUP_CONFIG->getParameterInt("VOTER_MODE")==4 ||
-	   LEGUP_CONFIG->getParameterInt("VOTER_MODE")==5) &&
-	   iNode->getBackward()) { // add voter delay to backward edges
-		iNode->setAtMaxDelay();
-    } else if (opName.empty() || isMem(instr)) {
-    //if (opName.empty() || isMem(instr)) {
+	//if (LEGUP_CONFIG->getParameterInt("TMR") &&
+	//   (LEGUP_CONFIG->getParameterInt("VOTER_MODE")==4 ||
+	//   LEGUP_CONFIG->getParameterInt("VOTER_MODE")==5) &&
+	//   iNode->getBackward()) { // add voter delay to backward edges
+	//	iNode->setAtMaxDelay();
+    //} else if (opName.empty() || isMem(instr)) {
+    if (opName.empty() || isMem(instr)) {
         if (isa<GetElementPtrInst>(instr)) {
             if (LEGUP_CONFIG->getParameterInt("DONT_CHAIN_GET_ELEM_PTR")) {
                 iNode->setAtMaxDelay();
@@ -371,6 +372,55 @@ void SchedulerDAG::insertSyncVoter(Function &F) {
 	}
 }
 
+void SchedulerDAG::findSCCBBs(Function &F) {
+	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+		std::cerr << "\n\n# DEBUG_TMR=2 - SCC\n";
+	std::cerr << "SCCs for " << F.getName().str() << " in post-order:\n";
+	//for (scc_iterator<Function *> I = scc_begin(&F), IE = scc_end(&F); I != IE; ++I) {
+	for (scc_iterator<Function *> I = scc_begin(&F); !I.isAtEnd(); ++I) {
+		const std::vector<BasicBlock *> &SCCBBs = *I;
+		if (SCCBBs.size()==1)
+			continue;
+		std::cerr << "  SCC:\n";
+		for (std::vector<BasicBlock *>::const_iterator BBI = SCCBBs.begin(),
+		                                               BBIE = SCCBBs.end();
+		    BBI != BBIE; ++BBI) {
+			const BasicBlock* bb = *BBI;
+			std::cerr << "    ->" << getLabel(bb) << "\n";
+		}
+	}
+}
+
+unsigned SchedulerDAG::getInstructionArea(Instruction *instr) {
+	//InstructionNode *iNode = getInstructionNode(instr);
+   	std::string opName = LEGUP_CONFIG->getOpNameFromInst(instr, alloc);
+	if (opName.empty() || isMem(instr))
+		return 0;
+
+	Operation *Op = LEGUP_CONFIG->getOperationRef(opName);
+	assert(Op);
+
+	return Op->getLUTs();
+}
+
+void SchedulerDAG::findTopologicalBBList(Function &F) {
+	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+		std::cerr << "\n\n# DEBUG_TMR=2 - Topological Instruction List\n";
+	unsigned areaTotal = 0;
+	for (Function::iterator b = F.begin(); b != F.end(); ++b) {
+		for (BasicBlock::iterator I = b->begin(); I != b->end(); ++I) {
+			unsigned area = getInstructionArea(I);
+			if(areaTotal+area > 100) {
+				std::cerr<< "--------------\n";
+				areaTotal = 0;
+			}
+			areaTotal += area;
+			std::cerr << "  Area=(" << areaTotal << ") "
+			          << getLabel(b) << ":" << getValueStr(I) << endl;
+		}
+	}
+}
+
 bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
     assert(_alloc);
     alloc = _alloc;
@@ -390,6 +440,12 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
 	// detect backward edges and mark on them (setBackward())
 	if (LEGUP_CONFIG->getParameterInt("TMR"))
 		insertSyncVoter(F);
+
+	// print SCCBBs
+	findSCCBBs(F);
+
+	// print topologically sorted BB lists
+	findTopologicalBBList(F);
 
 	// set delay
     for (Function::iterator b = F.begin(), be = F.end(); b != be; b++) {
@@ -546,6 +602,7 @@ FiniteStateMachine *SchedulerMapping::createFSM(Function *F,
         for (BasicBlock::iterator instr = B->begin(), ie = B->end();
              instr != ie; ++instr) {
             Instruction *I = instr;
+    		InstructionNode *iNode = dag->getInstructionNode(I);
             unsigned order = getState(dag->getInstructionNode(I));
 
             orderStates[order]->push_back(I);
@@ -570,6 +627,12 @@ FiniteStateMachine *SchedulerMapping::createFSM(Function *F,
             if (isa<LoadInst>(I) && LEGUP_CONFIG->duplicate_load_reg()) {
                 delayState = 1; // Instead of normal 2 for loads
             }
+
+			//FIXME -- added for TMR
+			if (LEGUP_CONFIG->getParameterInt("TMR") &&
+			    LEGUP_CONFIG->getParameterInt("VOTER_MODE")==4 &&
+			    iNode->getBackward() && isa<PHINode>(I))
+				delayState = 1;
 
             if (delayState == 0) {
                 fsm->setEndState(I, orderStates[order]);

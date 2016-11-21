@@ -5603,7 +5603,7 @@ void GenerateRTL::generatePHICopiesForSuccessor(RTLSignal* condition,
 			}
 
 			signal = getOp(CurBlock, IV);
-			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2) {
+			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3) {
 				std::cerr << "Inst: " << getValueStr(I) << "\n";
 				std::cerr << "\tIncoming: " << getValueStr(IV) << "\n";
 				std::cerr << "\tsigName= " << signal->getName() << "\n";
@@ -5656,7 +5656,7 @@ void GenerateRTL::generateTransition(RTLSignal *condition, State* s) {
 		trueCond->setOperand(0, condition);
 		trueCond->setOperand(1, trueBranch);
 
-		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
 			std::cerr << "---true cond---\n";
 		generatePHICopiesForSuccessor(trueCond, s, s->getTransitionState(0));
 		curState->addCondition(trueCond,
@@ -5670,7 +5670,7 @@ void GenerateRTL::generateTransition(RTLSignal *condition, State* s) {
 		falseCond->setOperand(0, condition);
 		falseCond->setOperand(1, falseBranch);
 
-		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
 			std::cerr << "---false cond---\n";
 		generatePHICopiesForSuccessor(falseCond, s, s->getDefaultTransition());
 		curState->addCondition(falseCond,
@@ -5732,15 +5732,15 @@ void GenerateRTL::generateDatapath() {
 	bool shouldConnectMemorySignals = usesPthreads
 			|| ps->functionUsesMemory(Fp->getName());
 
-	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
-		std::cerr << "\n\n# DEBUG_TMR=2 - state information\n";
+	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
+		std::cerr << "\n\n# DEBUG_TMR=3 - state information\n";
 	for (FiniteStateMachine::iterator state = fsm->begin(), se = fsm->end();
 			state != se; ++state) {
 
 		//const BasicBlock *b = state->getBasicBlock();
 		//errs() << indent << "/* " << b->getParent()->getName() << ": " <<
 		//    b->getName() << "*/\n";
-		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
 			std::cerr << "-----" << state->getName() << "-----\n";
 
 		RTLOp *transition;

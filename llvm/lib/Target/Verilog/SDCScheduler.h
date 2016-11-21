@@ -255,6 +255,9 @@ class SchedulerMapping;
     bool isDependent(InstructionNode *source, InstructionNode *dest);
     void add_lp_constraints_for_sdc_multipump(Function *F);
 
+	//TMR
+	unsigned getNumInstructionCycles(Instruction *instr);
+
     unsigned* maxCycle;
     Allocation *alloc;
 

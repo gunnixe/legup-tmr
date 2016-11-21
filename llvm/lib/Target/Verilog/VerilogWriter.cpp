@@ -7248,6 +7248,9 @@ void VerilogWriter::printTmrSignal(const RTLSignal *sig, std::string postfix) {
 	//     sig->getBackward())) //sig->isPhi()))
 	//	Out << "/*synthesis preserve*/;\n";
 	//else 
+	if (postfix=="_r" && type=="reg")
+		Out << "/*synthesis preserve*/;\n";
+	else
 		Out << "/*synthesis keep*/;\n";
 
 	//if (postfix=="_r") {
