@@ -1,8 +1,0 @@
-digraph {
-Node0x3ad9b90[label="  %indvar13 = phi i64 [ %indvar.next14, ..."];
-Node0x3ad9b90 -> Node0x3ad9b90[label="D:0.00ns L:0",color=blue];
-Node0x3ad9b90 -> Node0x3ad9b90[label="D:0.00ns L:0",color=blue];
-Node0x3ad9b90 -> Node0x3ad9b90[label="D:0.00ns L:0",color=blue];
-Node0x3ad9cd0[label="  %exitcond15 = icmp eq i64 %indvar13, 2..."];
-Node0x3ad9cd0 -> Node0x3ad9cd0[label="D:3.28ns L:0",color=blue];
-}
