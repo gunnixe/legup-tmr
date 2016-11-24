@@ -60,6 +60,8 @@ public:
 	void printTmrVoter(const std::string sigName, const std::string lo, const std::string hi,
 	        bool isRegVoter=false);
 	bool isLocalMemSignal(const RTLSignal *signal);
+	bool needSyncVoter(const RTLSignal *signal);
+	bool needPartVoter(const RTLSignal *signal);
     //
     
 private:

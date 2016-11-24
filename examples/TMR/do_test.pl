@@ -15,50 +15,59 @@ if($fname eq "all") {
 
 sub do_work {
 	my $fname = $_[0];
-	&clean_work($fname);
 
 	system("mkdir -p output") if(!-d "outout");
 	my $report_name = "output/".$fname.".rpt";
 	open(FRH, '>', $report_name) or die "cannot open '$report_name' $!";
 	
-	for(my $i=0; $i<=5; $i++) {
+	my $scenario_cnt = 0;
+	open(FSH, '<', "scenario.txt") or die "cannot open 'scenario.txt' $!";
+	while(<FSH>) {
+		chomp;
+		next if /^#/; #discard comments
+
+		if(m/^\d \d \d \d \d$/) {
+			@arg_list = split(/ /, $_, 5);
+			my ($tmr, $smode, $pmode, $lram, $pipe) = @arg_list; 
+
+			# LegUp4.0 does not support complex data dependency analysis.
+			# Thus, LegUp4.0 fails for pieplining.
+			# - need to skip several example including qsort and fft.
+			if(($fname eq "qsort") || ($fname eq "fft")) {
+				if(($lram==1) || ($pipe==1)) {
+					next;
+				}
+			}
+
+			# prepare work dir
+			my $cname = $fname."_".$scenario_cnt;
+			system("rm -rf output/$cname");
+
+			system("mkdir -p output") if(!-d "output");
+			system("cp -r template/$fname output/$cname");
+			chdir "output/$cname";
+
+			&change_config(@arg_list);
+		
+			# do simulation
+			system("make; make v | tee vsim.log;");
+			system("make p; make f;");
 	
-		# prepare work dir
-		my $cname = $fname."_".$i;
-		system("mkdir -p output") if(!-d "output");
-		system("cp -r template/$fname output/$cname");
-		chdir "output/$cname";
-	
-		if($i==0) { #no TMR
-			&change_config(0,0);
-		} else { #TMR with Mode=$i-1
-			&change_config(1,$i-1);
+			# finalize work dir
+			&summary(($cname, @arg_list));
+			chdir "../../";
+
+			$scenario_cnt = $scenario_cnt + 1;
 		}
-	
-		# do simulation
-		system("make; make v | tee vsim.log;");
-		system("make p; make f;");
-	
-		# finalize work dir
-		&summary($fname, $i);
-		chdir "../../";
 	}
-	
+	close(FSH);
 	close(FRH);
 }
 
-sub clean_work {
-	for(my $i=0; $i<=5; $i++) {
-		my $cname = $_[0]."_".$i;
-		system("rm -rf output/$cname");
-	}
-}
-
 sub summary {
-	my ($fname, $i) = @_;
-	my $tmr = ($i==0)? 0 : 1;
-	my $voter_mode = ($i==0)? 0 : $i-1;
-	print FRH "----- TMR=$tmr, VOTER_MODE=$voter_mode -----\n";
+	my ($cname, $tmr, $svoter_mode, $pvoter_mode, $local_ram, $pipeline) = @_;
+	print FRH "#----- foler_name=$cname, TMR=$tmr, SYNC_VOTER_MODE=$svoter_mode, PART_VOTER_MODE=$pvoter_mode -----\n";
+	print FRH "#-----     LOCAL_RAM=$local_ram, pipeline=$pipeline -----\n";
 
 	open(FH, '<', "vsim.log") or die "cannot open 'vsim.log' $!";
 	while(<FH>) {
@@ -106,15 +115,25 @@ sub summary {
 }
 
 sub change_config {
-	($tmr, $voter_mode) = @_;
+	my ($tmr, $smode, $pmode, $lram, $pipe) = @_;
 	open(FH, '+<', "config.tcl") or die "cannot open 'config.tcl' $!";
 	my $out = '';
 	while(<FH>) {
 		chomp;
 		if(m/^set_parameter TMR \d$/) {
 			$out .= "set_parameter TMR $tmr\n";
-		} elsif(m/^set_parameter VOTER_MODE \d$/) {
-			$out .= "set_parameter VOTER_MODE $voter_mode\n";
+		} elsif(m/^set_parameter SYNC_VOTER_MODE \d$/) {
+			$out .= "set_parameter SYNC_VOTER_MODE $smode\n";
+		} elsif(m/^set_parameter PART_VOTER_MODE \d$/) {
+			$out .= "set_parameter PART_VOTER_MODE $pmode\n";
+		} elsif(m/set_parameter LOCAL_RAMS \d$/) {
+			$out .= "set_parameter LOCAL_RAMS $lram\n";
+		} elsif(m/loop_pipeline \"loop\"$/) {
+			if($pipe==0) {
+				$out .= "#loop_pipeline \"loop\"\n";
+			} else {
+				$out .= "loop_pipeline \"loop\"\n";
+			}
 		} else {
 			$out .= "$_\n";
 		}

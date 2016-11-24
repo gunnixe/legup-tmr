@@ -6505,6 +6505,7 @@ RTLModule* GenerateRTL::generateRTL(MinimizeBitwidth *_MBW) {
 
 void GenerateRTL::updateVoterSignal(SchedulerDAG *dag) {
 
+	// synchronization voter check
 	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
 		std::cerr << "\n\n# DEBUG_TMR=2 - Backward signal\n";
 
@@ -6515,8 +6516,8 @@ void GenerateRTL::updateVoterSignal(SchedulerDAG *dag) {
 		if (iNode->getBackward()) {
 			RTLSignal *sig_wire = rtl->find(verilogName(*I));
 			RTLSignal *sig_reg = rtl->find(verilogName(*I) + "_reg");
-			sig_wire->setBackward();
-			sig_reg->setBackward();
+			sig_wire->setVoter(1);
+			sig_reg->setVoter(1);
 
 			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
 				std::cerr << "    " << getValueStr(I) << endl;
@@ -6527,9 +6528,28 @@ void GenerateRTL::updateVoterSignal(SchedulerDAG *dag) {
 		//	if (Instruction *use = dyn_cast<Instruction>(*i)) {
 		//		std::string wire = verilogName(*use);
 		//		RTLSignal *sig = rtl->find(wire);
-		//		sig->setBackward();
+		//		sig->setVoter(1);
 		//	}
 		//}
+	}
+
+	// partitioning voter check
+	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
+		std::cerr << "\n\n# DEBUG_TMR=2 - Partitioned signal\n";
+
+	for (inst_iterator i = inst_begin(Fp), e = inst_end(Fp); i != e; ++i) {
+        Instruction *I = &*i;
+		InstructionNode *iNode = dag->getInstructionNode(I);
+
+		if (iNode->getPartition()) {
+			RTLSignal *sig_wire = rtl->find(verilogName(*I));
+			RTLSignal *sig_reg = rtl->find(verilogName(*I) + "_reg");
+			sig_wire->setVoter(2);
+			sig_reg->setVoter(2);
+
+			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
+				std::cerr << "    " << getValueStr(I) << endl;
+		}
 	}
 }
 

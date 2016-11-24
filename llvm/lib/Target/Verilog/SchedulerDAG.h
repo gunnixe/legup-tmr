@@ -29,7 +29,8 @@ class LegupConfig;
 /// @brief Legup Instruction container class
 class InstructionNode {
 public:
-    InstructionNode (Instruction *I) : inst(I), backwardEdge(false) {}
+    InstructionNode (Instruction *I) : inst(I),
+	    backwardEdge(false), partitionEdge(false) {}
 
     typedef SmallVector<InstructionNode*, 3> depType;
     typedef depType::iterator iterator;
@@ -132,6 +133,8 @@ public:
 	// voter
 	void setBackward() { backwardEdge = true; }
 	bool getBackward() { return backwardEdge; }
+	void setPartition() { partitionEdge = true; }
+	bool getPartition() { return partitionEdge; }
 
 private:
     depType backDepInsts;
@@ -152,6 +155,7 @@ private:
 
 	// voter
 	bool backwardEdge;
+	bool partitionEdge;
 };
 
 /// LegupSchedulerPass - Builds memory dependencies and Instruction to
@@ -180,6 +184,18 @@ public:
 	void findSCCBBs(Function &F);
 	void findTopologicalBBList(Function &F);
 	unsigned getInstructionArea(Instruction *instr);
+	void findAllPaths(Function &F);
+	void findAllPaths(std::vector<const BasicBlock *> path, const BasicBlock *current);
+	bool isBackwardEdge(std::pair<const BasicBlock*, const BasicBlock*> edge);
+	void insertPartitionVoter(Function &F);
+	void runToposort(const Function &F);
+	bool recursiveDFSToposort(const BasicBlock *BB,
+               DenseMap<const BasicBlock *, int> &colorMap,
+               std::vector<const BasicBlock *> &sortedBBs);
+
+	// TMR
+	SmallVector<std::pair<const BasicBlock*, const BasicBlock*>, 32> BackEdges;
+	std::queue<std::vector<const BasicBlock*> > DAGPaths;
 
 private:
     void regDataDeps(InstructionNode *iNode);

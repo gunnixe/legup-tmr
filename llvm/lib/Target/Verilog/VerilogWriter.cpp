@@ -6565,6 +6565,31 @@ bool VerilogWriter::isLocalMemSignal(const RTLSignal *signal) {
 	return false;
 }
 
+bool VerilogWriter::needSyncVoter(const RTLSignal *signal) {
+	bool isReg = signal->isReg();
+	bool isBackward = (signal->getVoter()==1);
+	int syncVoterMode = LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE");
+
+	if (((syncVoterMode==1) && isReg) ||
+	    ((syncVoterMode==2) && isReg && isBackward) ||
+	    ((syncVoterMode==3) && isBackward) ||
+	    ((syncVoterMode==4) && isReg && isBackward) ) {
+		return true;
+	}
+	return false;
+}
+
+bool VerilogWriter::needPartVoter(const RTLSignal *signal) {
+	bool isReg = signal->isReg();
+	bool isPartitionBoundary = (signal->getVoter()==2);
+	int partVoterMode = LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE");
+
+	if ((partVoterMode==1) && isPartitionBoundary && isReg) {
+		return true;
+	}
+	return false;
+}
+
 void VerilogWriter::printDeclaration(const RTLSignal *signal, bool testBench) {
     std::string type = signal->getType();
     if (!type.empty()) {
@@ -6608,20 +6633,16 @@ void VerilogWriter::printDeclaration(const RTLSignal *signal, bool testBench) {
     	Out << "\n";
 		printTmrSignal(signal, "_r");
 
-		int voterMode = LEGUP_CONFIG->getParameterInt("VOTER_MODE");
-		bool isReg = signal->isReg();
-		bool isBackward = signal->getBackward();
 		// FIXME - For the local mem, always non-registered voters are inserted
 		bool isRegVoter = (!isLocalMemSignal(signal) && 
-		                   (signal->getName()!="cur_state" && voterMode==4));
+		                   (signal->getName()!="cur_state") && 
+		                   !needPartVoter(signal) && 
+		                   (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4));
 
-		if ((signal->getName()=="cur_state") ||
-		    (isLocalMemSignal(signal)) ||
-		    ((voterMode==1) && isReg) ||
-		    ((voterMode==2) && isReg && isBackward) ||
-		    ((voterMode==3) && isBackward) ||
-		    ((voterMode==4) && isReg && isBackward) ||
-		    ((voterMode==5) && isBackward)) {
+		if ((signal->getName()=="cur_state")
+		         || isLocalMemSignal(signal)
+			     || needSyncVoter(signal)
+		         || needPartVoter(signal)) {
 			printTmrSignal(signal, "_v");
 			printTmrVoter(signal->getName(), lo, hi, isRegVoter);
 		}
@@ -7244,13 +7265,13 @@ void VerilogWriter::printTmrSignal(const RTLSignal *sig, std::string postfix) {
    	Out << sig->getName() << postfix << "2 ";
 	//if ((postfix=="_r" && type=="reg") || 
 	//    (LEGUP_CONFIG->getParameterInt("TMR") &&
-	//     LEGUP_CONFIG->getParameterInt("VOTER_MODE")==1 &&
+	//     LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==1 &&
 	//     sig->getBackward())) //sig->isPhi()))
 	//	Out << "/*synthesis preserve*/;\n";
 	//else 
-	if (postfix=="_r" && type=="reg")
-		Out << "/*synthesis preserve*/;\n";
-	else
+	//if (postfix=="_r" && type=="reg")
+	//	Out << "/*synthesis preserve*/;\n";
+	//else
 		Out << "/*synthesis keep*/;\n";
 
 	//if (postfix=="_r") {

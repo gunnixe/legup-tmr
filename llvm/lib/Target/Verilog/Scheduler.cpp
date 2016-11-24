@@ -29,7 +29,7 @@ unsigned Scheduler::getNumInstructionCycles(Instruction *instr) {
 
 	// TMR - insert pipelined voter
 	//if (LEGUP_CONFIG->getParameterInt("TMR")) {
-	//	//if (LEGUP_CONFIG->getParameterInt("VOTER_MODE")==1 && isa<PHINode>(instr))
+	//	//if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==1 && isa<PHINode>(instr))
 	//	//	return 1;
 	//	if (isa<LoadInst>(instr))
 	//		return 2;

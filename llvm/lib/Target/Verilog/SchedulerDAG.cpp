@@ -24,11 +24,82 @@
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/CFG.h"
 #include "llvm/ADT/SCCIterator.h"
+#include "llvm/ADT/PostOrderIterator.h"
 
 using namespace llvm;
 using namespace legup;
 
 namespace legup {
+
+bool SchedulerDAG::recursiveDFSToposort(const BasicBlock *BB,
+			DenseMap<const BasicBlock *, int> &colorMap,
+			std::vector<const BasicBlock *> &sortedBBs) {
+	colorMap[BB] = 1;
+	// For demonstration, using the lowest-level APIs here. A BB's
+	// successors are determined by looking at its terminator instruction.
+	const TerminatorInst *TInst = BB->getTerminator();
+	for (unsigned I = 0, NSucc = TInst->getNumSuccessors(); I < NSucc; ++I) {
+		BasicBlock *Succ = TInst->getSuccessor(I);
+		int succColor = colorMap[Succ];
+		if (succColor == 0) {
+			if (!recursiveDFSToposort(Succ, colorMap, sortedBBs))
+				return false;
+		} else if (succColor == 1) {
+			// This detects a cycle because grey vertices are all
+			// ancestors of the currently explored vertex (in other words,
+			// they're "on the stack").
+			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2) {
+				errs() << " Detected cycle: edge from " << getLabel(BB)
+				       << " to " << getLabel(Succ) << "\n";
+			}
+			continue;
+			//return false;
+		}
+	}
+	// This BB is finished (fully explored), so we can add it to the
+	// vector.
+	colorMap[BB] = 2;
+	sortedBBs.push_back(BB);
+	return true;
+}
+
+void SchedulerDAG::runToposort(const Function &F) {
+	// Color marks per vertex (BB).
+	// Collects vertices (BBs) in "finish" order. The first finished vertex is
+	// first, and so on.
+	typedef std::vector<const BasicBlock *> BBVector;
+	DenseMap<const BasicBlock *, int> colorMap;
+	BBVector sortedBBs;
+
+	// Helper function to recursively run topological sorot from a given BB.
+	// Returns true if the sort succeeded and false otherwise; topological
+	// sort may fail if, for example, the graph is not a DAG (detected
+	// a cycle).
+	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+		errs() << "\n\n# DEBUG_TMR=2 - Topological sort of " << F.getName() << ":\n";
+	// Initialize the color map by marking all the vertices white.
+	for (Function::const_iterator I = F.begin(), IE = F.end(); I != IE; ++I) {
+		colorMap[I] = 0;
+	}
+
+	// The BB graph has a single entry vertex from which the other BBs should
+	// be discoverable - the function entry block.
+	bool success = recursiveDFSToposort(&F.getEntryBlock(), colorMap, sortedBBs);
+	if (success) {
+		// Now we have all the BBs inside sortedBBs in reverse topological
+		// order.
+		for (BBVector::const_reverse_iterator RI = sortedBBs.rbegin(),
+		                                      RE = sortedBBs.rend();
+		                                      RI != RE; ++RI) {
+			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+				errs() << " " << getLabel(*RI) << "\n";
+		}
+	} else {
+		errs() << " Sorting failed\n";
+	}
+
+	DAGPaths.push(sortedBBs);
+}
 
 // Add dependencies for all the operands of iNode
 // ie. %3 = add %1, %2
@@ -240,8 +311,8 @@ void SchedulerDAG::updateDAGwithInst(Instruction *instr) {
     std::string opName = LEGUP_CONFIG->getOpNameFromInst(instr, alloc);
 	//if (isa<PHINode>(instr)) { // add voter delay to 'phi' instruction
 	//if (LEGUP_CONFIG->getParameterInt("TMR") &&
-	//   (LEGUP_CONFIG->getParameterInt("VOTER_MODE")==4 ||
-	//   LEGUP_CONFIG->getParameterInt("VOTER_MODE")==5) &&
+	//   (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4 ||
+	//   LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==5) &&
 	//   iNode->getBackward()) { // add voter delay to backward edges
 	//	iNode->setAtMaxDelay();
     //} else if (opName.empty() || isMem(instr)) {
@@ -320,7 +391,7 @@ void SchedulerDAG::insertSyncVoter(const BasicBlock* pred, const BasicBlock* suc
 	     si != succ->end(); si++) {
 		const Instruction *i2 = si;
 		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
-			std::cerr << "    INSTRUCTION:" << getValueStr(i2) << endl;
+			errs() << "    INSTRUCTION:" << getValueStr(i2) << "\n";
    		for (User::const_op_iterator i = i2->op_begin(), e = i2->op_end(); i != e;
    		     ++i) {
 			const Instruction *use = dyn_cast<Instruction>(*i);
@@ -333,15 +404,15 @@ void SchedulerDAG::insertSyncVoter(const BasicBlock* pred, const BasicBlock* suc
 				const Instruction *i1 = pi;
 				if (foundBackwardDependency(use, i1, pred, succ, siIdx, piIdx)) {
 					if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
-						std::cerr << "      <-" << getValueStr(i1) << endl;
+						errs() << "      <-" << getValueStr(i1) << "\n";
 					//add backward information to InstructionNode
 					InstructionNode* iNode = getInstructionNode(const_cast<Instruction*>(i2));
 					InstructionNode* depNode = getInstructionNode(const_cast<Instruction*>(i1));
        				iNode->addBackDepInst(depNode);
        				depNode->addBackUseInst(iNode);
 
-					if (LEGUP_CONFIG->getParameterInt("VOTER_MODE")==3 ||
-					    LEGUP_CONFIG->getParameterInt("VOTER_MODE")==5)
+					if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==3)// ||
+					    //LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==5)
 						depNode->setBackward(); //def
 					else
 						iNode->setBackward(); //use(phi)
@@ -354,39 +425,33 @@ void SchedulerDAG::insertSyncVoter(const BasicBlock* pred, const BasicBlock* suc
 }
 
 void SchedulerDAG::insertSyncVoter(Function &F) {
-
-	// added to add voter to backedges
-	SmallVector<std::pair<const BasicBlock*, const BasicBlock*>, 32> Edges;
-	FindFunctionBackedges(F, Edges);
-
 	// add voter to the instruction which has backward edges
 	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
-		std::cerr << "\n\n# DEBUG_TMR=2 - Backward Edges\n";
-	for (unsigned i = 0, e = Edges.size(); i != e; ++i) {
-		const BasicBlock *succ = Edges[i].second;
-		const BasicBlock *pred = Edges[i].first;
+		errs() << "\n\n# DEBUG_TMR=2 - Backward Edges\n";
+	for (unsigned i = 0, e = BackEdges.size(); i != e; ++i) {
+		const BasicBlock *succ = BackEdges[i].second;
+		const BasicBlock *pred = BackEdges[i].first;
 
 		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
-			std::cerr << "  [" << i << "] " << getLabel(succ) << "<-" << getLabel(pred) << endl;
+			errs() << "  [" << i << "] " << getLabel(succ) << "<-" << getLabel(pred) << "\n";
 		insertSyncVoter(pred, succ);
 	}
 }
 
 void SchedulerDAG::findSCCBBs(Function &F) {
 	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
-		std::cerr << "\n\n# DEBUG_TMR=2 - SCC\n";
-	std::cerr << "SCCs for " << F.getName().str() << " in post-order:\n";
+		errs() << "\n\n# DEBUG_TMR=2 - SCC\n";
+	errs() << "SCCs for " << F.getName() << " in post-order:\n";
 	//for (scc_iterator<Function *> I = scc_begin(&F), IE = scc_end(&F); I != IE; ++I) {
 	for (scc_iterator<Function *> I = scc_begin(&F); !I.isAtEnd(); ++I) {
 		const std::vector<BasicBlock *> &SCCBBs = *I;
 		if (SCCBBs.size()==1)
 			continue;
-		std::cerr << "  SCC:\n";
+		errs() << "  SCC:\n";
 		for (std::vector<BasicBlock *>::const_iterator BBI = SCCBBs.begin(),
 		                                               BBIE = SCCBBs.end();
 		    BBI != BBIE; ++BBI) {
-			const BasicBlock* bb = *BBI;
-			std::cerr << "    ->" << getLabel(bb) << "\n";
+			errs() << "    ->" << getLabel(*BBI) << "\n";
 		}
 	}
 }
@@ -403,21 +468,135 @@ unsigned SchedulerDAG::getInstructionArea(Instruction *instr) {
 	return Op->getLUTs();
 }
 
+bool SchedulerDAG::isBackwardEdge(std::pair<const BasicBlock*, const BasicBlock*> edge) {
+	for (unsigned i = 0, e = BackEdges.size(); i != e; ++i) {
+		if (edge == BackEdges[i])
+			return true;
+	}
+
+	return false;
+}
+
+void SchedulerDAG::findAllPaths(std::vector<const BasicBlock *> path, const BasicBlock *current) {
+	path.push_back(current);
+
+	const TerminatorInst *tInst = current->getTerminator();
+	if (tInst->getNumSuccessors()==0) {
+		DAGPaths.push(path);
+	}
+
+	for (unsigned i = 0, nSucc = tInst->getNumSuccessors(); i < nSucc; ++i) {
+		BasicBlock *succ = tInst->getSuccessor(i);
+		std::pair<const BasicBlock*, const BasicBlock*> edge;
+		edge = std::make_pair(current, succ);
+		if (!isBackwardEdge(edge))
+			findAllPaths(path, succ);
+	}
+}
+
+void SchedulerDAG::findAllPaths(Function &F) {
+	std::vector<const BasicBlock *> path;
+	findAllPaths(path, &F.getEntryBlock());
+}
+
 void SchedulerDAG::findTopologicalBBList(Function &F) {
+	// Topologically sorted list - NOT consider backward edges
+	//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+	//	errs() << "\n\n# DEBUG_TMR=2 - Find all paths\n";
+	//errs() << "Basic blocks of " << F.getName() << " in post-order:\n";
+	//for (po_iterator<BasicBlock *> I = po_begin(&F.getEntryBlock()),
+	//                               IE = po_end(&F.getEntryBlock());
+	//                               I != IE; ++I) {
+	//	errs() << " " << getLabel(*I) << "\n";
+	//}
+
 	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
-		std::cerr << "\n\n# DEBUG_TMR=2 - Topological Instruction List\n";
+		errs() << "\n\n# DEBUG_TMR=2 - Topological Instruction List\n";
+
+	// Topologically sorted list - consider backward edges
+	//runToposort(F);
+
+	// Topologically sorted list - skip backward edges
+	std::vector<const BasicBlock *> path;
+	errs() << "Basic blocks of " << F.getName() << " in post-order:\n";
+	for (po_iterator<BasicBlock *> I = po_begin(&F.getEntryBlock()),
+	                               IE = po_end(&F.getEntryBlock());
+	                               I != IE; ++I) {
+		errs() << " " << getLabel(*I) << "\n";
+		path.push_back(*I);
+	}
+	DAGPaths.push(path);
+}
+
+void SchedulerDAG::insertPartitionVoter(Function &F) {
+	if(DAGPaths.empty())
+		return;
+
+	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
+		errs() << "\n\n# DEBUG_TMR=2 - InsertPartitioningVoter\n";
+
+	std::vector<const BasicBlock *> path = DAGPaths.front();
 	unsigned areaTotal = 0;
-	for (Function::iterator b = F.begin(); b != F.end(); ++b) {
-		for (BasicBlock::iterator I = b->begin(); I != b->end(); ++I) {
-			unsigned area = getInstructionArea(I);
-			if(areaTotal+area > 100) {
-				std::cerr<< "--------------\n";
-				areaTotal = 0;
+	unsigned areaLimit = LEGUP_CONFIG->getParameterInt("PARTITION_AREA_LIMIT");
+
+	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==1) {
+		for (std::vector<const BasicBlock *>::const_reverse_iterator b = path.rbegin(),
+		                                                     be = path.rend();
+		                                                     b != be; ++b) {
+			const BasicBlock *BB = *b;
+			InstructionNode *prevNode;
+			for (BasicBlock::const_iterator instr = BB->begin(), ie = BB->end();
+			                                instr != ie; ++instr) {
+				const Instruction *I = instr;
+				InstructionNode *iNode = getInstructionNode(const_cast<Instruction *>(I));
+				unsigned area = getInstructionArea(const_cast<Instruction *>(I));
+				if ((areaTotal+area > areaLimit) && (areaLimit!=0) && prevNode!=NULL) {
+					if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
+						errs() << "  ---- Insert Part. Voter ----\n";
+					areaTotal = 0;
+					prevNode->setPartition();
+				}
+				areaTotal += area;
+				if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3) {
+					errs() << "  Area=(" << areaTotal << ") "
+					          << getLabel(*b) << ":" << getValueStr(instr) << "\n";
+				}
+				if (area>0)
+					prevNode = iNode;
 			}
-			areaTotal += area;
-			std::cerr << "  Area=(" << areaTotal << ") "
-			          << getLabel(b) << ":" << getValueStr(I) << endl;
 		}
+	//} else {
+	//	errs() << "All paths of " << F.getName() << ":\n";
+	//	while (!DAGPaths.empty()) {
+	//		std::vector<const BasicBlock *> path = DAGPaths.front();
+
+	//		errs() << "\n---- path list start ----\n";
+	//		unsigned areaTotal = 0;
+	//		unsigned areaLimit = LEGUP_CONFIG->getParameterInt("PARTITION_AREA_LIMIT");
+
+	//		for (std::vector<const BasicBlock *>::const_iterator b = path.begin(),
+	//		                                                     be = path.end();
+	//		                                                     b != be; ++b) {
+	//			const BasicBlock *BB = *b;
+	//			for (BasicBlock::const_iterator instr = BB->begin(), ie = BB->end();
+	//			                                instr != ie; ++instr) {
+	//				const Instruction *I = instr;
+	//				InstructionNode *iNode = getInstructionNode(const_cast<Instruction *>(I));
+	//				unsigned area = getInstructionArea(const_cast<Instruction *>(I));
+	//				if ((areaTotal+area > areaLimit) && (areaLimit!=0)) {
+	//					errs() << "  ---- Insert Part. Voter ----\n";
+	//					areaTotal = 0;
+	//					iNode->setPartition();
+	//				}
+	//				areaTotal += area;
+	//				errs() << "  Area=(" << areaTotal << ") "
+	//				          << getLabel(*b) << ":" << getValueStr(instr) << "\n";
+	//			}
+	//		}
+	//		errs() << "---- path list end ----\n";
+
+	//		DAGPaths.pop();
+	//	}
 	}
 }
 
@@ -437,15 +616,19 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
 		}
 	}
 
-	// detect backward edges and mark on them (setBackward())
-	if (LEGUP_CONFIG->getParameterInt("TMR"))
+	// TMR - detect backward edges and mark on them (setBackward())
+	if (LEGUP_CONFIG->getParameterInt("TMR")) {
+		FindFunctionBackedges(F, BackEdges);
 		insertSyncVoter(F);
 
-	// print SCCBBs
-	findSCCBBs(F);
-
-	// print topologically sorted BB lists
-	findTopologicalBBList(F);
+		//findSCCBBs(F);
+		if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==1) {
+			findTopologicalBBList(F);
+		} else if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==2) {
+			findAllPaths(F);
+		}
+		insertPartitionVoter(F);
+	}
 
 	// set delay
     for (Function::iterator b = F.begin(), be = F.end(); b != be; b++) {
@@ -630,7 +813,7 @@ FiniteStateMachine *SchedulerMapping::createFSM(Function *F,
 
 			//FIXME -- added for TMR
 			if (LEGUP_CONFIG->getParameterInt("TMR") &&
-			    LEGUP_CONFIG->getParameterInt("VOTER_MODE")==4 &&
+			    LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4 &&
 			    iNode->getBackward() && isa<PHINode>(I))
 				delayState = 1;
 

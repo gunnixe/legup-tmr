@@ -201,9 +201,9 @@ public:
 
 	//TMR
 	bool isPhi() const;
-	bool getBackward() const { return backwardSignal; }
+	unsigned getVoter() const { return voterInsertionMode; }
+	void setVoter(unsigned v) { voterInsertionMode = v; }
 	bool driveFromVoter() const;
-	void setBackward() { backwardSignal = true; }
 
 private:
     std::string name;
@@ -218,7 +218,7 @@ private:
     std::vector<Instruction*> instrs;
 
 	//TMR
-	bool backwardSignal;
+	unsigned voterInsertionMode;
 
     void init();
 };

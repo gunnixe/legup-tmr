@@ -1,0 +1,26 @@
+#(tmr, sync_voter_mode, part_voter_mode, local_mem, pipeline)
+
+#default no TMR
+0 0 0 0 0
+
+#sync voter scenairo
+1 0 0 0 0
+1 1 0 0 0
+1 2 0 0 0
+1 3 0 0 0
+1 4 0 0 0
+
+#part voter scenario
+1 2 1 0 0
+1 4 1 0 0
+
+#local ram & pipeline
+0 0 0 1 0
+0 0 0 0 1
+0 0 0 1 1
+1 2 0 1 0
+1 2 0 0 1
+1 2 0 1 1
+1 4 0 1 0
+1 4 0 0 1
+1 4 0 1 1

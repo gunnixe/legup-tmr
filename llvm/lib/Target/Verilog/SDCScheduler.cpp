@@ -41,7 +41,7 @@ SDCScheduler::SDCScheduler(Allocation *alloc) : lp(0), map(0), alloc(alloc) {
 unsigned SDCScheduler::getNumInstructionCycles(Instruction *instr) {
 	InstructionNode *iNode = dag->getInstructionNode(instr);
 	if (LEGUP_CONFIG->getParameterInt("TMR") &&
-	    LEGUP_CONFIG->getParameterInt("VOTER_MODE")==4 &&
+	    LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4 &&
 		iNode->getBackward() && isa<PHINode>(instr))
 		return 1;
 

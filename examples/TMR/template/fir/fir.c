@@ -35,7 +35,7 @@ int FIRFilterStreaming ( int in, int coefficients[], int previous[]){
     if (previous[TAPS-1] == 0)
         return 0;
     else {
-        for (j = 0; j < TAPS; j++){
+        loop: for (j = 0; j < TAPS; j++){
             temp += previous[TAPS - j - 1]*coefficients[j];
         }
 
@@ -75,7 +75,7 @@ int main(){
     int output[INPUTSIZE];
     int i;
     unsigned int total = 0;
-    loop: for (i = 1; i <= INPUTSIZE; i++){
+    for (i = 1; i <= INPUTSIZE; i++){
         output[i-1] = FIRFilterStreaming (i, coefficients, previous);
         total += output[i-1];
     }

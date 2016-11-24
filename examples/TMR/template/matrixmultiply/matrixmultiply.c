@@ -14,7 +14,7 @@ volatile int resultAB1[SIZE][SIZE];
 
 int multiply(int i, int j) {
     int k, sum = 0;
-	for(k = 0; k < SIZE; k++) {
+	loop: for(k = 0; k < SIZE; k++) {
         sum += A1[i][k] * B1[k][j];
     }
     resultAB1[i][j] = sum;

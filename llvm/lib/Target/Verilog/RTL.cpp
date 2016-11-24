@@ -143,10 +143,10 @@ std::vector<RTLWidth> RTLWidth::widthsFromExclusionWithWidth(const RTLWidth &wid
 }
 
 RTLSignal::RTLSignal() : bitwidth(RTLWidth()), driver(0), defaultDriver(0),
-    checkXs(true), backwardSignal(false) {}
+    checkXs(true), voterInsertionMode(0) {}
 RTLSignal::RTLSignal(std::string name, std::string value, RTLWidth bitwidth)
     : name(name), value(value), bitwidth(bitwidth), driver(0), defaultDriver(0),
-    checkXs(true), backwardSignal(false) {}
+    checkXs(true), voterInsertionMode(0) {}
 
 
 bool RTLSignal::isReg() const {
@@ -162,20 +162,29 @@ bool RTLSignal::isPhi() const {
 }
 
 bool RTLSignal::driveFromVoter() const {
+	bool ret = false;
+	int svoterMode = LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE");
+	int pvoterMode = LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE");
+
 	if (!LEGUP_CONFIG->getParameterInt("TMR")) return false;
 	else if (getName()=="cur_state") return true;
-	else {
-		int voterMode = LEGUP_CONFIG->getParameterInt("VOTER_MODE");
-		if (voterMode==0)
-			return false;
-		else if (voterMode==1)
-			return (isReg());
-		else if (voterMode==2 || voterMode==4)
-			return (isReg() && getBackward()); //isPhi()));
-		else if (voterMode==3 || voterMode==5)
-			return (getBackward());
-	}
-	return false;
+	else if (svoterMode==0 && pvoterMode==0) return false;
+
+	// This mode alway returns 1 when a signal is register
+	if (svoterMode==1)
+		return (isReg());
+
+	// syncvoter check
+	if (svoterMode==2 || svoterMode==4)
+		ret = (isReg() && getVoter()==1);
+	else if (svoterMode==3)
+		ret = (getVoter()==1);
+
+	// partvoter check
+	if (pvoterMode==1)
+		ret |= (isReg() && getVoter()==2);
+
+	return ret;
 }
 
 RTLOp::RTLOp(Instruction *instr) : castWidth(false) {
