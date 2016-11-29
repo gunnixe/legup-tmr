@@ -1,4 +1,0 @@
-digraph {
-Node0x4164050[label="  %446 = add i32 %i_get_dqt.0.ph26, 1"];
-Node0x4164050 -> Node0x4164050[label="D:3.81ns L:0",color=blue];
-}

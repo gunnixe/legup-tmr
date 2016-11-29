@@ -1,4 +1,0 @@
-digraph {
-Node0x411c030[label="  %98 = sext i8 %60 to i32"];
-Node0x411c030 -> Node0x411c030[label="D:0.00ns L:0",color=blue];
-}

@@ -1,6 +1,0 @@
-digraph {
-Node0x4113460[label="  %temp.0.in.i.i = phi i8 [ %10, %12 ], ..."];
-Node0x4113460 -> Node0x4113460[label="D:0.00ns L:0",color=blue];
-Node0x41135a0[label="  %temp.0.i.i = zext i8 %temp.0.in.i.i t..."];
-Node0x41135a0 -> Node0x41135a0[label="D:0.00ns L:0",color=blue];
-}

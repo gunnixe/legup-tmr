@@ -1,8 +1,0 @@
-Depth = 1;
-Width = 32;
-Address_radix = dec;
-Data_radix = hex;
-Content
-Begin
-0: 00000000;	-- p_jinfo_MCUWidth[0] = 0
-End;

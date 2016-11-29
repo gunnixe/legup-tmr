@@ -1,8 +1,0 @@
-digraph {
-Node0x4121380[label="  %128 = load i32* @main_result, align 4..."];
-Node0x4121380 -> Node0x4121380[label="D:0.00ns L:2",color=blue];
-Node0x4121600[label="  store i32 %129, i32* @main_result, ali..."];
-Node0x4121380 -> Node0x4121600[label="D:0.00ns L:2",color=red];
-Node0x41214c0[label="  %129 = add nsw i32 %128, 1"];
-Node0x41214c0 -> Node0x41214c0[label="D:3.81ns L:0",color=blue];
-}

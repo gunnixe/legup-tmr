@@ -1,6 +1,0 @@
-digraph {
-Node0x411e330[label="  %244 = add nsw i32 %i_get_sos.0, 1"];
-Node0x411e330 -> Node0x411e330[label="D:3.81ns L:0",color=blue];
-Node0x411e470[label="  %245 = icmp slt i32 %196, %180"];
-Node0x411e470 -> Node0x411e470[label="D:4.43ns L:0",color=blue];
-}

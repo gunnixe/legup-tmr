@@ -1,8 +1,0 @@
-digraph {
-Node0x40e5640[label="  %44 = add nsw i32 %41, %k.02"];
-Node0x40e5640 -> Node0x40e5640[label="D:3.81ns L:0",color=blue];
-Node0x40e5640 -> Node0x40e5640[label="D:3.81ns L:0",color=blue];
-Node0x40e5640 -> Node0x40e5640[label="D:3.81ns L:0",color=blue];
-Node0x40e5780[label="  %45 = icmp sgt i32 %44, 63"];
-Node0x40e5780 -> Node0x40e5780[label="D:4.43ns L:0",color=blue];
-}

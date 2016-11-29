@@ -1,8 +1,0 @@
-digraph {
-Node0x4124800[label="  %163 = mul i32 %70, 3"];
-Node0x4124800 -> Node0x4124800[label="D:6.50ns L:0",color=blue];
-Node0x4124940[label="  %.sum = add i32 %163, 9"];
-Node0x4124940 -> Node0x4124940[label="D:3.81ns L:0",color=blue];
-Node0x4124a80[label="  %scevgep174.sum21 = add i32 %indvar172..."];
-Node0x4124a80 -> Node0x4124a80[label="D:3.81ns L:0",color=blue];
-}

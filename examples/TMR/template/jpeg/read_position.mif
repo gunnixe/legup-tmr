@@ -1,8 +1,0 @@
-Depth = 1;
-Width = 32;
-Address_radix = dec;
-Data_radix = hex;
-Content
-Begin
-0: FFFFFFFF;	-- read_position[0] = -1
-End;

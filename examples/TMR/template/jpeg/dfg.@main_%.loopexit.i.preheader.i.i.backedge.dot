@@ -1,6 +1,0 @@
-digraph {
-Node0x4154e90[label="  %ReadBuf.0.be = phi i8* [ %scevgep175,..."];
-Node0x4154e90 -> Node0x4154e90[label="D:0.00ns L:0",color=blue];
-Node0x4154fd0[label="  %indvar.next177 = add i32 %indvar176, ..."];
-Node0x4154fd0 -> Node0x4154fd0[label="D:3.81ns L:0",color=blue];
-}

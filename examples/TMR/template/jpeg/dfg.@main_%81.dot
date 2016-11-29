@@ -1,6 +1,0 @@
-digraph {
-Node0x411a4b0[label="  %82 = load i16* @p_jinfo_image_height,..."];
-Node0x411a4b0 -> Node0x411a4b0[label="D:0.00ns L:2",color=blue];
-Node0x411a5f0[label="  %83 = icmp eq i16 %82, 59"];
-Node0x411a5f0 -> Node0x411a5f0[label="D:1.95ns L:0",color=blue];
-}

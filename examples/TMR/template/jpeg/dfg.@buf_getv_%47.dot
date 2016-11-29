@@ -1,8 +1,0 @@
-digraph {
-Node0x40a3070[label="  %.pre10 = phi i32 [ %.pre10.pre, %45 ]..."];
-Node0x40a3070 -> Node0x40a3070[label="D:0.00ns L:0",color=blue];
-Node0x40a31b0[label="  %temp.0.in.i1 = phi i8 [ %43, %45 ], [..."];
-Node0x40a31b0 -> Node0x40a31b0[label="D:0.00ns L:0",color=blue];
-Node0x40a32f0[label="  %temp.0.i2 = zext i8 %temp.0.in.i1 to ..."];
-Node0x40a32f0 -> Node0x40a32f0[label="D:0.00ns L:0",color=blue];
-}

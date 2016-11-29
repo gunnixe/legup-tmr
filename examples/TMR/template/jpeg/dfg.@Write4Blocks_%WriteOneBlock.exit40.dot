@@ -1,6 +1,0 @@
-digraph {
-Node0x40c0860[label="  %133 = icmp slt i32 %50, %6"];
-Node0x40c0860 -> Node0x40c0860[label="D:4.43ns L:0",color=blue];
-Node0x40c09a0[label="  %or.cond72 = and i1 %94, %133"];
-Node0x40c09a0 -> Node0x40c09a0[label="D:0.00ns L:0",color=blue];
-}

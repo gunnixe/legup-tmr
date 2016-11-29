@@ -1,6 +1,0 @@
-digraph {
-Node0x418be60[label="  %711 = icmp ult i32* %scevgep134, %647"];
-Node0x418be60 -> Node0x418be60[label="D:13.00ns L:0",color=blue];
-Node0x418bfa0[label="  %indvar.next133 = add i32 %indvar132, ..."];
-Node0x418bfa0 -> Node0x418bfa0[label="D:3.81ns L:0",color=blue];
-}

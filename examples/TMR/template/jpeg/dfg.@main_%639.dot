@@ -1,7 +1,0 @@
-digraph {
-Node0x41815a0[label="  %640 = add nsw i32 %CurrentMCU.054.i.i..."];
-Node0x41815a0 -> Node0x41815a0[label="D:3.81ns L:0",color=blue];
-Node0x41815a0 -> Node0x41815a0[label="D:3.81ns L:0",color=blue];
-Node0x41816e0[label="  %exitcond93 = icmp eq i32 %640, %523"];
-Node0x41816e0 -> Node0x41816e0[label="D:2.34ns L:0",color=blue];
-}
