@@ -1,0 +1,5 @@
+digraph {
+Node0x40d5cc0[label="  %.0.i.i5 = phi i32 [ %temp.0.i.i4, %39..."];
+Node0x40d5cc0 -> Node0x40d5cc0[label="D:0.00ns L:0",color=blue];
+Node0x40d5cc0 -> Node0x40d5cc0[label="D:0.00ns L:0",color=blue];
+}

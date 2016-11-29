@@ -1,0 +1,15 @@
+digraph {
+Node0x4125840[label="  %p_jinfo_smp_fact.0.ph = phi i32 [ 0, ..."];
+Node0x4125840 -> Node0x4125840[label="D:0.00ns L:0",color=blue];
+Node0x4125980[label="  %p_jinfo_num_components.0.ph = phi i8 ..."];
+Node0x4125980 -> Node0x4125980[label="D:0.00ns L:0",color=blue];
+Node0x4125980 -> Node0x4125980[label="D:0.00ns L:0",color=blue];
+Node0x4125ac0[label="  %ReadBuf.0.ph = phi i8* [ getelementpt..."];
+Node0x4125ac0 -> Node0x4125ac0[label="D:0.00ns L:0",color=blue];
+Node0x4125c00[label="  %i_get_dqt.0.ph = phi i32 [ 0, %.loope..."];
+Node0x4125c00 -> Node0x4125c00[label="D:0.00ns L:0",color=blue];
+Node0x4125d40[label="  %i_get_dht.0.ph = phi i32 [ 0, %.loope..."];
+Node0x4125d40 -> Node0x4125d40[label="D:0.00ns L:0",color=blue];
+Node0x4125e80[label="  %i_marker.0.ph = phi i32 [ 1, %.loopex..."];
+Node0x4125e80 -> Node0x4125e80[label="D:0.00ns L:0",color=blue];
+}

@@ -1,20 +1,24 @@
-#!/usr/bin/perl
+#!/usr/bin/perl -s
 
-my @example_list = qw(add fir matrixmultiply qsort fft);
+#my @example_list = qw(add fir matrixmultiply qsort fft);
+
+#dhrystone benchmark example
+my @example_list = qw(adpcm aes gsm blowfish);# jpeg);
 
 my ($fname) = @ARGV;
 die "Need folder name\n" if(not defined $fname);
 
 if($fname eq "all") {
-	&do_work($_) for(@example_list);
+	&do_work($_, $c) for(@example_list);
 } else {
 	$dest_folder = "template/".$fname;
 	die "Folder '$dest_folder' is not exist\n" if(!-d $dest_folder);
-	&do_work($fname);
+	&do_work($fname, $c);
 }
 
 sub do_work {
 	my $fname = $_[0];
+	my $create_only = $_[1];
 
 	system("mkdir -p output") if(!-d "outout");
 	my $report_name = "output/".$fname.".rpt";
@@ -49,14 +53,16 @@ sub do_work {
 
 			&change_config(@arg_list);
 		
-			# do simulation
-			system("make; make v | tee vsim.log;");
-			system("make p; make f;");
+			if(!$create_only) {
+				# do simulation
+				system("make; make v | tee vsim.log;");
+				system("make p; make f;");
 	
-			# finalize work dir
-			&summary(($cname, @arg_list));
-			chdir "../../";
+				&summary(($cname, @arg_list));
+			}
 
+			# finalize work dir
+			chdir "../../";
 			$scenario_cnt = $scenario_cnt + 1;
 		}
 	}

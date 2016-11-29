@@ -1,0 +1,103 @@
+# vsim -c -do "run 7000000000000000ns; exit;" work.main_tb 
+# Start time: 14:59:36 on Nov 25,2016
+# Loading work.main_tb
+# Loading work.top
+# Loading work.memory_controller
+# Loading work.ram_dual_port
+# Loading work.ALTERA_MF_MEMORY_INITIALIZATION
+# Loading work.rom_dual_port
+# Loading work.main
+# Loading work.lpm_divide
+# Loading work.LPM_HINT_EVALUATION
+# Loading work.huff_make_dhuff_tb
+# Loading work.DecodeHuffMCU
+# Loading work.DecodeHuffman
+# Loading work.buf_getv
+# Loading work.ChenIDct
+# Loading work.Write4Blocks
+# ** Warning: Design size of 33075 statements exceeds ModelSim Altera Starter recommended capacity.
+# Expect performance to be adversely affected.
+# run 7000000000000000ns
+# Cycle:                15628 Time:               312610    
+# marker = 0xd8
+# Cycle:                15644 Time:               312930    
+# marker = 0xe0
+# Cycle:                15711 Time:               314270    
+# marker = 0xdb
+# Cycle:                15721 Time:               314470     length =          65
+# Cycle:                15730 Time:               314650     prec =           0
+# Cycle:                15730 Time:               314650     num  =           0
+# Cycle:                16013 Time:               320310    
+# marker = 0xdb
+# Cycle:                16023 Time:               320510     length =          65
+# Cycle:                16032 Time:               320690     prec =           0
+# Cycle:                16032 Time:               320690     num  =           1
+# Cycle:                16315 Time:               326350    
+# marker = 0xc0
+# Cycle:                16332 Time:               326690    length         =          17
+# Cycle:                16332 Time:               326690    data_precision =           8
+# Cycle:                16332 Time:               326690    image_height   =          59
+# Cycle:                16333 Time:               326710    image_width    =          90
+# Cycle:                16333 Time:               326710    num_components =           3
+# Cycle:                16374 Time:               327530     index         =           0
+# Cycle:                16374 Time:               327530     id            =           1
+# Cycle:                16374 Time:               327530     h_samp_factor =           2
+# Cycle:                16374 Time:               327530     v_samp_factor =           2
+# Cycle:                16375 Time:               327550     quant_tbl_no  =           0
+# 
+# Cycle:                16416 Time:               328370     index         =           1
+# Cycle:                16416 Time:               328370     id            =           2
+# Cycle:                16416 Time:               328370     h_samp_factor =           1
+# Cycle:                16416 Time:               328370     v_samp_factor =           1
+# Cycle:                16417 Time:               328390     quant_tbl_no  =           1
+# 
+# Cycle:                16458 Time:               329210     index         =           2
+# Cycle:                16458 Time:               329210     id            =           3
+# Cycle:                16458 Time:               329210     h_samp_factor =           1
+# Cycle:                16458 Time:               329210     v_samp_factor =           1
+# Cycle:                16459 Time:               329230     quant_tbl_no  =           1
+# 
+# Cycle:                16493 Time:               329910    
+# Sampling Factor is 4:1:1
+# Cycle:                16507 Time:               330190    
+# marker = 0xc4
+# Cycle:                16517 Time:               330390     length =          29
+# Cycle:                16526 Time:               330570     index = 0x0
+# Cycle:                16581 Time:               331670     count =          12
+# Cycle:                16667 Time:               333390    
+# marker = 0xc4
+# Cycle:                16677 Time:               333590     length =         179
+# Cycle:                16686 Time:               333770     index = 0x10
+# Cycle:                16742 Time:               334890     count =         162
+# Cycle:                17578 Time:               351610    
+# marker = 0xc4
+# Cycle:                17588 Time:               351810     length =          29
+# Cycle:                17597 Time:               351990     index = 0x1
+# Cycle:                17652 Time:               353090     count =          12
+# Cycle:                17738 Time:               354810    
+# marker = 0xc4
+# Cycle:                17748 Time:               355010     length =         179
+# Cycle:                17757 Time:               355190     index = 0x11
+# Cycle:                17813 Time:               356310     count =         162
+# Cycle:                18649 Time:               373030    
+# marker = 0xda
+# Cycle:                18659 Time:               373230     length =          12
+# Cycle:                18659 Time:               373230     num_comp =           3
+# Cycle:                18680 Time:               373650     comp_id       =           1
+# Cycle:                18680 Time:               373650     dc_tbl_no     =           0
+# Cycle:                18680 Time:               373650     ac_tbl_no     =           0
+# Cycle:                18712 Time:               374290     comp_id       =           2
+# Cycle:                18712 Time:               374290     dc_tbl_no     =           1
+# Cycle:                18712 Time:               374290     ac_tbl_no     =           1
+# Cycle:                18747 Time:               374990     comp_id       =           3
+# Cycle:                18747 Time:               374990     dc_tbl_no     =           1
+# Cycle:                18747 Time:               374990     ac_tbl_no     =           1
+# Cycle:                22279 Time:               445630    Decode 4:1:1 NumMCU =          96
+# Cycle:              1288493 Time:             25769910    Result:       21745
+# Cycle:              1288496 Time:             25769970    RESULT: PASS
+# At t=         25770030000 clk=1 finish=1 return_val=     21745
+# Cycles:              1288499
+# ** Note: $finish    : main.v(54530)
+#    Time: 25770030 ns  Iteration: 2  Instance: /main_tb
+# End time: 17:29:07 on Nov 25,2016, Elapsed time: 2:29:31
+# Errors: 0, Warnings: 1

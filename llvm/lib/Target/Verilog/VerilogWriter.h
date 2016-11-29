@@ -62,6 +62,7 @@ public:
 	bool isLocalMemSignal(const RTLSignal *signal);
 	bool needSyncVoter(const RTLSignal *signal);
 	bool needPartVoter(const RTLSignal *signal);
+	bool isBasicOperation(const RTLModule *rtl);
     //
     
 private:

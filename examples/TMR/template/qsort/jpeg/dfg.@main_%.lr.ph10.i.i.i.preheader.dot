@@ -1,0 +1,6 @@
+digraph {
+Node0x4128540[label="  %190 = icmp sgt i8 %p_jinfo_num_compon..."];
+Node0x4128540 -> Node0x4128540[label="D:1.66ns L:0",color=blue];
+Node0x4128680[label="  %191 = sext i8 %p_jinfo_num_components..."];
+Node0x4128680 -> Node0x4128680[label="D:0.00ns L:0",color=blue];
+}

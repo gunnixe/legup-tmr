@@ -35,7 +35,7 @@ namespace legup {
 
 bool VerilogWriter::isTmrSig(const RTLSignal *sig) {
 	if (LEGUP_CONFIG->getParameterInt("TMR") &&
-	    (sig->getType() == "reg" || sig->getType() == "wire")) {
+	            (sig->getType() == "reg" || sig->getType() == "wire")) {
 		assert(currReplica=="0" || currReplica=="1" || currReplica=="2");
 		return true;
 	}
@@ -6665,6 +6665,18 @@ void VerilogWriter::printDeclaration(const RTLSignal *signal, bool testBench) {
     }
 }
 
+bool VerilogWriter::isBasicOperation(const RTLModule *rtl) {
+	std::string name = rtl->getName();
+
+	if (name=="div_signed") return true;
+	if (name=="div_unsigned") return true;
+	if (name=="lpm_divide") return true;
+	if (name=="lpm_mult") return true;
+	if (name.find("altfp_") == 0) return true;
+
+	return false;
+}
+
 void VerilogWriter::printRTL(const RTLModule *rtl) {
 
     this->rtl = rtl;
@@ -6676,13 +6688,20 @@ void VerilogWriter::printRTL(const RTLModule *rtl) {
     }
     printModuleHeader();
 
-    for (RTLModule::const_module_iterator i = rtl->instances_begin(),
-                                          e = rtl->instances_end();
-         i != e; ++i) {
-        Out << "\n";
-        printModuleInstance(Out, *i);
-    }
-    Out << "\n";
+   	for (RTLModule::const_module_iterator i = rtl->instances_begin(),
+   	                                      e = rtl->instances_end();
+   	                                      i != e; ++i) {
+		bool tmrInst = (LEGUP_CONFIG->getParameterInt("TMR") && isBasicOperation(*i));
+		unsigned tmrIterNum = tmrInst? 3 : 1;
+		useReplicaNumberForAllVariables = tmrInst? true : false;
+		for (unsigned tmrIter=0; tmrIter<tmrIterNum; tmrIter++) {
+			currReplica = utostr(tmrIter);
+    	    Out << "\n";
+    	    printModuleInstance(Out, *i);
+    	}
+    	Out << "\n";
+		useReplicaNumberForAllVariables = false;
+	}
 
     if (LEGUP_CONFIG->getParameterInt("PRINT_FUNCTION_START_FINISH")) {
         Out << "always @(posedge start)\n"
@@ -6790,8 +6809,10 @@ std::string VerilogWriter::bitsForSignalAndModuleName(const RTLSignal *sig,
 void VerilogWriter::printModuleInstance(std::stringstream &Out,
                                         const RTLModule *mod) {
     Out << mod->getBody() << "\n";
-    Out << mod->getName() << " " << mod->getInstName() << " ("
-        << "\n";
+    Out << mod->getName() << " " << mod->getInstName();
+	if (LEGUP_CONFIG->getParameterInt("TMR"))
+		Out << "_r" + currReplica;
+	Out << " (\n";
     for (RTLModule::const_signal_iterator i = mod->port_begin(),
                                           e = mod->port_end();
          i != e; ++i) {
@@ -6821,7 +6842,10 @@ void VerilogWriter::printModuleInstance(std::stringstream &Out,
         } else {
             Out << ",\n\t";
         }
-        Out << mod->getInstName() << "." << (*i)->getName() << " = "
+        Out << mod->getInstName();
+		if (LEGUP_CONFIG->getParameterInt("TMR"))
+			Out << "_r" + currReplica;
+		Out << "." << (*i)->getName() << " = "
             << (*i)->getValue();
         if (i == mod->param_end() - 1) {
             Out << ";\n";

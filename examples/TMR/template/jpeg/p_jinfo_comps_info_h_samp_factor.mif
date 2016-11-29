@@ -1,0 +1,10 @@
+Depth = 3;
+Width = 8;
+Address_radix = dec;
+Data_radix = hex;
+Content
+Begin
+0: 00;	-- p_jinfo_comps_info_h_samp_factor[0] = 0
+1: 00;	-- p_jinfo_comps_info_h_samp_factor[1] = 0
+2: 00;	-- p_jinfo_comps_info_h_samp_factor[2] = 0
+End;

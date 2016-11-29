@@ -1,0 +1,4 @@
+digraph {
+Node0x40a5870[label="  %.0 = phi i32 [ %34, %pgetc.exit ], [ ..."];
+Node0x40a5870 -> Node0x40a5870[label="D:0.00ns L:0",color=blue];
+}

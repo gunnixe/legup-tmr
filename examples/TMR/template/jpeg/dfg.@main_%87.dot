@@ -1,0 +1,6 @@
+digraph {
+Node0x411ad70[label="  %88 = load i16* @p_jinfo_image_width, ..."];
+Node0x411ad70 -> Node0x411ad70[label="D:0.00ns L:2",color=blue];
+Node0x411aeb0[label="  %89 = icmp eq i16 %88, 90"];
+Node0x411aeb0 -> Node0x411aeb0[label="D:1.95ns L:0",color=blue];
+}

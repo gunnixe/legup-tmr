@@ -1,0 +1,4 @@
+digraph {
+Node0x41255c0[label="  %p_jinfo_smp_fact.0.ph.be = phi i32 [ ..."];
+Node0x41255c0 -> Node0x41255c0[label="D:0.00ns L:0",color=blue];
+}

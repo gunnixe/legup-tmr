@@ -1,0 +1,12 @@
+digraph {
+Node0x407aaa0[label="  %indvar15 = phi i32 [ %indvar.next16, ..."];
+Node0x407aaa0 -> Node0x407aaa0[label="D:0.00ns L:0",color=blue];
+Node0x407aaa0 -> Node0x407aaa0[label="D:0.00ns L:0",color=blue];
+Node0x407aaa0 -> Node0x407aaa0[label="D:0.00ns L:0",color=blue];
+Node0x407abe0[label="  %130 = mul i32 %113, %indvar15"];
+Node0x407abe0 -> Node0x407abe0[label="D:6.50ns L:0",color=blue];
+Node0x407ad20[label="  %131 = add i32 %116, %130"];
+Node0x407ad20 -> Node0x407ad20[label="D:3.81ns L:0",color=blue];
+Node0x40c04a0[label="  %132 = mul i32 %indvar15, %123"];
+Node0x40c04a0 -> Node0x40c04a0[label="D:6.50ns L:0",color=blue];
+}

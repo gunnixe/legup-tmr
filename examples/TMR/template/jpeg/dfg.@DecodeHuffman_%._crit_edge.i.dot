@@ -1,0 +1,4 @@
+digraph {
+Node0x410fd80[label="  %.pre.i = load i32* @current_read_byte..."];
+Node0x410fd80 -> Node0x410fd80[label="D:0.00ns L:2",color=blue];
+}

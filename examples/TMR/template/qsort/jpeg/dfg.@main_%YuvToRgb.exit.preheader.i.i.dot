@@ -1,0 +1,27 @@
+digraph {
+Node0x417ab60[label="  %583 = load i16* @p_jinfo_image_width,..."];
+Node0x417ab60 -> Node0x417ab60[label="D:0.00ns L:2",color=blue];
+Node0x417ab60 -> Node0x417ab60[label="D:0.00ns L:2",color=blue];
+Node0x417ab60 -> Node0x417ab60[label="D:0.00ns L:2",color=blue];
+Node0x417aca0[label="  %584 = sext i16 %583 to i32"];
+Node0x417aca0 -> Node0x417aca0[label="D:0.00ns L:0",color=blue];
+Node0x417ade0[label="  %585 = load i16* @p_jinfo_image_height..."];
+Node0x417ade0 -> Node0x417ade0[label="D:0.00ns L:2",color=blue];
+Node0x417ade0 -> Node0x417ade0[label="D:0.00ns L:2",color=blue];
+Node0x417af20[label="  %586 = sext i16 %585 to i32"];
+Node0x417af20 -> Node0x417af20[label="D:0.00ns L:0",color=blue];
+Node0x417b060[label="  %.pre.i.i = load i32* getelementptr in..."];
+Node0x417b060 -> Node0x417b060[label="D:0.00ns L:2",color=blue];
+Node0x417b1a0[label="  %587 = load i32* @p_jinfo_MCUWidth, al..."];
+Node0x417b1a0 -> Node0x417b1a0[label="D:0.00ns L:2",color=blue];
+Node0x417b2e0[label="  %588 = sext i16 %583 to i32"];
+Node0x417b2e0 -> Node0x417b2e0[label="D:0.00ns L:0",color=blue];
+Node0x417b420[label="  %589 = sext i16 %585 to i32"];
+Node0x417b420 -> Node0x417b420[label="D:0.00ns L:0",color=blue];
+Node0x417b560[label="  %590 = sext i16 %583 to i32"];
+Node0x417b560 -> Node0x417b560[label="D:0.00ns L:0",color=blue];
+Node0x417b560 -> Node0x417b560[label="D:0.00ns L:0",color=blue];
+Node0x417b560 -> Node0x417b560[label="D:0.00ns L:0",color=blue];
+Node0x417b6a0[label="  %591 = shl nsw i32 %590, 3"];
+Node0x417b6a0 -> Node0x417b6a0[label="D:0.00ns L:0",color=blue];
+}

@@ -1,0 +1,35 @@
+digraph {
+Node0x4126380[label="  %scevgep174.sum4 = add i32 %indvar172,..."];
+Node0x4126380 -> Node0x4126380[label="D:3.81ns L:0",color=blue];
+Node0x41264c0[label="  %170 = getelementptr inbounds i8* %.ph..."];
+Node0x41264c0 -> Node0x41264c0[label="D:13.00ns L:0",color=blue];
+Node0x4126600[label="  %171 = load i8* %scevgep175, align 1, ..."];
+Node0x4126600 -> Node0x4126600[label="D:0.00ns L:2",color=blue];
+Node0x4126740[label="  %172 = zext i8 %171 to i16"];
+Node0x4126740 -> Node0x4126740[label="D:0.00ns L:0",color=blue];
+Node0x4126880[label="  %173 = shl nuw i16 %172, 8"];
+Node0x4126880 -> Node0x4126880[label="D:0.00ns L:0",color=blue];
+Node0x41269c0[label="  %scevgep174.sum5 = add i32 %indvar172,..."];
+Node0x41269c0 -> Node0x41269c0[label="D:3.81ns L:0",color=blue];
+Node0x4126b00[label="  %174 = getelementptr inbounds i8* %.ph..."];
+Node0x4126b00 -> Node0x4126b00[label="D:13.00ns L:0",color=blue];
+Node0x4126c40[label="  %175 = load i8* %170, align 1, !tbaa !..."];
+Node0x4126c40 -> Node0x4126c40[label="D:0.00ns L:2",color=blue];
+Node0x4126d80[label="  %176 = zext i8 %175 to i16"];
+Node0x4126d80 -> Node0x4126d80[label="D:0.00ns L:0",color=blue];
+Node0x4126ec0[label="  %177 = or i16 %173, %176"];
+Node0x4126ec0 -> Node0x4126ec0[label="D:0.63ns L:0",color=blue];
+Node0x4126ec0 -> Node0x4126ec0[label="D:0.63ns L:0",color=blue];
+Node0x4127000[label="  %178 = sext i16 %177 to i32"];
+Node0x4127000 -> Node0x4127000[label="D:0.00ns L:0",color=blue];
+Node0x4127140[label="  %scevgep174.sum6 = add i32 %indvar172,..."];
+Node0x4127140 -> Node0x4127140[label="D:3.81ns L:0",color=blue];
+Node0x4127280[label="  %179 = load i8* %174, align 1, !tbaa !..."];
+Node0x4127280 -> Node0x4127280[label="D:0.00ns L:2",color=blue];
+Node0x4127280 -> Node0x4127280[label="D:0.00ns L:2",color=blue];
+Node0x41273c0[label="  %180 = zext i8 %179 to i32"];
+Node0x41273c0 -> Node0x41273c0[label="D:0.00ns L:0",color=blue];
+Node0x41273c0 -> Node0x41273c0[label="D:0.00ns L:0",color=blue];
+Node0x4127780[label="  %183 = icmp eq i16 %177, 12"];
+Node0x4127780 -> Node0x4127780[label="D:1.95ns L:0",color=blue];
+}

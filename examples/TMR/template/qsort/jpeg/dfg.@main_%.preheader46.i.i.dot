@@ -1,0 +1,4 @@
+digraph {
+Node0x412e580[label="  %CurrentMCU.054.i.i = phi i32 [ 0, %.p..."];
+Node0x412e580 -> Node0x412e580[label="D:0.00ns L:0",color=blue];
+}

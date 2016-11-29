@@ -1,0 +1,293 @@
+\documentclass[landscape]{article}
+\usepackage{gantt}
+\pagestyle{empty}
+\begin{document}
+\begin{figure}
+\begin{gantt}[fontsize=\scriptsize]{4}{2}
+\begin{ganttitle}
+\numtitle{0}{1}{1}{1}
+\end{ganttitle}
+\ganttbar{  \%huffsize = alloca [257 x i32], align 4}{1}{1}
+\ganttbar{  \%huffcode = alloca [257 x i32], align 4}{1}{1}
+\ganttbar{  br label \%.preheader3}{1}{1}
+\end{gantt}
+\end{figure}
+\begin{figure}
+\begin{gantt}[fontsize=\scriptsize]{8}{5}
+\begin{ganttitle}
+\numtitle{0}{1}{4}{1}
+\end{ganttitle}
+\ganttbar{  \%indvar16 = phi i32 [ \%indvar.next17, \%6 ], [ 0, \%0 ]}{1}{1}
+\ganttcon{2}{1}{1}{3}
+\ganttbar{  \%p.014 = phi i32 [ \%p.1.lcssa, \%6 ], [ 0, \%0 ]}{1}{1}
+\ganttbar{  \%i.015 = add i32 \%indvar16, 1}{1}{1}
+\ganttcon{2}{3}{2}{4}
+\ganttbar{  \%scevgep19 = getelementptr i32* \%p\_xhtbl\_bits, i32 \%i.015}{2}{1}
+\ganttcon{3}{4}{2}{5}
+\ganttbar{  \%1 = load i32* \%scevgep19, align 4, !tbaa !1}{2}{2}
+\ganttcon{4}{5}{4}{6}
+\ganttbar{  \%2 = icmp slt i32 \%1, 1}{4}{1}
+\ganttcon{5}{6}{4}{7}
+\ganttbar{  br i1 \%2, label \%6, label \%.lr.ph.preheader}{4}{1}
+\end{gantt}
+\end{figure}
+\begin{figure}
+\begin{gantt}[fontsize=\scriptsize]{2}{2}
+\begin{ganttitle}
+\numtitle{0}{1}{1}{1}
+\end{ganttitle}
+\ganttbar{  br label \%.lr.ph}{1}{1}
+\end{gantt}
+\end{figure}
+\begin{figure}
+\begin{gantt}[fontsize=\scriptsize]{8}{4}
+\begin{ganttitle}
+\numtitle{0}{1}{3}{1}
+\end{ganttitle}
+\ganttbar{  \%indvar12 = phi i32 [ 0, \%.lr.ph.preheader ], [ \%indvar.next13, \%.lr.ph ]}{1}{1}
+\ganttcon{2}{1}{1}{3}
+\ganttcon{2}{1}{1}{2}
+\ganttbar{  \%3 = add i32 \%p.014, \%indvar12}{1}{1}
+\ganttcon{2}{2}{2}{6}
+\ganttbar{  \%indvar.next13 = add i32 \%indvar12, 1}{1}{1}
+\ganttcon{2}{3}{1}{4}
+\ganttcon{2}{3}{1}{1}
+\ganttbar{  \%exitcond14 = icmp eq i32 \%indvar.next13, \%1}{1}{1}
+\ganttcon{2}{4}{1}{5}
+\ganttbar{  br i1 \%exitcond14, label \%.\_crit\_edge, label \%.lr.ph}{1}{1}
+\ganttbar{  \%scevgep15 = getelementptr [257 x i32]* \%huffsize, i32 0, i32 \%3}{2}{1}
+\ganttcon{3}{6}{2}{7}
+\ganttbar{  store i32 \%i.015, i32* \%scevgep15, align 4, !tbaa !1}{2}{1}
+\end{gantt}
+\end{figure}
+\begin{figure}
+\begin{gantt}[fontsize=\scriptsize]{5}{2}
+\begin{ganttitle}
+\numtitle{0}{1}{1}{1}
+\end{ganttitle}
+\ganttbar{  \%4 = icmp sgt i32 \%1, 1}{1}{1}
+\ganttcon{2}{1}{1}{2}
+\ganttbar{  \%smax = select i1 \%4, i32 \%1, i32 1}{1}{1}
+\ganttcon{2}{2}{1}{3}
+\ganttbar{  \%5 = add i32 \%p.014, \%smax}{1}{1}
+\ganttbar{  br label \%6}{1}{1}
+\end{gantt}
+\end{figure}
+\begin{figure}
+\begin{gantt}[fontsize=\scriptsize]{5}{2}
+\begin{ganttitle}
+\numtitle{0}{1}{1}{1}
+\end{ganttitle}
+\ganttbar{  \%p.1.lcssa = phi i32 [ \%5, \%.\_crit\_edge ], [ \%p.014, \%.preheader3 ]}{1}{1}
+\ganttbar{  \%indvar.next17 = add i32 \%indvar16, 1}{1}{1}
+\ganttcon{2}{2}{1}{3}
+\ganttbar{  \%exitcond18 = icmp eq i32 \%indvar.next17, 16}{1}{1}
+\ganttcon{2}{3}{1}{4}
+\ganttbar{  br i1 \%exitcond18, label \%7, label \%.preheader3}{1}{1}
+\end{gantt}
+\end{figure}
+\begin{figure}
+\begin{gantt}[fontsize=\scriptsize]{6}{4}
+\begin{ganttitle}
+\numtitle{0}{1}{3}{1}
+\end{ganttitle}
+\ganttbar{  \%8 = getelementptr inbounds [257 x i32]* \%huffsize, i32 0, i32 \%p.1.lcssa}{1}{1}
+\ganttcon{2}{1}{1}{2}
+\ganttbar{  store i32 0, i32* \%8, align 4, !tbaa !1}{1}{1}
+\ganttbar{  \%9 = getelementptr inbounds [257 x i32]* \%huffsize, i32 0, i32 0}{1}{1}
+\ganttcon{2}{3}{2}{5}
+\ganttbar{  br label \%.outer}{1}{1}
+\ganttbar{  \%10 = load i32* \%9, align 4, !tbaa !1}{2}{1}
+\end{gantt}
+\end{figure}
+\begin{figure}
+\begin{gantt}[fontsize=\scriptsize]{2}{2}
+\begin{ganttitle}
+\numtitle{0}{1}{1}{1}
+\end{ganttitle}
+\ganttbar{  br label \%.outer}{1}{1}
+\end{gantt}
+\end{figure}
+\begin{figure}
+\begin{gantt}[fontsize=\scriptsize]{7}{2}
+\begin{ganttitle}
+\numtitle{0}{1}{1}{1}
+\end{ganttitle}
+\ganttbar{  \%p.2.ph = phi i32 [ 0, \%7 ], [ \%15, \%.outer.loopexit ]}{1}{1}
+\ganttcon{2}{1}{1}{4}
+\ganttbar{  \%code.0.ph = phi i32 [ 0, \%7 ], [ \%22, \%.outer.loopexit ]}{1}{1}
+\ganttcon{2}{2}{1}{5}
+\ganttbar{  \%size.0.ph = phi i32 [ \%10, \%7 ], [ \%17, \%.outer.loopexit ]}{1}{1}
+\ganttbar{  \%11 = add i32 \%p.2.ph, 1}{1}{1}
+\ganttbar{  \%12 = or i32 \%code.0.ph, 1}{1}{1}
+\ganttbar{  br label \%13}{1}{1}
+\end{gantt}
+\end{figure}
+\begin{figure}
+\begin{gantt}[fontsize=\scriptsize]{15}{4}
+\begin{ganttitle}
+\numtitle{0}{1}{3}{1}
+\end{ganttitle}
+\ganttbar{  \%indvar6 = phi i32 [ \%indvar.next7, \%13 ], [ 0, \%.outer ]}{1}{1}
+\ganttcon{2}{1}{1}{7}
+\ganttcon{2}{1}{1}{5}
+\ganttcon{2}{1}{1}{4}
+\ganttcon{2}{1}{1}{3}
+\ganttcon{2}{1}{1}{2}
+\ganttbar{  \%14 = add i32 \%p.2.ph, \%indvar6}{1}{1}
+\ganttcon{2}{2}{2}{8}
+\ganttbar{  \%15 = add i32 \%11, \%indvar6}{1}{1}
+\ganttcon{2}{3}{1}{6}
+\ganttcon{2}{3}{2}{9}
+\ganttbar{  \%code.0 = add i32 \%code.0.ph, \%indvar6}{1}{1}
+\ganttcon{2}{4}{2}{10}
+\ganttbar{  \%16 = add i32 \%12, \%indvar6}{1}{1}
+\ganttbar{  \%19 = icmp slt i32 \%15, 257}{1}{1}
+\ganttcon{2}{6}{3}{13}
+\ganttbar{  \%indvar.next7 = add i32 \%indvar6, 1}{1}{1}
+\ganttcon{2}{7}{1}{1}
+\ganttbar{  \%scevgep8 = getelementptr [257 x i32]* \%huffcode, i32 0, i32 \%14}{2}{1}
+\ganttcon{3}{8}{2}{10}
+\ganttbar{  \%scevgep9 = getelementptr [257 x i32]* \%huffsize, i32 0, i32 \%15}{2}{1}
+\ganttcon{3}{9}{2}{11}
+\ganttbar{  store i32 \%code.0, i32* \%scevgep8, align 4, !tbaa !1}{2}{1}
+\ganttbar{  \%17 = load i32* \%scevgep9, align 4, !tbaa !1}{2}{1}
+\ganttcon{3}{11}{3}{12}
+\ganttbar{  \%18 = icmp eq i32 \%17, \%size.0.ph}{3}{1}
+\ganttcon{4}{12}{3}{13}
+\ganttbar{  \%or.cond = and i1 \%18, \%19}{3}{1}
+\ganttcon{4}{13}{3}{14}
+\ganttbar{  br i1 \%or.cond, label \%13, label \%.critedge}{3}{1}
+\end{gantt}
+\end{figure}
+\begin{figure}
+\begin{gantt}[fontsize=\scriptsize]{3}{2}
+\begin{ganttitle}
+\numtitle{0}{1}{1}{1}
+\end{ganttitle}
+\ganttbar{  \%20 = icmp eq i32 \%17, 0}{1}{1}
+\ganttcon{2}{1}{1}{2}
+\ganttbar{  br i1 \%20, label \%.preheader.preheader, label \%.preheader2.preheader}{1}{1}
+\end{gantt}
+\end{figure}
+\begin{figure}
+\begin{gantt}[fontsize=\scriptsize]{3}{2}
+\begin{ganttitle}
+\numtitle{0}{1}{1}{1}
+\end{ganttitle}
+\ganttbar{  \%21 = sub i32 \%17, \%size.0.ph}{1}{1}
+\ganttbar{  br label \%.preheader2}{1}{1}
+\end{gantt}
+\end{figure}
+\begin{figure}
+\begin{gantt}[fontsize=\scriptsize]{2}{2}
+\begin{ganttitle}
+\numtitle{0}{1}{1}{1}
+\end{ganttitle}
+\ganttbar{  br label \%.preheader}{1}{1}
+\end{gantt}
+\end{figure}
+\begin{figure}
+\begin{gantt}[fontsize=\scriptsize]{7}{2}
+\begin{ganttitle}
+\numtitle{0}{1}{1}{1}
+\end{ganttitle}
+\ganttbar{  \%indvar10 = phi i32 [ 0, \%.preheader2.preheader ], [ \%indvar.next11, \%.pre...}{1}{1}
+\ganttcon{2}{1}{1}{4}
+\ganttbar{  \%code.1 = phi i32 [ \%16, \%.preheader2.preheader ], [ \%22, \%.preheader2 ]}{1}{1}
+\ganttcon{2}{2}{1}{3}
+\ganttbar{  \%22 = shl i32 \%code.1, 1}{1}{1}
+\ganttcon{2}{3}{1}{2}
+\ganttbar{  \%indvar.next11 = add i32 \%indvar10, 1}{1}{1}
+\ganttcon{2}{4}{1}{5}
+\ganttcon{2}{4}{1}{1}
+\ganttbar{  \%exitcond = icmp eq i32 \%indvar.next11, \%21}{1}{1}
+\ganttcon{2}{5}{1}{6}
+\ganttbar{  br i1 \%exitcond, label \%.outer.loopexit, label \%.preheader2}{1}{1}
+\end{gantt}
+\end{figure}
+\begin{figure}
+\begin{gantt}[fontsize=\scriptsize]{10}{5}
+\begin{ganttitle}
+\numtitle{0}{1}{4}{1}
+\end{ganttitle}
+\ganttbar{  \%indvar = phi i32 [ 0, \%.preheader.preheader ], [ \%indvar.next, \%34 ]}{1}{1}
+\ganttcon{2}{1}{1}{4}
+\ganttbar{  \%p\_dhtbl\_ml.011 = phi i32 [ 1, \%.preheader.preheader ], [ \%p\_dhtbl\_ml.1...}{1}{1}
+\ganttbar{  \%p.39 = phi i32 [ 0, \%.preheader.preheader ], [ \%p.4, \%34 ]}{1}{1}
+\ganttbar{  \%l.010 = add i32 \%indvar, 1}{1}{1}
+\ganttcon{2}{4}{2}{6}
+\ganttcon{2}{4}{2}{5}
+\ganttbar{  \%scevgep = getelementptr i32* \%p\_dhtbl\_maxcode, i32 \%l.010}{2}{1}
+\ganttbar{  \%scevgep5 = getelementptr i32* \%p\_xhtbl\_bits, i32 \%l.010}{2}{1}
+\ganttcon{3}{6}{2}{7}
+\ganttbar{  \%23 = load i32* \%scevgep5, align 4, !tbaa !1}{2}{2}
+\ganttcon{4}{7}{4}{8}
+\ganttbar{  \%24 = icmp eq i32 \%23, 0}{4}{1}
+\ganttcon{5}{8}{4}{9}
+\ganttbar{  br i1 \%24, label \%34, label \%25}{4}{1}
+\end{gantt}
+\end{figure}
+\begin{figure}
+\begin{gantt}[fontsize=\scriptsize]{14}{8}
+\begin{ganttitle}
+\numtitle{0}{1}{7}{1}
+\end{ganttitle}
+\ganttbar{  \%scevgep4 = getelementptr i32* \%p\_dhtbl\_valptr, i32 \%l.010}{1}{1}
+\ganttcon{2}{1}{1}{3}
+\ganttbar{  \%scevgep3 = getelementptr i32* \%p\_dhtbl\_mincode, i32 \%l.010}{1}{1}
+\ganttcon{2}{2}{2}{8}
+\ganttbar{  store i32 \%p.39, i32* \%scevgep4, align 4, !tbaa !1}{1}{1}
+\ganttbar{  \%26 = getelementptr inbounds [257 x i32]* \%huffcode, i32 0, i32 \%p.39}{1}{1}
+\ganttcon{2}{4}{1}{5}
+\ganttbar{  \%27 = load i32* \%26, align 4, !tbaa !1}{1}{1}
+\ganttcon{2}{5}{2}{8}
+\ganttbar{  \%29 = add i32 \%p.39, -1}{1}{1}
+\ganttcon{2}{6}{5}{10}
+\ganttbar{  br label \%34}{1}{1}
+\ganttbar{  store i32 \%27, i32* \%scevgep3, align 4, !tbaa !1}{2}{1}
+\ganttbar{  \%28 = load i32* \%scevgep5, align 4, !tbaa !1}{3}{2}
+\ganttcon{5}{9}{5}{11}
+\ganttcon{5}{9}{5}{10}
+\ganttbar{  \%30 = add i32 \%29, \%28}{5}{1}
+\ganttcon{6}{10}{6}{12}
+\ganttbar{  \%33 = add i32 \%28, \%p.39}{5}{1}
+\ganttbar{  \%31 = getelementptr inbounds [257 x i32]* \%huffcode, i32 0, i32 \%30}{6}{1}
+\ganttcon{7}{12}{6}{13}
+\ganttbar{  \%32 = load i32* \%31, align 4, !tbaa !1}{6}{1}
+\end{gantt}
+\end{figure}
+\begin{figure}
+\begin{gantt}[fontsize=\scriptsize]{8}{3}
+\begin{ganttitle}
+\numtitle{0}{1}{2}{1}
+\end{ganttitle}
+\ganttbar{  \%.sink = phi i32 [ \%32, \%25 ], [ -1, \%.preheader ]}{1}{1}
+\ganttcon{2}{1}{1}{4}
+\ganttbar{  \%p.4 = phi i32 [ \%33, \%25 ], [ \%p.39, \%.preheader ]}{1}{1}
+\ganttbar{  \%p\_dhtbl\_ml.1 = phi i32 [ \%l.010, \%25 ], [ \%p\_dhtbl\_ml.011, \%.prehead...}{1}{1}
+\ganttbar{  store i32 \%.sink, i32* \%scevgep, align 4}{1}{1}
+\ganttbar{  \%indvar.next = add i32 \%indvar, 1}{1}{1}
+\ganttcon{2}{5}{1}{6}
+\ganttbar{  \%exitcond2 = icmp eq i32 \%indvar.next, 16}{1}{1}
+\ganttcon{2}{6}{1}{7}
+\ganttbar{  br i1 \%exitcond2, label \%35, label \%.preheader}{1}{1}
+\end{gantt}
+\end{figure}
+\begin{figure}
+\begin{gantt}[fontsize=\scriptsize]{6}{5}
+\begin{ganttitle}
+\numtitle{0}{1}{4}{1}
+\end{ganttitle}
+\ganttbar{  \%36 = getelementptr inbounds i32* \%p\_dhtbl\_maxcode, i32 \%p\_dhtbl\_ml.1}{1}{1}
+\ganttcon{2}{1}{3}{4}
+\ganttcon{2}{1}{1}{2}
+\ganttbar{  \%37 = load i32* \%36, align 4, !tbaa !1}{1}{2}
+\ganttcon{3}{2}{3}{3}
+\ganttbar{  \%38 = add nsw i32 \%37, 1}{3}{1}
+\ganttcon{4}{3}{3}{4}
+\ganttbar{  store i32 \%38, i32* \%36, align 4, !tbaa !1}{3}{1}
+\ganttbar{  ret i32 \%p\_dhtbl\_ml.1}{4}{1}
+\end{gantt}
+\end{figure}
+\end{document}

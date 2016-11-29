@@ -1,0 +1,8 @@
+digraph {
+Node0x41889e0[label="  %689 = load i8* getelementptr inbounds..."];
+Node0x41889e0 -> Node0x41889e0[label="D:0.00ns L:1",color=blue];
+Node0x4188b20[label="  %690 = sext i8 %689 to i32"];
+Node0x4188b20 -> Node0x4188b20[label="D:0.00ns L:0",color=blue];
+Node0x4188c60[label="  %691 = add nsw i32 %690, 1"];
+Node0x4188c60 -> Node0x4188c60[label="D:3.81ns L:0",color=blue];
+}

@@ -1,0 +1,27 @@
+Depth = 20;
+Width = 32;
+Address_radix = dec;
+Data_radix = hex;
+Content
+Begin
+0: FFFFFFFE;	-- extend_mask[0] = -2
+1: FFFFFFFC;	-- extend_mask[1] = -4
+2: FFFFFFF8;	-- extend_mask[2] = -8
+3: FFFFFFF0;	-- extend_mask[3] = -16
+4: FFFFFFE0;	-- extend_mask[4] = -32
+5: FFFFFFC0;	-- extend_mask[5] = -64
+6: FFFFFF80;	-- extend_mask[6] = -128
+7: FFFFFF00;	-- extend_mask[7] = -256
+8: FFFFFE00;	-- extend_mask[8] = -512
+9: FFFFFC00;	-- extend_mask[9] = -1024
+10: FFFFF800;	-- extend_mask[10] = -2048
+11: FFFFF000;	-- extend_mask[11] = -4096
+12: FFFFE000;	-- extend_mask[12] = -8192
+13: FFFFC000;	-- extend_mask[13] = -16384
+14: FFFF8000;	-- extend_mask[14] = -32768
+15: FFFF0000;	-- extend_mask[15] = -65536
+16: FFFE0000;	-- extend_mask[16] = -131072
+17: FFFC0000;	-- extend_mask[17] = -262144
+18: FFF80000;	-- extend_mask[18] = -524288
+19: FFF00000;	-- extend_mask[19] = -1048576
+End;

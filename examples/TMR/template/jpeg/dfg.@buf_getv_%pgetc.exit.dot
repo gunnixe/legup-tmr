@@ -1,0 +1,19 @@
+digraph {
+Node0x40a0ba0[label="  %.0.i = phi i32 [ %temp.0.i, %27 ], [ ..."];
+Node0x40a0ba0 -> Node0x40a0ba0[label="D:0.00ns L:0",color=blue];
+Node0x40a0ba0 -> Node0x40a0ba0[label="D:0.00ns L:0",color=blue];
+Node0x40a0e20[label="  %28 = sub nsw i32 8, %p.06"];
+Node0x40a0e20 -> Node0x40a0e20[label="D:3.80ns L:0",color=blue];
+Node0x40a0f60[label="  %29 = lshr i32 %.0.i, %28"];
+Node0x40a0f60 -> Node0x40a0f60[label="D:4.13ns L:0",color=blue];
+Node0x40a10a0[label="  %30 = or i32 %29, %16"];
+Node0x40a10a0 -> Node0x40a10a0[label="D:0.63ns L:0",color=blue];
+Node0x40a11e0[label="  %31 = sub nsw i32 7, %p.06"];
+Node0x40a11e0 -> Node0x40a11e0[label="D:3.80ns L:0",color=blue];
+Node0x40a1460[label="  %32 = getelementptr inbounds [32 x i32..."];
+Node0x40a1460 -> Node0x40a1460[label="D:13.00ns L:0",color=blue];
+Node0x40a15a0[label="  %33 = load i32* %32, align 4, !tbaa !1"];
+Node0x40a15a0 -> Node0x40a15a0[label="D:0.00ns L:1",color=blue];
+Node0x40a16e0[label="  %34 = and i32 %30, %33"];
+Node0x40a16e0 -> Node0x40a16e0[label="D:0.66ns L:0",color=blue];
+}

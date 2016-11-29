@@ -1,0 +1,37 @@
+digraph {
+Node0x40df610[label="  %1 = getelementptr inbounds [3 x i8]* ..."];
+Node0x40df610 -> Node0x40df610[label="D:13.00ns L:0",color=blue];
+Node0x40dee80[label="  %2 = load i8* %1, align 1, !tbaa !1"];
+Node0x40dee80 -> Node0x40dee80[label="D:0.00ns L:2",color=blue];
+Node0x40e1c30[label="  %10 = tail call fastcc i32 @DecodeHuff..."];
+Node0x40dee80 -> Node0x40e1c30[label="D:0.00ns L:2",color=red];
+Node0x40defc0[label="  %3 = sext i8 %2 to i32"];
+Node0x40defc0 -> Node0x40defc0[label="D:0.00ns L:0",color=blue];
+Node0x40defc0 -> Node0x40defc0[label="D:0.00ns L:0",color=blue];
+Node0x40defc0 -> Node0x40defc0[label="D:0.00ns L:0",color=blue];
+Node0x40defc0 -> Node0x40defc0[label="D:0.00ns L:0",color=blue];
+Node0x40defc0 -> Node0x40defc0[label="D:0.00ns L:0",color=blue];
+Node0x40defc0 -> Node0x40defc0[label="D:0.00ns L:0",color=blue];
+Node0x40defc0 -> Node0x40defc0[label="D:0.00ns L:0",color=blue];
+Node0x40defc0 -> Node0x40defc0[label="D:0.00ns L:0",color=blue];
+Node0x40defc0 -> Node0x40defc0[label="D:0.00ns L:0",color=blue];
+Node0x40defc0 -> Node0x40defc0[label="D:0.00ns L:0",color=blue];
+Node0x40df100[label="  %4 = getelementptr inbounds [2 x [257 ..."];
+Node0x40df100 -> Node0x40df100[label="D:13.00ns L:0",color=blue];
+Node0x40df240[label="  %5 = getelementptr inbounds [2 x i32]*..."];
+Node0x40df240 -> Node0x40df240[label="D:13.00ns L:0",color=blue];
+Node0x40df380[label="  %6 = load i32* %5, align 4, !tbaa !4"];
+Node0x40df380 -> Node0x40df380[label="D:0.00ns L:2",color=blue];
+Node0x40df380 -> Node0x40e1c30[label="D:0.00ns L:2",color=red];
+Node0x40e1870[label="  %7 = getelementptr inbounds [2 x [36 x..."];
+Node0x40e1870 -> Node0x40e1870[label="D:13.00ns L:0",color=blue];
+Node0x40e19b0[label="  %8 = getelementptr inbounds [2 x [36 x..."];
+Node0x40e19b0 -> Node0x40e19b0[label="D:13.00ns L:0",color=blue];
+Node0x40e1af0[label="  %9 = getelementptr inbounds [2 x [36 x..."];
+Node0x40e1af0 -> Node0x40e1af0[label="D:13.00ns L:0",color=blue];
+Node0x40e1c30 -> Node0x40e1c30[label="D:0.00ns L:1",color=blue];
+Node0x40e1c30 -> Node0x40e1c30[label="D:0.00ns L:1",color=blue];
+Node0x40e1c30 -> Node0x40e1c30[label="D:0.00ns L:1",color=blue];
+Node0x40e1d70[label="  %11 = icmp eq i32 %10, 0"];
+Node0x40e1d70 -> Node0x40e1d70[label="D:2.34ns L:0",color=blue];
+}

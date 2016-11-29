@@ -1,0 +1,9 @@
+Depth = 2;
+Width = 32;
+Address_radix = dec;
+Data_radix = hex;
+Content
+Begin
+0: 00000000;	-- out_prec_get_dht[0] = 0
+1: 00000000;	-- out_prec_get_dht[1] = 0
+End;

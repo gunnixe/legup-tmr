@@ -1,0 +1,9 @@
+Depth = 2;
+Width = 32;
+Address_radix = dec;
+Data_radix = hex;
+Content
+Begin
+0: 00000041;	-- out_length_get_dqt[0] = 65
+1: 00000041;	-- out_length_get_dqt[1] = 65
+End;

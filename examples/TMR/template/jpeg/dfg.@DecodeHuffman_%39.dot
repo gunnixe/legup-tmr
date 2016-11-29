@@ -1,0 +1,6 @@
+digraph {
+Node0x40d5900[label="  %temp.0.in.i.i3 = phi i8 [ %35, %37 ],..."];
+Node0x40d5900 -> Node0x40d5900[label="D:0.00ns L:0",color=blue];
+Node0x40d5a40[label="  %temp.0.i.i4 = zext i8 %temp.0.in.i.i3..."];
+Node0x40d5a40 -> Node0x40d5a40[label="D:0.00ns L:0",color=blue];
+}

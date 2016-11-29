@@ -1,0 +1,8 @@
+Depth = 1;
+Width = 16;
+Address_radix = dec;
+Data_radix = hex;
+Content
+Begin
+0: 0000;	-- p_jinfo_image_height[0] = 0
+End;

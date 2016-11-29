@@ -1,0 +1,17 @@
+Depth = 10;
+Width = 32;
+Address_radix = dec;
+Data_radix = hex;
+Content
+Begin
+0: 000000D8;	-- out_unread_marker[0] = 216
+1: 000000E0;	-- out_unread_marker[1] = 224
+2: 000000DB;	-- out_unread_marker[2] = 219
+3: 000000DB;	-- out_unread_marker[3] = 219
+4: 000000C0;	-- out_unread_marker[4] = 192
+5: 000000C4;	-- out_unread_marker[5] = 196
+6: 000000C4;	-- out_unread_marker[6] = 196
+7: 000000C4;	-- out_unread_marker[7] = 196
+8: 000000C4;	-- out_unread_marker[8] = 196
+9: 000000DA;	-- out_unread_marker[9] = 218
+End;

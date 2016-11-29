@@ -1,0 +1,17 @@
+digraph {
+Node0x4099a40[label="  %1 = add nsw i32 %n, -1"];
+Node0x4099a40 -> Node0x4099a40[label="D:3.81ns L:0",color=blue];
+Node0x4099a40 -> Node0x4099a40[label="D:3.81ns L:0",color=blue];
+Node0x4099a40 -> Node0x4099a40[label="D:3.81ns L:0",color=blue];
+Node0x4099a40 -> Node0x4099a40[label="D:3.81ns L:0",color=blue];
+Node0x4099f90[label="  %2 = load i32* @read_position, align 4..."];
+Node0x4099f90 -> Node0x4099f90[label="D:0.00ns L:2",color=blue];
+Node0x4099f90 -> Node0x4099f90[label="D:0.00ns L:2",color=blue];
+Node0x4099f90 -> Node0x4099f90[label="D:0.00ns L:2",color=blue];
+Node0x4099f90 -> Node0x4099f90[label="D:0.00ns L:2",color=blue];
+Node0x409a0d0[label="  %3 = sub nsw i32 %1, %2"];
+Node0x409a0d0 -> Node0x409a0d0[label="D:3.80ns L:0",color=blue];
+Node0x409a0d0 -> Node0x409a0d0[label="D:3.80ns L:0",color=blue];
+Node0x409a210[label="  %4 = icmp sgt i32 %3, 0"];
+Node0x409a210 -> Node0x409a210[label="D:4.43ns L:0",color=blue];
+}

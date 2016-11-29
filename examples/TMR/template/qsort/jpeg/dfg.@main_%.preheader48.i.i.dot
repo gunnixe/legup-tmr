@@ -1,0 +1,12 @@
+digraph {
+Node0x4190be0[label="  call fastcc void @Write4Blocks(i32* ge..."];
+Node0x4190aa0[label="  call fastcc void @Write4Blocks(i32* ge..."];
+Node0x4190aa0 -> Node0x4190be0[label="D:0.00ns L:1",color=red];
+Node0x4190d20[label="  call fastcc void @Write4Blocks(i32* ge..."];
+Node0x4190aa0 -> Node0x4190d20[label="D:0.00ns L:1",color=red];
+Node0x4190be0 -> Node0x4190d20[label="D:0.00ns L:1",color=red];
+Node0x4190e60[label="  %740 = icmp slt i32 %651, %501"];
+Node0x4190e60 -> Node0x4190e60[label="D:4.43ns L:0",color=blue];
+Node0x4190fa0[label="  %indvar.next165 = add i32 %indvar164, ..."];
+Node0x4190fa0 -> Node0x4190fa0[label="D:3.81ns L:0",color=blue];
+}

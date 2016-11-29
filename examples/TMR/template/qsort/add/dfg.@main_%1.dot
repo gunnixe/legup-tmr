@@ -1,0 +1,21 @@
+digraph {
+Node0x39a51d0[label="  %r.02 = phi i32 [ 0, %0 ], [ %3, %1 ]"];
+Node0x39a51d0 -> Node0x39a51d0[label="D:0.00ns L:0",color=blue];
+Node0x39a6790[label="  %i.01 = phi i32 [ 0, %0 ], [ %4, %1 ]"];
+Node0x39a6790 -> Node0x39a6790[label="D:0.00ns L:0",color=blue];
+Node0x39a6790 -> Node0x39a6790[label="D:0.00ns L:0",color=blue];
+Node0x39a68d0[label="  %scevgep = getelementptr [1024 x i32]*..."];
+Node0x39a68d0 -> Node0x39a68d0[label="D:20.00ns L:0",color=blue];
+Node0x39a6b50[label="  %2 = load i32* %scevgep, align 4, !tba..."];
+Node0x39a6b50 -> Node0x39a6b50[label="D:0.00ns L:2",color=blue];
+Node0x39a6c90[label="  %3 = add i32 %2, %r.02"];
+Node0x39a6c90 -> Node0x39a6c90[label="D:2.50ns L:0",color=blue];
+Node0x39a6c90 -> Node0x39a6c90[label="D:2.50ns L:0",color=blue];
+Node0x39a6c90 -> Node0x39a6c90[label="D:2.50ns L:0",color=blue];
+Node0x39a6c90 -> Node0x39a6c90[label="D:2.50ns L:0",color=blue];
+Node0x39a6dd0[label="  %4 = add nsw i32 %i.01, 1"];
+Node0x39a6dd0 -> Node0x39a6dd0[label="D:2.50ns L:0",color=blue];
+Node0x39a6dd0 -> Node0x39a6dd0[label="D:2.50ns L:0",color=blue];
+Node0x39a6f10[label="  %exitcond1 = icmp eq i32 %4, 1024"];
+Node0x39a6f10 -> Node0x39a6f10[label="D:2.49ns L:0",color=blue];
+}

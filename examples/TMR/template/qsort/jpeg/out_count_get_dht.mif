@@ -1,0 +1,11 @@
+Depth = 4;
+Width = 32;
+Address_radix = dec;
+Data_radix = hex;
+Content
+Begin
+0: 0000000C;	-- out_count_get_dht[0] = 12
+1: 000000A2;	-- out_count_get_dht[1] = 162
+2: 0000000C;	-- out_count_get_dht[2] = 12
+3: 000000A2;	-- out_count_get_dht[3] = 162
+End;

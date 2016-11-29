@@ -1,0 +1,14 @@
+digraph {
+Node0x40d7480[label="  %code.0.lcssa = phi i32 [ %..i, %buf_g..."];
+Node0x40d7480 -> Node0x40d7480[label="D:0.00ns L:0",color=blue];
+Node0x40d7480 -> Node0x40d7480[label="D:0.00ns L:0",color=blue];
+Node0x40d75c0[label="  %l.0.lcssa = phi i32 [ 1, %buf_getb.ex..."];
+Node0x40d75c0 -> Node0x40d75c0[label="D:0.00ns L:0",color=blue];
+Node0x40d75c0 -> Node0x40d75c0[label="D:0.00ns L:0",color=blue];
+Node0x40d7700[label="  %49 = getelementptr inbounds i32* %Dhu..."];
+Node0x40d7700 -> Node0x40d7700[label="D:13.00ns L:0",color=blue];
+Node0x40d7840[label="  %50 = load i32* %49, align 4, !tbaa !1"];
+Node0x40d7840 -> Node0x40d7840[label="D:0.00ns L:2",color=blue];
+Node0x40d7980[label="  %51 = icmp slt i32 %code.0.lcssa, %50"];
+Node0x40d7980 -> Node0x40d7980[label="D:4.43ns L:0",color=blue];
+}

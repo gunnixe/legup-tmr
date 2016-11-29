@@ -1,0 +1,11 @@
+digraph {
+Node0x4112ba0[label="  %9 = getelementptr inbounds i8* %4, i3..."];
+Node0x4112ba0 -> Node0x4112ba0[label="D:0.00ns L:0",color=blue];
+Node0x4112e20[label="  %10 = load i8* %5, align 1, !tbaa !7"];
+Node0x4112ce0[label="  store i8* %9, i8** @CurHuffReadBuf, al..."];
+Node0x4112ce0 -> Node0x4112e20[label="D:13.00ns L:1",color=red];
+Node0x4112e20 -> Node0x4112e20[label="D:0.00ns L:2",color=blue];
+Node0x4112e20 -> Node0x4112e20[label="D:0.00ns L:2",color=blue];
+Node0x4112f60[label="  %11 = icmp eq i8 %10, 0"];
+Node0x4112f60 -> Node0x4112f60[label="D:1.52ns L:0",color=blue];
+}

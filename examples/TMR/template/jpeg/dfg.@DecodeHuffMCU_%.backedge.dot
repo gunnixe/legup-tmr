@@ -1,0 +1,7 @@
+digraph {
+Node0x40e7440[label="  %k.0.be = phi i32 [ %60, %59 ], [ %64,..."];
+Node0x40e7440 -> Node0x40e7440[label="D:0.00ns L:0",color=blue];
+Node0x40e7440 -> Node0x40e7440[label="D:0.00ns L:0",color=blue];
+Node0x40e7580[label="  %65 = icmp slt i32 %k.0.be, 64"];
+Node0x40e7580 -> Node0x40e7580[label="D:4.43ns L:0",color=blue];
+}

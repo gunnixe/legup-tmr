@@ -1,0 +1,10 @@
+Depth = 3;
+Width = 32;
+Address_radix = dec;
+Data_radix = hex;
+Content
+Begin
+0: 00000000;	-- OutData_comp_vpos[0] = 0
+1: 00000000;	-- OutData_comp_vpos[1] = 0
+2: 00000000;	-- OutData_comp_vpos[2] = 0
+End;

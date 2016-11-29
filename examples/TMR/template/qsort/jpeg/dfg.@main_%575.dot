@@ -1,0 +1,6 @@
+digraph {
+Node0x4179760[label="  %576 = icmp sgt i32 %566, 255"];
+Node0x4179760 -> Node0x4179760[label="D:4.43ns L:0",color=blue];
+Node0x41798a0[label="  %.1.i.i.i = select i1 %576, i32 255, i..."];
+Node0x41798a0 -> Node0x41798a0[label="D:3.58ns L:0",color=blue];
+}

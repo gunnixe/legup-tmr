@@ -1,0 +1,13 @@
+digraph {
+Node0x414e370[label="  %17 = phi i8* [ %ReadBuf.0, %.loopexit..."];
+Node0x414e370 -> Node0x414e370[label="D:0.00ns L:0",color=blue];
+Node0x414e370 -> Node0x414e370[label="D:0.00ns L:0",color=blue];
+Node0x414e370 -> Node0x414e370[label="D:0.00ns L:0",color=blue];
+Node0x414e4b0[label="  %storemerge2.i.i.i = getelementptr inb..."];
+Node0x414e4b0 -> Node0x414e4b0[label="D:0.00ns L:0",color=blue];
+Node0x414e4b0 -> Node0x414e4b0[label="D:0.00ns L:0",color=blue];
+Node0x4152910[label="  %.sink3.i.i.i = load i8* %17, align 1"];
+Node0x4152910 -> Node0x4152910[label="D:0.00ns L:2",color=blue];
+Node0x4152a50[label="  %18 = icmp eq i8 %.sink3.i.i.i, -1"];
+Node0x4152a50 -> Node0x4152a50[label="D:1.52ns L:0",color=blue];
+}
