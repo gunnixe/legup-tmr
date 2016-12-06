@@ -40,12 +40,18 @@ SDCScheduler::SDCScheduler(Allocation *alloc) : lp(0), map(0), alloc(alloc) {
 
 unsigned SDCScheduler::getNumInstructionCycles(Instruction *instr) {
 	InstructionNode *iNode = dag->getInstructionNode(instr);
-	if (LEGUP_CONFIG->getParameterInt("TMR") &&
-	    LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4 &&
-		iNode->getBackward() && isa<PHINode>(instr))
-		return 1;
+	unsigned ret = Scheduler::getNumInstructionCycles(instr);
 
-	return Scheduler::getNumInstructionCycles(instr);
+	if (LEGUP_CONFIG->getParameterInt("TMR")) {
+		if (isa<PHINode>(instr)) {
+			if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4 && iNode->getBackward())
+				ret++;
+		} else if (isa<LoadInst>(instr)) {
+			if (LEGUP_CONFIG->getParameterInt("LOCAL_RAMS"))
+				ret++;
+		}
+	}
+	return ret;
 }
 
 void SDCScheduler::createLPVariables(Function *F) {

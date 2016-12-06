@@ -563,8 +563,17 @@ bool LegupConfig::getNumberOfFUsAllocated(std::string FuName, int *number) {
 // returns false if no constraint is found
 bool LegupConfig::getOperationLatency(std::string FuName, int *latency) {
     // errs() << "getFULatency(" << FuName << ")\n"
+	bool ret = findMatchingConstraint(FuName, FuncUnitLatency, latency);
 
-    return findMatchingConstraint(FuName, FuncUnitLatency, latency);
+	// TMR
+	//if (FuName=="local_mem_dual_port") {
+	//	if(LEGUP_CONFIG->getParameterInt("TMR")
+	//			&& LEGUP_CONFIG->getParameterInt("LOCAL_RAMS")) {
+	//		(*latency)++;
+	//	}
+	//}
+
+	return ret;
 }
 
 // works the same as getNumberOfFUsAllocated()

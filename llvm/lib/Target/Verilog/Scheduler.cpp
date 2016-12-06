@@ -31,7 +31,7 @@ unsigned Scheduler::getNumInstructionCycles(Instruction *instr) {
 	//if (LEGUP_CONFIG->getParameterInt("TMR")) {
 	//	//if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==1 && isa<PHINode>(instr))
 	//	//	return 1;
-	//	if (isa<LoadInst>(instr))
+	//	if (LEGUP_CONFIG->getParameterInt("LOCAL_RAMS") && isa<LoadInst>(instr))
 	//		return 2;
 	//}
 
@@ -116,12 +116,7 @@ unsigned Scheduler::getNumInstructionCycles(Instruction *instr) {
               RAM *ram = alloc->getLocalRamFromInst(instr);
               if (ram && !alloc->isRAMGlobal(ram)) {
                   // local memory
-                  //if (LEGUP_CONFIG->getParameterInt("TMR")) {
-                  //    //TMR::add 1 cycle delay for registered voter for memory input ports
-                  //    return ram->getLatency(alloc)+1;
-                  //}
-                  //else
-                      return ram->getLatency(alloc);
+                  return ram->getLatency(alloc);
               } else {
                   // global memory
                   return getGlobalMemLatency();

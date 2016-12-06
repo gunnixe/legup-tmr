@@ -790,9 +790,9 @@ int RAM::getLatency(Allocation *alloc) {
                 --latency;
             }
         } else {
-            // global RAM take 1 off latency
-            // (1 cycle is taken by the memory controller)
-            latency = constraint-1;
+           	// global RAM take 1 off latency
+           	// (1 cycle is taken by the memory controller)
+           	latency = constraint-1;
         }
     }
     return latency;

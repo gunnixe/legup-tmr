@@ -812,10 +812,14 @@ FiniteStateMachine *SchedulerMapping::createFSM(Function *F,
             }
 
 			//FIXME -- added for TMR
-			if (LEGUP_CONFIG->getParameterInt("TMR") &&
-			    LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4 &&
-			    iNode->getBackward() && isa<PHINode>(I))
-				delayState = 1;
+			if (LEGUP_CONFIG->getParameterInt("TMR")) {
+				if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4 &&
+			    			iNode->getBackward() && isa<PHINode>(I))
+					delayState = 1;
+				if (LEGUP_CONFIG->getParameterInt("LOCAL_RAMS") &&
+							isa<LoadInst>(I))
+					delayState++;
+			}
 
             if (delayState == 0) {
                 fsm->setEndState(I, orderStates[order]);

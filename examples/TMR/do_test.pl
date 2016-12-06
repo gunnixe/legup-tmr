@@ -1,24 +1,32 @@
 #!/usr/bin/perl -s
 
-#my @example_list = qw(add fir matrixmultiply qsort fft);
+my @example_list = qw(add fir matrixmultiply qsort fft);
 
 #dhrystone benchmark example
-my @example_list = qw(adpcm aes gsm blowfish);# jpeg);
+#my @example_list = qw(add fir matrixmultiply qsort fft adpcm aes gsm blowfish);# jpeg);
 
 my ($fname) = @ARGV;
 die "Need folder name\n" if(not defined $fname);
 
 if($fname eq "all") {
-	&do_work($_, $c) for(@example_list);
+	&do_work($_, $c, $f) for(@example_list);
 } else {
 	$dest_folder = "template/".$fname;
 	die "Folder '$dest_folder' is not exist\n" if(!-d $dest_folder);
-	&do_work($fname, $c);
+	&do_work($fname, $c, $f);
 }
 
 sub do_work {
 	my $fname = $_[0];
-	my $create_only = $_[1];
+	my $flag_create = 1;
+	my $flag_exec = 1;
+	my $flag_summary = 1;
+	if($_[1]) {
+		($flag_create, $flag_exec, $flag_summary) = (1,0,0);
+	} elsif($_[2]) {
+		($flag_create, $flag_exec, $flag_summary) = (0,0,1);
+	}
+		
 
 	system("mkdir -p output") if(!-d "outout");
 	my $report_name = "output/".$fname.".rpt";
@@ -38,28 +46,28 @@ sub do_work {
 			# Thus, LegUp4.0 fails for pieplining.
 			# - need to skip several example including qsort and fft.
 			if(($fname eq "qsort") || ($fname eq "fft")) {
-				if(($lram==1) || ($pipe==1)) {
+				#if(($lram==1) || ($pipe==1)) {
+				if($pipe==1) {
 					next;
 				}
 			}
 
 			# prepare work dir
 			my $cname = $fname."_".$scenario_cnt;
-			system("rm -rf output/$cname");
 
-			system("mkdir -p output") if(!-d "output");
-			system("cp -r template/$fname output/$cname");
-			chdir "output/$cname";
-
-			&change_config(@arg_list);
-		
-			if(!$create_only) {
-				# do simulation
-				system("make; make v | tee vsim.log;");
-				system("make p; make f;");
-	
-				&summary(($cname, @arg_list));
+			if($flag_create) {
+				system("rm -rf output/$cname");
+				system("mkdir -p output") if(!-d "output");
+				system("cp -r template/$fname output/$cname");
 			}
+			chdir "output/$cname";
+			&change_config(@arg_list) if($flag_create);
+		
+			# do simulation
+			system("make; make v | tee vsim.log;") if $flag_exec;
+			#system("make p; make f;") if $flag_exec;
+	
+			#&summary(($cname, @arg_list)) if $flag_summary;
 
 			# finalize work dir
 			chdir "../../";
@@ -72,7 +80,7 @@ sub do_work {
 
 sub summary {
 	my ($cname, $tmr, $svoter_mode, $pvoter_mode, $local_ram, $pipeline) = @_;
-	print FRH "#----- foler_name=$cname, TMR=$tmr, SYNC_VOTER_MODE=$svoter_mode, PART_VOTER_MODE=$pvoter_mode -----\n";
+	print FRH "#----- dir_name=$cname, TMR=$tmr, SYNC_VOTER_MODE=$svoter_mode, PART_VOTER_MODE=$pvoter_mode -----\n";
 	print FRH "#-----     LOCAL_RAM=$local_ram, pipeline=$pipeline -----\n";
 
 	open(FH, '<', "vsim.log") or die "cannot open 'vsim.log' $!";
@@ -93,15 +101,25 @@ sub summary {
 	open(FH, '<', "top.fit.summary") or die "cannot open 'top.fit.summary' $!";
 	while(<FH>) {
 		chomp;
-		if((m/^Total logic elements : [\d,]+ \/ [\d,]+ /) ||
-		   (m/\s+Total combinational functions : [\d,]+ \/ [\d,]+ /) ||
-		   (m/\s+Dedicated logic registers : [\d,]+ \/ [\d,]+ /) ||
-		   (m/^Total memory bits : [\d,]+ \/ [\d,]+ /) ||
-		   (m/^Embedded Multiplier 9-bit elements : [\d,]+ \/ [\d,]+ /)) {
+		# for alter 13.0-sp1
+		#if((m/^Total logic elements : [\d,]+ \/ [\d,]+ /) ||
+		#   (m/\s+Total combinational functions : [\d,]+ \/ [\d,]+ /) ||
+		#   (m/\s+Dedicated logic registers : [\d,]+ \/ [\d,]+ /) ||
+		#   (m/^Total memory bits : [\d,]+ \/ [\d,]+ /) ||
+		#   (m/^Embedded Multiplier 9-bit elements : [\d,]+ \/ [\d,]+ /)) {
+		#	print FRH "\t$_\n";
+		#}
+		#last if(m/^Embedded Multiplier 9-bit elements : [\d,]+ \/ [\d,]+ /);
+
+		# modifed for alter 16.1
+		if((m/^Logic utilization \(in ALMs\) : [\d,]+ \/ [\d,]+ /) ||
+		   (m/^Total registers : [\d,]+/) ||
+		   (m/^Total block memory bits : [\d,]+ \/ [\d,]+ /) ||
+		   (m/^Total RAM Blocks : [\d,]+ \/ [\d,]+ /) ||
+		   (m/^Total DSP Blocks : [\d,]+ \/ [\d,]+ /)) {
 			print FRH "\t$_\n";
 		}
-
-		last if(m/^Embedded Multiplier 9-bit elements : [\d,]+ \/ [\d,]+ /);
+		last if(m/^Total DSP Blocks : [\d,]+ \/ [\d,]+ /);
 	}
 	die "cannot find string in 'top.fit.summary'" if(eof FH);
 	close(FH);
@@ -109,9 +127,9 @@ sub summary {
 	open(FH, '<', "top.sta.rpt") or die "cannot open 'top.sta.rpt' $!";
 	while(<FH>) {
 		chomp;
-		if(m/^; Slow Model Fmax Summary/) {
+		if(m/^; Fmax\s+;/) {
 			my $line;
-			$line = readline(FH) for(1..4);
+			$line = readline(FH) for(1..2);
 			print FRH "\tFMax = $line\n";
 			last;
 		}
@@ -134,6 +152,10 @@ sub change_config {
 			$out .= "set_parameter PART_VOTER_MODE $pmode\n";
 		} elsif(m/set_parameter LOCAL_RAMS \d$/) {
 			$out .= "set_parameter LOCAL_RAMS $lram\n";
+			#add locam mem constrant for FMax
+			#if($tmr && $lram) {
+			#	$out .= "set_operation_latency local_mem_dual_port 2\n";
+			#}
 		} elsif(m/loop_pipeline \"loop\"$/) {
 			if($pipe==0) {
 				$out .= "#loop_pipeline \"loop\"\n";

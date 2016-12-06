@@ -59,7 +59,7 @@ public:
 	void printTmrSignal(const RTLSignal *signal, std::string postfix);
 	void printTmrVoter(const std::string sigName, const std::string lo, const std::string hi,
 	        bool isRegVoter=false);
-	bool isLocalMemSignal(const RTLSignal *signal);
+	bool isLocalMemSignal(const RTLSignal *signal, bool checkOutSig=false);
 	bool needSyncVoter(const RTLSignal *signal);
 	bool needPartVoter(const RTLSignal *signal);
 	bool isBasicOperation(const RTLModule *rtl);
