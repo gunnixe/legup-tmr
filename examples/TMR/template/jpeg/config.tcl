@@ -10,6 +10,8 @@ set_parameter LOCAL_RAMS 1
 #set_parameter GROUP_RAMS_SIMPLE_OFFSET 1
 set_parameter CASE_FSM 1
 
+set_parameter VSIM_NO_ASSERT 1
+
 set_parameter TMR 0
 set_parameter SYNC_VOTER_MODE 0
 # SVOTER_MODE 0=output only,

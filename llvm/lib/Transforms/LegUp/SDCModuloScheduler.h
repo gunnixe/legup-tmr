@@ -191,6 +191,26 @@ class SDCModuloScheduler {
     Module *M;
     void initLoop();
     int getInitialMII();
+	unsigned getNumInstructionCycles(Instruction *I) {
+		unsigned ret = Scheduler::getNumInstructionCycles(I);
+		//if (LEGUP_CONFIG->getParameterInt("TMR") && 
+		//		LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4) {
+		//	InstructionNode *iNode = dag->getInstructionNode(I);
+		//	if (isa<LoadInst>(I)) {
+		//		if (LEGUP_CONFIG->getParameterInt("LOCAL_RAMS")) {
+		//			RAM *localRam = dag->getAlloc()->getLocalRamFromInst(I);
+		//			if (localRam) {
+		//				if (localRam->getScope() == RAM::LOCAL)
+		//			  	++ret;
+		//			}
+		//		}
+		//	}
+		//	//else if (isa<PHINode>(I) && iNode->getBackward())
+		//	//	++ret;
+		//}
+		return ret;
+	}
+
 
     // ---------------------------------------------------------------------------
     // SDC scheduler
@@ -267,7 +287,7 @@ class SDCModuloScheduler {
             numInst++;
             InstructionNode *iNode = dag->getInstructionNode(i);
             startVariableIndex[iNode] = numVars;
-            int delay = Scheduler::getNumInstructionCycles(i);
+            int delay = getNumInstructionCycles(i);
             if (isa<StoreInst>(i)) {
                 // store you need an extra cycle for the memory to be ready
                 delay = 1;
@@ -279,7 +299,7 @@ class SDCModuloScheduler {
                        << " End Index: " << endVariableIndex[iNode]
                        << " I: " << *i << "\n";
 
-            numVars += (1 + Scheduler::getNumInstructionCycles(i));
+            numVars += (1 + getNumInstructionCycles(i));
         }
 
         if (SDCdebug)
@@ -558,9 +578,9 @@ class SDCModuloScheduler {
         // don't constraint multi-cycle operations
         // dependency has more than 1 cycle latency, so this dependency will
         // already be in another cycle.
-        if (Scheduler::getNumInstructionCycles(Root->getInst()) > 0)
+        if (getNumInstructionCycles(Root->getInst()) > 0)
             return;
-        if (Scheduler::getNumInstructionCycles(Curr->getInst()) > 0)
+        if (getNumInstructionCycles(Curr->getInst()) > 0)
             return;
 
         // Walk through the dependencies
@@ -570,7 +590,7 @@ class SDCModuloScheduler {
             // dependency from depNode -> Curr
             InstructionNode *depNode = *i;
 
-            if (Scheduler::getNumInstructionCycles(depNode->getInst()) > 0)
+            if (getNumInstructionCycles(depNode->getInst()) > 0)
                 continue;
 
             float delay = PartialPathDelay + depNode->getDelay();

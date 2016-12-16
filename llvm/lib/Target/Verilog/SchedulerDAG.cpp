@@ -25,6 +25,7 @@
 #include "llvm/Analysis/CFG.h"
 #include "llvm/ADT/SCCIterator.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "Ram.h"
 
 using namespace llvm;
 using namespace legup;
@@ -299,9 +300,6 @@ bool hasNoDelay(Instruction *instr) {
     return (instr->isCast() || isa<PHINode>(instr) || isa<AllocaInst>(instr) ||
             instr->isTerminator() || isa<LoadInst>(instr) ||
             isa<CallInst>(instr));
-    //return (instr->isCast() || isa<AllocaInst>(instr) ||
-    //        instr->isTerminator() || isa<LoadInst>(instr) ||
-    //        isa<CallInst>(instr));
 }
 
 void SchedulerDAG::updateDAGwithInst(Instruction *instr) {
@@ -309,13 +307,6 @@ void SchedulerDAG::updateDAGwithInst(Instruction *instr) {
 
     // set delay
     std::string opName = LEGUP_CONFIG->getOpNameFromInst(instr, alloc);
-	//if (isa<PHINode>(instr)) { // add voter delay to 'phi' instruction
-	//if (LEGUP_CONFIG->getParameterInt("TMR") &&
-	//   (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4 ||
-	//   LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==5) &&
-	//   iNode->getBackward()) { // add voter delay to backward edges
-	//	iNode->setAtMaxDelay();
-    //} else if (opName.empty() || isMem(instr)) {
     if (opName.empty() || isMem(instr)) {
         if (isa<GetElementPtrInst>(instr)) {
             if (LEGUP_CONFIG->getParameterInt("DONT_CHAIN_GET_ELEM_PTR")) {
@@ -326,7 +317,23 @@ void SchedulerDAG::updateDAGwithInst(Instruction *instr) {
                 iNode->setAtMaxDelay();
             }
         } else if (hasNoDelay(instr)) {
-            iNode->setDelay(0);
+			// TMR - add voter delay to backward edges
+			//if (LEGUP_CONFIG->getParameterInt("TMR") &&
+			//		LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4 &&
+			//		//isa<PHINode>(instr) && 
+			//		iNode->getBackward()) {
+			//	iNode->setAtMaxDelay();
+			//} else if (LEGUP_CONFIG->getParameterInt("TMR") &&
+			//		LEGUP_CONFIG->getParameterInt("LOCAL_RAMS") &&
+			//		isa<LoadInst>(instr)) {
+			//	RAM *localRam = alloc->getLocalRamFromInst(instr);
+			//	if (localRam && localRam->getScope() == RAM::LOCAL)
+			//		iNode->setAtMaxDelay();
+			//	else
+            //		iNode->setDelay(0);
+			//} else {
+            	iNode->setDelay(0);
+			//}
         } else {
             // errs() << "Empty: " << *instr << "\n";
             // assert(hasNoDelay(instr));
@@ -785,7 +792,6 @@ FiniteStateMachine *SchedulerMapping::createFSM(Function *F,
         for (BasicBlock::iterator instr = B->begin(), ie = B->end();
              instr != ie; ++instr) {
             Instruction *I = instr;
-    		InstructionNode *iNode = dag->getInstructionNode(I);
             unsigned order = getState(dag->getInstructionNode(I));
 
             orderStates[order]->push_back(I);
@@ -812,13 +818,21 @@ FiniteStateMachine *SchedulerMapping::createFSM(Function *F,
             }
 
 			//FIXME -- added for TMR
-			if (LEGUP_CONFIG->getParameterInt("TMR")) {
-				if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4 &&
-			    			iNode->getBackward() && isa<PHINode>(I))
+			if (LEGUP_CONFIG->getParameterInt("TMR") &&
+					LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4) {
+    			InstructionNode *iNode = dag->getInstructionNode(I);
+				if (iNode->getBackward() && isa<PHINode>(I))
 					delayState = 1;
-				if (LEGUP_CONFIG->getParameterInt("LOCAL_RAMS") &&
-							isa<LoadInst>(I))
-					delayState++;
+				//if (LEGUP_CONFIG->getParameterInt("LOCAL_RAMS") &&
+				//		LEGUP_CONFIG->getParameterInt("USE_REG_VOTER_FOR_LOCAL_RAMS") &&
+				//		isa<LoadInst>(I)) {
+				//	Allocation *alloc = dag->getAlloc();
+				//	RAM *localRam = alloc->getLocalRamFromInst(I);
+				//	if (localRam) {
+				//		if (localRam->getScope() == RAM::LOCAL)
+				//			delayState++;
+				//	}
+				//}
 			}
 
             if (delayState == 0) {

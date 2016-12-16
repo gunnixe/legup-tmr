@@ -7,7 +7,7 @@ source ../../config.tcl
 
 #set_parameter SDC_NO_CHAINING 1
 
-set_parameter TMR 1
+set_parameter TMR 0
 set_parameter SYNC_VOTER_MODE 2
 # SVOTER_MODE 0=output only,
 #             1=all reigisters,

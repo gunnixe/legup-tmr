@@ -196,6 +196,7 @@ public:
 	// TMR
 	SmallVector<std::pair<const BasicBlock*, const BasicBlock*>, 32> BackEdges;
 	std::queue<std::vector<const BasicBlock*> > DAGPaths;
+	Allocation *getAlloc() { return alloc; }
 
 private:
     void regDataDeps(InstructionNode *iNode);

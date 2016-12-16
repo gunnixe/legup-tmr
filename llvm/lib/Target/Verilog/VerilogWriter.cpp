@@ -3177,6 +3177,10 @@ void VerilogWriter::printRamInstance(RAM *R, bool memCtrlInstance) {
 			// However, the parameter of memory latency is not changed (not add 1)
 			// But, it uses a registered voter for memory output
             int latency = ((RAM *)R)->getLatency(alloc);
+			if (LEGUP_CONFIG->getParameterInt("TMR") &&
+					LEGUP_CONFIG->getParameterInt("USE_REG_VOTER_FOR_LOCAL_RAMS")) {
+				--latency;
+			}
             Out << "defparam " << name << ".latency = " << latency << ";\n";
         }
 
@@ -6553,6 +6557,9 @@ bool VerilogWriter::isLocalMemSignal(const RTLSignal *signal, bool checkOutSig) 
 	for (Allocation::const_ram_iterator i = alloc->ram_begin();
 	        i != alloc->ram_end(); ++i) {
 		const RAM *R = *i;
+		if (R->getScope() == RAM::GLOBAL)
+			continue;
+
 		const char* portInNames[6] = { "_address_a", "_address_b",
 		                             "_write_enable_a", "_write_enable_b",
 		                             "_in_a", "_in_b" };
@@ -6600,6 +6607,13 @@ bool VerilogWriter::needPartVoter(const RTLSignal *signal) {
 
 void VerilogWriter::printDeclaration(const RTLSignal *signal, bool testBench) {
     std::string type = signal->getType();
+
+	//XILINX
+    if (type == "wire" && rtl->synthesis_keep_signal(signal->getName())
+				&& (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT")!="xilinx")) {
+		Out << "(* KEEP=\"TRUE\" *) ";
+	}
+
     if (!type.empty()) {
         if (type == "wire" &&
             (signal->getNumConditions() != 0 || signal->getNumDrivers() != 0)) {
@@ -6626,7 +6640,8 @@ void VerilogWriter::printDeclaration(const RTLSignal *signal, bool testBench) {
     }
 
     if (type == "wire" && rtl->synthesis_keep_signal(signal->getName())) {
-        Out << "/* synthesis keep */";
+		if (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT")!="xilinx")
+        	Out << "/* synthesis keep */";
     }
 
     Out << ";";
@@ -6643,14 +6658,15 @@ void VerilogWriter::printDeclaration(const RTLSignal *signal, bool testBench) {
 
 		// FIXME - For the local mem, always non-registered voters are inserted
 		bool isRegVoter = (!isLocalMemSignal(signal) && 
+		                   !isLocalMemSignal(signal, true) && 
 		                   (signal->getName()!="cur_state") && 
 		                   !needPartVoter(signal) && 
 		                   (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4));
-		if (isLocalMemSignal(signal, true))
+		if (isLocalMemSignal(signal, true) &&
+				LEGUP_CONFIG->getParameterInt("USE_REG_VOTER_FOR_LOCAL_RAMS"))
 			isRegVoter = true;
 
 		if ((signal->getName()=="cur_state")
-		         //|| isLocalMemSignal(signal)
 		         || isLocalMemSignal(signal, true)
 			     || needSyncVoter(signal)
 		         || needPartVoter(signal)) {
@@ -6660,10 +6676,16 @@ void VerilogWriter::printDeclaration(const RTLSignal *signal, bool testBench) {
 
     	if (LEGUP_CONFIG->getParameterInt("CASE_FSM") &&
     	    signal->getName() == "cur_state") {
+			if (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT")=="xilinx")
+				Out << "(* KEEP=\"TRUE\" *) ";
     	    Out << "reg " << signal->getWidth().str()
     	        << " next_state_r0,"
     	        << " next_state_r1,"
-    	        << " next_state_r2 /*synthesis keep*/;\n";
+    	        << " next_state_r2";
+			if (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT")!="xilinx")
+				Out << " /*synthesis keep*/";
+			Out << ";\n";
+				
     	    //Out << "reg " << signal->getWidth().str()
     	    //    << " next_state_v0,"
     	    //    << " next_state_v1,"
@@ -6812,7 +6834,8 @@ void VerilogWriter::printModuleInstance(std::stringstream &Out,
                                         const RTLModule *mod) {
     Out << mod->getBody() << "\n";
     Out << mod->getName() << " " << mod->getInstName();
-	if (LEGUP_CONFIG->getParameterInt("TMR"))
+	if (LEGUP_CONFIG->getParameterInt("TMR")
+			&& useReplicaNumberForAllVariables)
 		Out << "_r" + currReplica;
 	Out << " (\n";
     for (RTLModule::const_signal_iterator i = mod->port_begin(),
@@ -6845,7 +6868,8 @@ void VerilogWriter::printModuleInstance(std::stringstream &Out,
             Out << ",\n\t";
         }
         Out << mod->getInstName();
-		if (LEGUP_CONFIG->getParameterInt("TMR"))
+		if (LEGUP_CONFIG->getParameterInt("TMR")
+				&& useReplicaNumberForAllVariables)
 			Out << "_r" + currReplica;
 		Out << "." << (*i)->getName() << " = "
             << (*i)->getValue();
@@ -7278,6 +7302,14 @@ void VerilogWriter::printSignal(const RTLSignal *signal) {
 
 void VerilogWriter::printTmrSignal(const RTLSignal *sig, std::string postfix) {
 	std::string type = sig->getType();
+	//bool needSynthKeep = (sig->getName()=="cur_state" || isLocalMemSignal(sig, true)
+	//					|| needSyncVoter(sig) || needPartVoter(sig));
+	bool needSynthKeep = true;
+
+	if (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT") == "xilinx")
+		if ((type=="reg" && postfix=="_r" && needSynthKeep) || postfix=="_v")
+			Out << "(* KEEP=\"TRUE\" *) ";
+
 	if (type == "wire" &&
 	    (sig->getNumConditions() != 0 || sig->getNumDrivers() != 0 || postfix == "_v")) {
 	    Out << "reg ";
@@ -7289,16 +7321,21 @@ void VerilogWriter::printTmrSignal(const RTLSignal *sig, std::string postfix) {
    	Out << sig->getName() << postfix << "0, ";
    	Out << sig->getName() << postfix << "1, ";
    	Out << sig->getName() << postfix << "2 ";
-	//if ((postfix=="_r" && type=="reg") || 
-	//    (LEGUP_CONFIG->getParameterInt("TMR") &&
-	//     LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==1 &&
-	//     sig->getBackward())) //sig->isPhi()))
-	//	Out << "/*synthesis preserve*/;\n";
-	//else 
-	//if (postfix=="_r" && type=="reg")
-	//	Out << "/*synthesis preserve*/;\n";
-	//else
-		Out << "/*synthesis keep*/;\n";
+	if (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT") != "xilinx") {
+		//if ((postfix=="_r" && type=="reg") || 
+		//    (LEGUP_CONFIG->getParameterInt("TMR") &&
+		//     LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==1 &&
+		//     sig->getBackward())) //sig->isPhi()))
+		//	Out << "/*synthesis preserve*/;\n";
+		//else 
+		//if (postfix=="_r" && type=="reg")
+		//	Out << "/*synthesis preserve*/;\n";
+		//else
+		if ((type=="reg" && postfix=="_r" && needSynthKeep) || postfix=="_v")
+			Out << "/*synthesis keep*/";
+	}
+	Out << ";\n";
+
 
 	//if (postfix=="_r") {
 	//	Out << "reg [1:0] " << sig->getName() << "_errid"
@@ -7306,7 +7343,7 @@ void VerilogWriter::printTmrSignal(const RTLSignal *sig, std::string postfix) {
 	//}
 
 	//FIXME - module boundary is not triplicated
-	// boradcasting module's finish signal
+	// boradcasting module's finish & return signal
 	if (postfix=="_r" && type=="wire" && requireBroadcasting(sig)) {
 		for(int i=0; i<3; i++) {
 			Out << "assign " << sig->getName() << "_r" << i
@@ -7321,7 +7358,9 @@ bool VerilogWriter::requireBroadcasting(const RTLSignal *signal) {
          i != e; ++i) {
 		const RTLModule *mod = *i;
 		std::string moduleFinishName = mod->getName() + "_finish";
-		if(moduleFinishName == signal->getName())
+		std::string moduleReturnName = mod->getName() + "_return_val";
+		if(moduleFinishName == signal->getName()
+				|| moduleReturnName == signal->getName())
 			return true;
     }
 
@@ -7579,6 +7618,15 @@ void VerilogWriter::printValueMinBW(const RTLSignal *sig, unsigned w,
             }*/
     //    }
 
+	// TMR
+	std::string sigName = sig->getName();
+	if (useReplicaNumberForAllVariables && isTmrSig(sig)) {
+		if (sig->driveFromVoter() || isLocalMemSignal(sig, true))
+			sigName += "_v" + currReplica;
+		else
+			sigName += "_r" + currReplica;
+	}
+
     bool USE_LSB = LEGUP_CONFIG->getParameterInt("MB_MINIMIZE_LSB");
     std::string hi = sig->getWidth().getHi();
     std::string lo = sig->getWidth().getLo();
@@ -7598,11 +7646,11 @@ void VerilogWriter::printValueMinBW(const RTLSignal *sig, unsigned w,
         // signal is signed
         if (minW == 1) {
             if (isSigned)
-                Out << "{" << utostr(w) << "{" << sig->getName() << "}}";
+                Out << "{" << utostr(w) << "{" << sigName << "}}";
             else if (zeroExtend)
-                Out << "{" << utostr(w - 1) << "'d0," << sig->getName() << "}";
+                Out << "{" << utostr(w - 1) << "'d0," << sigName << "}";
             else
-                Out << sig->getName();
+                Out << sigName;
         } else {
             // Opening bracket needed in all cases
             Out << "{";
@@ -7611,7 +7659,7 @@ void VerilogWriter::printValueMinBW(const RTLSignal *sig, unsigned w,
             //"{12{sig_name[19]}},", if the signal is signed
             if (minW < w) {
                 if (isSigned)
-                    Out << "{" << utostr(w - minW) << "{" << sig->getName()
+                    Out << "{" << utostr(w - minW) << "{" << sigName
                         << "[" << utostr(extendFrom) << "]"
                         << "}},";
                 else if (zeroExtend)
@@ -7620,12 +7668,12 @@ void VerilogWriter::printValueMinBW(const RTLSignal *sig, unsigned w,
             // The second part of the same signal can be like this if LSB==0:
             // sig_name
             if (LSB == 0)
-                Out << sig->getName();
+                Out << sigName;
             // if LSB>0, the second part of the signal should be like this:
             // sig_name[19:LSB]
             // if LSB>0, the third part of the signal should be zeroes
             else {
-                Out << sig->getName() << "[" << utostr(extendFrom) << ":"
+                Out << sigName << "[" << utostr(extendFrom) << ":"
                     << utostr(LSB) << "]," << utostr(LSB) << "'d0";
             }
             Out << "}";
@@ -7633,7 +7681,7 @@ void VerilogWriter::printValueMinBW(const RTLSignal *sig, unsigned w,
     }
 
     else {
-        Out << sig->getName();
+        Out << sigName;
     }
 }
 

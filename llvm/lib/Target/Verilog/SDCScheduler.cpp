@@ -42,14 +42,20 @@ unsigned SDCScheduler::getNumInstructionCycles(Instruction *instr) {
 	InstructionNode *iNode = dag->getInstructionNode(instr);
 	unsigned ret = Scheduler::getNumInstructionCycles(instr);
 
-	if (LEGUP_CONFIG->getParameterInt("TMR")) {
-		if (isa<PHINode>(instr)) {
-			if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4 && iNode->getBackward())
-				ret++;
-		} else if (isa<LoadInst>(instr)) {
-			if (LEGUP_CONFIG->getParameterInt("LOCAL_RAMS"))
-				ret++;
-		}
+	if (LEGUP_CONFIG->getParameterInt("TMR") && 
+			LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4) {
+		if (isa<PHINode>(instr) && iNode->getBackward())
+			++ret;
+		//else if (isa<LoadInst>(instr)) {
+		//	if (LEGUP_CONFIG->getParameterInt("LOCAL_RAMS") &&
+		//			LEGUP_CONFIG->getParameterInt("USE_REG_VOTER_FOR_LOCAL_RAMS")) {
+		//		RAM *localRam = alloc->getLocalRamFromInst(instr);
+		//		if (localRam) {
+		//			if (localRam->getScope() == RAM::LOCAL)
+		//				++ret;
+		//		}
+		//	}
+		//}
 	}
 	return ret;
 }

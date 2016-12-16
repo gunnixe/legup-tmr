@@ -154,7 +154,13 @@ bool ModuloScheduler::check_for_legup_label(BasicBlock *bb) {
 int ModuloScheduler::delay(Instruction *I) {
 
     if (isa<PHINode>(I)) {
-        return 0;
+    	//InstructionNode *iNode = dag->getInstructionNode(I);
+		//if(LEGUP_CONFIG->getParameterInt("TMR") &&
+		//		LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4 &&
+		//		iNode->getBackward()) {
+		//	return 1;
+		//else
+        	return 0;
     }
 
     if (isa<BitCastInst>(I)) {
@@ -177,6 +183,18 @@ int ModuloScheduler::delay(Instruction *I) {
     */
 
     int latency = Scheduler::getNumInstructionCycles(I);
+	//if (LEGUP_CONFIG->getParameterInt("TMR") &&
+	//		LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4 &&
+	//		isa<LoadInst>(I) &&
+	//		LEGUP_CONFIG->getParameterInt("LOCAL_RAMS")) {
+	//	RAM *localRam = alloc->getLocalRamFromInst(I);
+	//	if (localRam) {
+	//		if (localRam->getScope() == RAM::LOCAL) {
+	//			++latency;
+	//		}
+	//	}
+	//}
+
 
     if (latency > 0) {
         return latency;

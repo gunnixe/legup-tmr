@@ -23,7 +23,7 @@ static LegupConfig LegupConfigObj;
 
 LegupConfig *LEGUP_CONFIG = &LegupConfigObj;
 
-#define NUM_PARAMETERS 131
+#define NUM_PARAMETERS 132
 const std::string validParameters[NUM_PARAMETERS] = {
     "ALIAS_ANALYSIS", "CLOCK_PERIOD", "DEBUG_MODULO_DEPENDENT",
     "DEBUG_MODULO_TABLE", "DEBUG_PERTURBATION", "DEBUG_VERIFY_INCR_SDC",
@@ -59,6 +59,7 @@ const std::string validParameters[NUM_PARAMETERS] = {
 	// Added for TMR
     "TMR", "SYNC_VOTER_MODE", "PART_VOTER_MODE",
 	"DEBUG_TMR", "PARTITION_AREA_LIMIT",
+	"USE_REG_VOTER_FOR_LOCAL_RAMS", //FIXME
 
 	// DEBUG
     "INSPECT_DEBUG",                   // Inspect debugger: Populate database.
@@ -566,12 +567,13 @@ bool LegupConfig::getOperationLatency(std::string FuName, int *latency) {
 	bool ret = findMatchingConstraint(FuName, FuncUnitLatency, latency);
 
 	// TMR
-	//if (FuName=="local_mem_dual_port") {
-	//	if(LEGUP_CONFIG->getParameterInt("TMR")
-	//			&& LEGUP_CONFIG->getParameterInt("LOCAL_RAMS")) {
-	//		(*latency)++;
-	//	}
-	//}
+	if(LEGUP_CONFIG->getParameterInt("TMR")
+			&& LEGUP_CONFIG->getParameterInt("USE_REG_VOTER_FOR_LOCAL_RAMS")
+			&& LEGUP_CONFIG->getParameterInt("LOCAL_RAMS")) {
+		if (FuName.find("local_mem_dual_port") != std::string::npos) {
+			(*latency)++;
+		}
+	}
 
 	return ret;
 }
