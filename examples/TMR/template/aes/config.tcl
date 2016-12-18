@@ -5,6 +5,8 @@ set_parameter GROUP_RAMS 0
 set_parameter GROUP_RAMS_SIMPLE_OFFSET 0
 set_parameter CASE_FSM 1
 
+set_parameter MB_MINIMIZE_HW 0
+
 set_parameter TMR 1
 set_parameter SYNC_VOTER_MODE 0
 # SVOTER_MODE 0=output only,
