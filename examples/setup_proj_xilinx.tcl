@@ -59,8 +59,9 @@ project set "FSM Encoding Algorithm" "One-Hot" -process "Synthesize - XST"
 
 # XST was crashing without this - See http://forums.xilinx.com/t5/Synthesis/Synthesis-Error-INTERNAL-ERROR-Xst-cmain-c-3423-1-29-Process/td-p/290491
 project set "Other XST Command Line Options" "-keep_hierarchy soft" -process "Synthesize - XST"
-
 project set "Generate Detailed MAP Report" "true" -process "Map"
+
+project set "Allow Unexpanded Blocks" "true" -process "Translate"
 
 #set_global_assignment -name SEARCH_PATH $search_path
 

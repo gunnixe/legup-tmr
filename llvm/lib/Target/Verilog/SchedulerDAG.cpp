@@ -307,7 +307,11 @@ void SchedulerDAG::updateDAGwithInst(Instruction *instr) {
 
     // set delay
     std::string opName = LEGUP_CONFIG->getOpNameFromInst(instr, alloc);
-    if (opName.empty() || isMem(instr)) {
+	if (iNode->getPartition()
+			&& LEGUP_CONFIG->getParameterInt("TMR")
+			&& LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==2) {
+		iNode->setAtMaxDelay();
+	} else if (opName.empty() || isMem(instr)) {
         if (isa<GetElementPtrInst>(instr)) {
             if (LEGUP_CONFIG->getParameterInt("DONT_CHAIN_GET_ELEM_PTR")) {
                 iNode->setAtMaxDelay();
@@ -546,7 +550,7 @@ void SchedulerDAG::insertPartitionVoter(Function &F) {
 	unsigned areaTotal = 0;
 	unsigned areaLimit = LEGUP_CONFIG->getParameterInt("PARTITION_AREA_LIMIT");
 
-	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==1) {
+	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")!=0) {
 		for (std::vector<const BasicBlock *>::const_reverse_iterator b = path.rbegin(),
 		                                                     be = path.rend();
 		                                                     b != be; ++b) {
@@ -629,10 +633,10 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
 		insertSyncVoter(F);
 
 		//findSCCBBs(F);
-		if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==1) {
+		if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")!=0) {
 			findTopologicalBBList(F);
-		} else if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==2) {
-			findAllPaths(F);
+		//} else if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==2) {
+		//	findAllPaths(F);
 		}
 		insertPartitionVoter(F);
 	}

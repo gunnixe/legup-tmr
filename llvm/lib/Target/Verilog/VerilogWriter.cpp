@@ -2575,10 +2575,60 @@ void VerilogWriter::printAltSyncRAMModule(bool readonly) {
     delete m;
 }
 
+void VerilogWriter::printMemoryAssignForTmr(std::string postfix) {
+
+    Out << "assign " << "memory_controller_enable" << postfix << "_r0 = "
+		<< "    " << "memory_controller_enable" << postfix << ";\n";
+    Out << "assign " << "memory_controller_enable" << postfix << "_r1 = "
+		<< "    " << "memory_controller_enable" << postfix << ";\n";
+    Out << "assign " << "memory_controller_enable" << postfix << "_r2 = "
+		<< "    " << "memory_controller_enable" << postfix << ";\n";
+
+    Out << "assign " << "memory_controller_address" << postfix << "_r0 = "
+    	<< "    " << "memory_controller_address" << postfix << ";\n";
+    Out << "assign " << "memory_controller_address" << postfix << "_r1 = "
+    	<< "    " << "memory_controller_address" << postfix << ";\n";
+    Out << "assign " << "memory_controller_address" << postfix << "_r2 = "
+    	<< "    " << "memory_controller_address" << postfix << ";\n";
+
+    Out << "assign " << "memory_controller_write_enable" << postfix << "_r0 = "
+    	<< "    " << "memory_controller_write_enable" << postfix << ";\n";
+    Out << "assign " << "memory_controller_write_enable" << postfix << "_r1 = "
+    	<< "    " << "memory_controller_write_enable" << postfix << ";\n";
+    Out << "assign " << "memory_controller_write_enable" << postfix << "_r2 = "
+    	<< "    " << "memory_controller_write_enable" << postfix << ";\n";
+
+    Out << "assign " << "memory_controller_in" << postfix << "_r0 = "
+    	<< "    " << "memory_controller_in" << postfix << ";\n";
+    Out << "assign " << "memory_controller_in" << postfix << "_r1 = "
+    	<< "    " << "memory_controller_in" << postfix << ";\n";
+    Out << "assign " << "memory_controller_in" << postfix << "_r2 = "
+    	<< "    " << "memory_controller_in" << postfix << ";\n";
+
+    if (alloc->usesGenericRAMs()) {
+    	Out << "assign " << "memory_controller_size" << postfix << "_r0 = "
+    		<< "    " << "memory_controller_size" << postfix << ";\n";
+    	Out << "assign " << "memory_controller_size" << postfix << "_r1 = "
+    		<< "    " << "memory_controller_size" << postfix << ";\n";
+    	Out << "assign " << "memory_controller_size" << postfix << "_r2 = "
+    		<< "    " << "memory_controller_size" << postfix << ";\n";
+	}
+
+	std::string r0 = "memory_controller_out" + postfix + "_r0";
+	std::string r1 = "memory_controller_out" + postfix + "_r1";
+	std::string r2 = "memory_controller_out" + postfix + "_r2";
+    Out << "assign " << "memory_controller_out" << postfix << " = "
+		<< "(" << r0 << "==" << r1 << ")? " << r0 << " : " << r2 << ";\n";
+    Out << "\n";
+}
+
 void VerilogWriter::printMemoryVariablesSignals(std::string busName,
                                                 std::string inputPrefix,
                                                 std::string outputPrefix,
                                                 std::string postfix) {
+
+	if (LEGUP_CONFIG->getParameterInt("TMR") && useReplicaNumberForAllVariables)
+		postfix += "_r" + currReplica;
 
     Out << outputPrefix << " " << busName << "_enable" << postfix << ";\n";
 
@@ -2625,10 +2675,29 @@ void VerilogWriter::printMemoryVariables(bool top) {
             << "_waitrequest;\n";
     }
 
-    printMemoryVariablesSignals("memory_controller", inputPrefix, outputPrefix,
-                                "_a");
-    printMemoryVariablesSignals("memory_controller", inputPrefix, outputPrefix,
-                                "_b");
+   	printMemoryVariablesSignals("memory_controller", inputPrefix, outputPrefix,
+   	                            "_a");
+   	printMemoryVariablesSignals("memory_controller", inputPrefix, outputPrefix,
+   	                            "_b");
+
+	// print additional TMR signals
+	bool tmrInst = LEGUP_CONFIG->getParameterInt("TMR");
+	unsigned tmrIterNum = tmrInst? 3 : 1;
+	useReplicaNumberForAllVariables = tmrInst? true : false;
+	for (unsigned tmrIter=0; tmrIter<tmrIterNum; tmrIter++) {
+		currReplica = utostr(tmrIter);
+   	    Out << "\n";
+    	printMemoryVariablesSignals("memory_controller", inputPrefix, outputPrefix,
+    	                            "_a");
+    	printMemoryVariablesSignals("memory_controller", inputPrefix, outputPrefix,
+    	                            "_b");
+   	}
+	useReplicaNumberForAllVariables = false;
+	if (tmrInst) {
+		printMemoryAssignForTmr("_a");
+		printMemoryAssignForTmr("_b");
+	}
+
     if (alloc->getDbgInfo()->isDebugRtlEnabled()) {
         // Debugger has multiplexed access to memory controller, so another set
         // of
@@ -6248,97 +6317,133 @@ void VerilogWriter::printMainInstance(const bool usesPthreads) {
 }
 
 void VerilogWriter::printMemoryControllerInstance() {
+	bool tmrInst = LEGUP_CONFIG->getParameterInt("TMR");
+	unsigned tmrIterNum = tmrInst? 3 : 1;
+	useReplicaNumberForAllVariables = tmrInst? true : false;
+	for (unsigned tmrIter=0; tmrIter<tmrIterNum; tmrIter++) {
+		currReplica = utostr(tmrIter);
+   	    Out << "\n";
+    	if (LEGUP_CONFIG->getParameterInt("DUAL_PORT_BINDING")) {
+   	    	printMemoryControllerInstanceDual();
+    	} else {
+   	    	printMemoryControllerInstanceNormal();
+    	}
+   	}
+   	Out << "\n";
+	useReplicaNumberForAllVariables = false;
 
-    if (LEGUP_CONFIG->getParameterInt("DUAL_PORT_BINDING")) {
-        Out << "memory_controller memory_controller_inst (\n"
-            << "\t.clk( clk ),\n";
-        // if (LEGUP_CONFIG->numAccelerators() > 0) {
-        if (LEGUP_CONFIG->isHybridFlow() || LEGUP_CONFIG->isPCIeFlow()) {
-            Out << "\t.flag_to_sharedMemory_a( flag_to_sharedMemory_a ),\n";
-            Out << "\t.flag_to_sharedMemory_b( flag_to_sharedMemory_b ),\n";
-        }
-        Out << "\t.memory_controller_enable_a( memory_controller_enable_a ),\n"
-            << "\t.memory_controller_enable_b( memory_controller_enable_b ),\n"
-            << "\t.memory_controller_address_a( memory_controller_address_a "
-               "),\n"
-            << "\t.memory_controller_address_b( memory_controller_address_b "
-               "),\n"
-            << "\t.memory_controller_write_enable_a( "
-               "memory_controller_write_enable_a ),\n"
-            << "\t.memory_controller_write_enable_b( "
-               "memory_controller_write_enable_b ),\n"
-            << "\t.memory_controller_in_a( memory_controller_in_a ),\n"
-               "\t.memory_controller_in_b( memory_controller_in_b ),\n";
-        if (alloc->usesGenericRAMs()) {
-            // if (LEGUP_CONFIG->numAccelerators() > 0) {
-            if (LEGUP_CONFIG->isHybridFlow() || LEGUP_CONFIG->isPCIeFlow()) {
-                Out << "\t.memory_controller_size_a( memory_size_a ),\n"
-                    << "\t.memory_controller_size_b( memory_size_b ),\n";
-            } else {
-                Out << "\t.memory_controller_size_a( memory_controller_size_a "
-                       "),\n"
-                    << "\t.memory_controller_size_b( memory_controller_size_b "
-                       "),\n";
-            }
-        }
-        // If we remove the output register of the memory controller, the port
-        // names
-        // are slightly different
-        if (LEGUP_CONFIG->duplicate_load_reg()) {
-            Out << "\t.memory_controller_waitrequest( "
-                   "memory_controller_waitrequest ),\n"
-                << "\t.memory_controller_out_a( memory_controller_out_a ),\n"
-                << "\t.memory_controller_out_b( memory_controller_out_b )\n"
-                << ");\n\n";
-        } else {
-            Out << "\t.memory_controller_waitrequest( "
-                   "memory_controller_waitrequest ),\n"
-                << "\t.memory_controller_out_reg_a( memory_controller_out_a "
-                   "),\n"
-                << "\t.memory_controller_out_reg_b( memory_controller_out_b )\n"
-                << ");\n\n";
-        }
+	//if (LEGUP_CONFIG->getParameterInt("TMR")) {
+	//	printTmrVoter("memory_controller_out_a", "0", "`MEMORY_CONTROLLER_DATA_SIZE-1", 0, 1);
+	//	printTmrVoter("memory_controller_out_b", "0", "`MEMORY_CONTROLLER_DATA_SIZE-1", 0, 1);
+	//}
+}
+
+void VerilogWriter::printMemoryControllerInstanceDual() {
+	std::string instName = "memory_controller_inst";
+	std::string out_a = "memory_controller_out_a";
+	std::string out_b = "memory_controller_out_b";
+
+	if (LEGUP_CONFIG->getParameterInt("TMR")) {
+		instName += "_r" + currReplica;
+		out_a += "_r" + currReplica;
+		out_b += "_r" + currReplica;
+	}
+
+	Out << "memory_controller " << instName << " (\n"
+	    << "\t.clk( clk ),\n";
+	// if (LEGUP_CONFIG->numAccelerators() > 0) {
+	if (LEGUP_CONFIG->isHybridFlow() || LEGUP_CONFIG->isPCIeFlow()) {
+	    Out << "\t.flag_to_sharedMemory_a( flag_to_sharedMemory_a ),\n";
+	    Out << "\t.flag_to_sharedMemory_b( flag_to_sharedMemory_b ),\n";
+	}
+	Out << "\t.memory_controller_enable_a( memory_controller_enable_a ),\n"
+	    << "\t.memory_controller_enable_b( memory_controller_enable_b ),\n"
+	    << "\t.memory_controller_address_a( memory_controller_address_a "
+	       "),\n"
+	    << "\t.memory_controller_address_b( memory_controller_address_b "
+	       "),\n"
+	    << "\t.memory_controller_write_enable_a( "
+	       "memory_controller_write_enable_a ),\n"
+	    << "\t.memory_controller_write_enable_b( "
+	       "memory_controller_write_enable_b ),\n"
+	    << "\t.memory_controller_in_a( memory_controller_in_a ),\n"
+	       "\t.memory_controller_in_b( memory_controller_in_b ),\n";
+	if (alloc->usesGenericRAMs()) {
+	    // if (LEGUP_CONFIG->numAccelerators() > 0) {
+	    if (LEGUP_CONFIG->isHybridFlow() || LEGUP_CONFIG->isPCIeFlow()) {
+	        Out << "\t.memory_controller_size_a( memory_size_a ),\n"
+	            << "\t.memory_controller_size_b( memory_size_b ),\n";
+	    } else {
+	        Out << "\t.memory_controller_size_a( memory_controller_size_a "
+	               "),\n"
+	            << "\t.memory_controller_size_b( memory_controller_size_b "
+	               "),\n";
+	    }
+	}
+	// If we remove the output register of the memory controller, the port
+	// names
+	// are slightly different
+	if (LEGUP_CONFIG->duplicate_load_reg()) {
+	    Out << "\t.memory_controller_waitrequest( "
+	           "memory_controller_waitrequest ),\n"
+	        << "\t.memory_controller_out_a( " << out_a << " ),\n"
+	        << "\t.memory_controller_out_b( " << out_b << " )\n"
+	        << ");\n\n";
+	} else {
+	    Out << "\t.memory_controller_waitrequest( "
+	           "memory_controller_waitrequest ),\n"
+	        << "\t.memory_controller_out_reg_a( " << out_a << " "
+	           "),\n"
+	        << "\t.memory_controller_out_reg_b( " << out_b << " )\n"
+	        << ");\n\n";
+	}
+}
+
+void VerilogWriter::printMemoryControllerInstanceNormal() {
+	std::string instName = "memory_controller_inst";
+	if (LEGUP_CONFIG->getParameterInt("TMR"))
+		instName += "_r" + currReplica;
+
+    Out << "memory_controller " << instName << " (\n"
+        << "\t.clk( clk ),\n";
+    // if (LEGUP_CONFIG->numAccelerators() > 0) {
+    if (LEGUP_CONFIG->isHybridFlow() || LEGUP_CONFIG->isPCIeFlow()) {
+        Out << "\t.flag_to_sharedMemory_a( flag_to_sharedMemory_a ),\n";
+        Out << "\t.flag_to_sharedMemory_b( 1'b0 ),\n";
+    }
+    Out << "\t.memory_controller_enable_a( memory_controller_enable_a ),\n"
+        << "\t.memory_controller_enable_b( 1'b0 ),\n"
+        << "\t.memory_controller_address_a( memory_controller_address_a "
+           "),\n"
+        << "\t.memory_controller_address_b( "
+           "{`MEMORY_CONTROLLER_ADDR_SIZE{1'b0}} ),\n"
+        << "\t.memory_controller_write_enable_a( "
+           "memory_controller_write_enable_a ),\n"
+        << "\t.memory_controller_write_enable_b( 1'b0 ),\n"
+        << "\t.memory_controller_in_a( memory_controller_in_a ),\n"
+           "\t.memory_controller_in_b( "
+           "{`MEMORY_CONTROLLER_DATA_SIZE{1'b0}} ),\n";
+    if (alloc->usesGenericRAMs()) {
+        Out << "\t.memory_controller_size_a( memory_controller_size_a ),\n"
+            << "\t.memory_controller_size_b( 2'b00 ),\n";
+    }
+    // If we remove the output register of the memory controller, the port
+    // names
+    // are slightly different
+    //FIXME - need to merge with voter - currently only working with dual port
+    if (LEGUP_CONFIG->duplicate_load_reg()) {
+        Out << "\t.memory_controller_waitrequest( "
+               "memory_controller_waitrequest ),\n"
+            << "\t.memory_controller_out_a( memory_controller_out_a ),\n"
+            << "\t.memory_controller_out_b( )\n"
+            << ");\n\n";
     } else {
-        Out << "memory_controller memory_controller_inst (\n"
-            << "\t.clk( clk ),\n";
-        // if (LEGUP_CONFIG->numAccelerators() > 0) {
-        if (LEGUP_CONFIG->isHybridFlow() || LEGUP_CONFIG->isPCIeFlow()) {
-            Out << "\t.flag_to_sharedMemory_a( flag_to_sharedMemory_a ),\n";
-            Out << "\t.flag_to_sharedMemory_b( 1'b0 ),\n";
-        }
-        Out << "\t.memory_controller_enable_a( memory_controller_enable_a ),\n"
-            << "\t.memory_controller_enable_b( 1'b0 ),\n"
-            << "\t.memory_controller_address_a( memory_controller_address_a "
+        Out << "\t.memory_controller_waitrequest( "
+               "memory_controller_waitrequest ),\n"
+            << "\t.memory_controller_out_reg_a( memory_controller_out_a "
                "),\n"
-            << "\t.memory_controller_address_b( "
-               "{`MEMORY_CONTROLLER_ADDR_SIZE{1'b0}} ),\n"
-            << "\t.memory_controller_write_enable_a( "
-               "memory_controller_write_enable_a ),\n"
-            << "\t.memory_controller_write_enable_b( 1'b0 ),\n"
-            << "\t.memory_controller_in_a( memory_controller_in_a ),\n"
-               "\t.memory_controller_in_b( "
-               "{`MEMORY_CONTROLLER_DATA_SIZE{1'b0}} ),\n";
-        if (alloc->usesGenericRAMs()) {
-            Out << "\t.memory_controller_size_a( memory_controller_size_a ),\n"
-                << "\t.memory_controller_size_b( 2'b00 ),\n";
-        }
-        // If we remove the output register of the memory controller, the port
-        // names
-        // are slightly different
-        if (LEGUP_CONFIG->duplicate_load_reg()) {
-            Out << "\t.memory_controller_waitrequest( "
-                   "memory_controller_waitrequest ),\n"
-                << "\t.memory_controller_out_a( memory_controller_out_a ),\n"
-                << "\t.memory_controller_out_b( )\n"
-                << ");\n\n";
-        } else {
-            Out << "\t.memory_controller_waitrequest( "
-                   "memory_controller_waitrequest ),\n"
-                << "\t.memory_controller_out_reg_a( memory_controller_out_a "
-                   "),\n"
-                << "\t.memory_controller_out_reg_b( )\n"
-                << ");\n\n";
-        }
+            << "\t.memory_controller_out_reg_b( )\n"
+            << ");\n\n";
     }
 }
 
@@ -6599,7 +6704,7 @@ bool VerilogWriter::needPartVoter(const RTLSignal *signal) {
 	bool isPartitionBoundary = (signal->getVoter()==2);
 	int partVoterMode = LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE");
 
-	if ((partVoterMode==1) && isPartitionBoundary && isReg) {
+	if ((partVoterMode!=0) && isPartitionBoundary && isReg) {
 		return true;
 	}
 	return false;
@@ -6657,13 +6762,18 @@ void VerilogWriter::printDeclaration(const RTLSignal *signal, bool testBench) {
 		printTmrSignal(signal, "_r");
 
 		// FIXME - For the local mem, always non-registered voters are inserted
-		bool isRegVoter = (!isLocalMemSignal(signal) && 
-		                   !isLocalMemSignal(signal, true) && 
-		                   (signal->getName()!="cur_state") && 
-		                   !needPartVoter(signal) && 
-		                   (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4));
+		bool isRegVoter = false;
+		if (!isLocalMemSignal(signal) && 
+				!isLocalMemSignal(signal, true) && 
+				(signal->getName()!="cur_state") && 
+				!needPartVoter(signal) && 
+				(LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4))
+			isRegVoter = true;
 		if (isLocalMemSignal(signal, true) &&
 				LEGUP_CONFIG->getParameterInt("USE_REG_VOTER_FOR_LOCAL_RAMS"))
+			isRegVoter = true;
+		if (needPartVoter(signal) && 
+				LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==2)
 			isRegVoter = true;
 
 		if ((signal->getName()=="cur_state")
@@ -7414,15 +7524,21 @@ void VerilogWriter::printVoter(const RTLSignal *signal) {
 	//Out << "end\n";
 }
 
-void VerilogWriter::printTmrVoter(std::string sigName, std::string lo, std::string hi, bool isRegVoter) {
+void VerilogWriter::printTmrVoter(std::string sigName, std::string lo, std::string hi,
+			bool isRegVoter, bool isModuleBoundary) {
 	bool bitWidthOne = (hi=="");
 
 	std::string r0 = bitWidthOne? sigName + "_r0" : sigName + "_r0[i]";
 	std::string r1 = bitWidthOne? sigName + "_r1" : sigName + "_r1[i]";
 	std::string r2 = bitWidthOne? sigName + "_r2" : sigName + "_r2[i]";
-	std::string v0 = bitWidthOne? sigName + "_v0" : sigName + "_v0[i]";
-	std::string v1 = bitWidthOne? sigName + "_v1" : sigName + "_v1[i]";
-	std::string v2 = bitWidthOne? sigName + "_v2" : sigName + "_v2[i]";
+
+	std::string postfix0 = isModuleBoundary? "" : "_v0";
+	std::string postfix1 = isModuleBoundary? "" : "_v1";
+	std::string postfix2 = isModuleBoundary? "" : "_v2";
+	std::string v0 = bitWidthOne? sigName + postfix0 : sigName + postfix0 + "[i]";
+	std::string v1 = bitWidthOne? sigName + postfix1 : sigName + postfix1 + "[i]";
+	std::string v2 = bitWidthOne? sigName + postfix2 : sigName + postfix2 + "[i]";
+
 	std::string defValue =
 	    (sigName=="cur_state" || sigName=="next_state")? "LEGUP_0" : "0";
 
