@@ -36,7 +36,7 @@ my @device_interconnection_frames;
 my @device_interface_frames;
 my @device_block_configuration_frames;
 my @device_frames;
-my @sim_min_delay_ns;
+my @sim_max_freq_mhz;
 my @sim_number_of_clock_cycles;
 my @sim_wall_clock_us;
 my @fault_injection_recoverable;
@@ -47,9 +47,6 @@ sub summarize_in_csv {
 	push @name_list, $cname;
 
 	open(FXH, '<', "ML605.par") or die "cannot open 'ML605.par' $!";
-	binmode FXH;
-	my $delay_report_count = 0;
-	my $current_design_delay = 0;
 	while(<FXH>) {
 		chomp;
 		if(/\s+Number of Slice Registers:\s+([\d,]+) out of\s+[\d,]+\s+\d+%/) {
@@ -73,19 +70,24 @@ sub summarize_in_csv {
 		} elsif(/\s+Number of DSP48E1s:\s+([\d,]+) out of\s+[\d,]+\s+\d+%/) {
 			$num = $1; $num =~ s/,//g;
 			push @number_of_dsp48e1s, $num;
-		} elsif(/\| SETUP       \|\s+[-\d\.]+ns\|\s+([-\d\.]+)ns\|/) {
-			if($delay_report_count==1) {
-				$num = $1; $num =~ s/,//g;
-				push @sim_min_delay_ns, $num;
-				$current_design_delay = $num;
-				last;
-			} else {
-				$delay_report_count++;
-			}
+			last;
 		}
 	}
 	die "cannot find string in 'ML605.par'" if(eof FXH);
 	close(FXH);
+
+	open(FTIMH, '<', "ML605.twr") or die "cannot open 'ML605.twr' $!";
+	my $current_design_delay = 0;
+	while(<FTIMH>) {
+		chomp;
+		if(/Maximum frequency: (\d+\.\d+)MHz/) {
+			push @sim_max_freq_mhz, $1;
+			$current_design_delay = $1;
+			last;
+		}
+	}
+	die "cannot find string in 'ML605.twr'" if(eof FTIMH);
+	close(FTIMH);
 
 	open(FSIMH, '<', "vsim.log") or die "cannot open 'vsim.log' $!";
 	while(<FSIMH>) {
@@ -94,7 +96,87 @@ sub summarize_in_csv {
 			die "simulation fail" if($1 eq "FAIL");
 		} elsif(/^# Cycles:\s+(\d+)$/) {
 			push @sim_number_of_clock_cycles, $1;
-			my $current_design_wall_clock = $1*$current_design_delay/1000;
+			my $current_design_wall_clock = $1/$current_design_delay;
+			push @sim_wall_clock_us, $current_design_wall_clock;
+			last;
+		}
+	}
+	die "cannot find string in 'vsim.log'" if(eof FSIMH);
+	close(FSIMH);
+}
+
+sub summary_for_altera {
+	my ($cname) = @_;
+	push @name_list, $cname;
+
+	my $altera_ver = 13;
+	open(FH, '<', "top.fit.summary") or die "cannot open 'top.fit.summary' $!";
+	while(<FH>) {
+		chomp;
+		if(m/^Quartus II 64-Bit Version : 16/) {
+			$altera_ver = 16;
+		}
+
+		if($altera_ver == 13) { # for alter 13.0-sp1
+			if(/^Total logic elements : ([\d,]+) \/ [\d,]+ /) {
+				$num = $1; $num =~ s/,//g;
+				push @number_of_slice_luts, $num;
+			} elsif(/\s+Dedicated logic registers : ([\d,]+) \/ [\d,]+ /) {
+				$num = $1; $num =~ s/,//g;
+				push @number_of_slice_registers, $num;
+			} elsif(/^Total memory bits : ([\d,]+) \/ [\d,]+ /) {
+				$num = $1; $num =~ s/,//g;
+				push @number_of_ramb18e1s, $num;
+			} elsif(/^Embedded Multiplier 9-bit elements : ([\d,]+) \/ [\d,]+ /) {
+				$num = $1; $num =~ s/,//g;
+				push @number_of_dsp48e1s, $num;
+				last;
+			}
+		} else { ## modifed for alter 16.1
+			if(/^Logic utilization \(in ALMs\) : ([\d,]+) \/ [\d,]+ /) {
+				$num = $1; $num =~ s/,//g;
+				push @number_of_slice_luts, $num;
+			} elsif(/^Total registers : ([\d,]+)/) {
+				$num = $1; $num =~ s/,//g;
+				push @number_of_slice_registers, $num;
+			} elsif(/^Total RAM Blocks : ([\d,]+) \/ [\d,]+ /) {
+				$num = $1; $num =~ s/,//g;
+				push @number_of_ramb18e1s, $num;
+			} elsif(/^Total DSP Blocks : ([\d,]+) \/ [\d,]+ /) {
+				$num = $1; $num =~ s/,//g;
+				push @number_of_dsp48e1s, $num;
+				last;
+			}
+		}
+	}
+	die "cannot find string in 'top.fit.summary'" if(eof FH);
+	close(FH);
+
+	open(FH, '<', "top.sta.rpt") or die "cannot open 'top.sta.rpt' $!";
+	my $current_design_delay = 0;
+	while(<FH>) {
+		chomp;
+		if(m/^; Fmax\s+;/) {
+			my $line;
+			$line = readline(FH) for(1..2);
+			if(/^;\s+(\d+\.\d+) MHz ;/) {
+				push @sim_max_freq_mhz, $num;
+				$current_design_delay = $num;
+			}
+			last;
+		}
+	}
+	die "cannot find string in 'top.sta.rpt'" if(eof FH);
+	close(FH);
+
+	open(FSIMH, '<', "vsim.log") or die "cannot open 'vsim.log' $!";
+	while(<FSIMH>) {
+		chomp;
+		if(/^# Cycle: +\d+ Time: +\d+ +RESULT: (\w+)$/) {
+			die "simulation fail" if($1 eq "FAIL");
+		} elsif(/^# Cycles:\s+(\d+)$/) {
+			push @sim_number_of_clock_cycles, $1;
+			my $current_design_wall_clock = $1/$current_design_delay;
 			push @sim_wall_clock_us, $current_design_wall_clock;
 			last;
 		}
@@ -104,6 +186,7 @@ sub summarize_in_csv {
 }
 
 sub write_csv_file {
+	my $xilinx = $_[0];
 	my $csv_name = "output/report.csv";
 	open(FCSV, '>', $csv_name) or die "cannot open '$csv_name' $!";
 
@@ -113,20 +196,22 @@ sub write_csv_file {
 	print FCSV ",$_" for(@number_of_slice_registers);
 	print FCSV ",\nNumber of Slice LUTs";
 	print FCSV ",$_" for(@number_of_slice_luts);
+	if($xilinx) {
 	print FCSV ",\nNumber of occupied Slices";
 	print FCSV ",$_" for(@number_of_occupied_slices);
 	print FCSV ",\nNumber of bounded IOBS";
 	print FCSV ",$_" for(@number_of_bounded_iobs);
 	print FCSV ",\nNumber of RAMB36E1/FIFO36E1s";
 	print FCSV ",$_" for(@number_of_ramb36e1s);
+	}
 	print FCSV ",\nNumber of RAMB18E1/FIFO18E1s";
 	print FCSV ",$_" for(@number_of_ramb18e1s);
 	print FCSV ",\nNumber of DSP48E1s";
 	print FCSV ",$_" for(@number_of_dsp48e1s);
 	print FCSV ",\n";
 
-	print FCSV ",\nMininum delay (ns)";
-	print FCSV ",$_" for(@sim_min_delay_ns);
+	print FCSV ",\nMaximum Clock Frequency (MHz)";
+	print FCSV ",$_" for(@sim_max_freq_mhz);
 	print FCSV ",\nNumber of clock cycles";
 	print FCSV ",$_" for(@sim_number_of_clock_cycles);
 	print FCSV ",\nWall clock (ms)";
@@ -207,13 +292,14 @@ sub do_work {
 			&change_makefile($xilinx) if($flag_create);
 		
 			# do simulation
-			#FIXME
 			system("make | tee make.log;") if $flag_exec;
 			system("make v | tee vsim.log;") if $flag_exec;
 			system("make p; make f | tee synth.log;") if($flag_exec);
 	
+			# summarize
 			if($flag_summary) {
-				&summary(($cname, @arg_list)) if $xilinx==0;
+				&make_report($cname, @arg_list);
+				&summary_for_altera($cname) if $xilinx==0;
 				&summarize_in_csv($cname) if $xilinx==1;
 			}
 
@@ -226,7 +312,7 @@ sub do_work {
 	close(FRH);
 }
 
-sub summary {
+sub make_report {
 	my ($cname, $tmr, $smode, $pmode, $lram, $pipe, $rvlram) = @_;
 	print FRH "\n#----- dir_name=$cname, TMR=$tmr, SYNC_VOTER_MODE=$smode, PART_VOTER_MODE=$pmode -----\n";
 	print FRH "#-----     LOCAL_RAM=$lram, USE_REG_VOTER_FOR_LOCAL_RAMS=$rvlram, pipeline=$pipe -----\n";
@@ -244,45 +330,6 @@ sub summary {
 		}
 	}
 	die "cannot find string in 'vsim.log'" if(eof FH);
-	close(FH);
-
-	open(FH, '<', "top.fit.summary") or die "cannot open 'top.fit.summary' $!";
-	while(<FH>) {
-		chomp;
-		# for alter 13.0-sp1
-		if((m/^Total logic elements : [\d,]+ \/ [\d,]+ /) ||
-		   (m/\s+Total combinational functions : [\d,]+ \/ [\d,]+ /) ||
-		   (m/\s+Dedicated logic registers : [\d,]+ \/ [\d,]+ /) ||
-		   (m/^Total memory bits : [\d,]+ \/ [\d,]+ /) ||
-		   (m/^Embedded Multiplier 9-bit elements : [\d,]+ \/ [\d,]+ /)) {
-			print FRH "\t$_\n";
-		}
-		last if(m/^Embedded Multiplier 9-bit elements : [\d,]+ \/ [\d,]+ /);
-
-		## modifed for alter 16.1
-		#if((m/^Logic utilization \(in ALMs\) : [\d,]+ \/ [\d,]+ /) ||
-		#   (m/^Total registers : [\d,]+/) ||
-		#   (m/^Total block memory bits : [\d,]+ \/ [\d,]+ /) ||
-		#   (m/^Total RAM Blocks : [\d,]+ \/ [\d,]+ /) ||
-		#   (m/^Total DSP Blocks : [\d,]+ \/ [\d,]+ /)) {
-		#	print FRH "\t$_\n";
-		#}
-		#last if(m/^Total DSP Blocks : [\d,]+ \/ [\d,]+ /);
-	}
-	die "cannot find string in 'top.fit.summary'" if(eof FH);
-	close(FH);
-
-	open(FH, '<', "top.sta.rpt") or die "cannot open 'top.sta.rpt' $!";
-	while(<FH>) {
-		chomp;
-		if(m/^; Fmax\s+;/) {
-			my $line;
-			$line = readline(FH) for(1..2);
-			print FRH "\tFMax = $line\n";
-			last;
-		}
-	}
-	die "cannot find string in 'top.sta.rpt'" if(eof FH);
 	close(FH);
 }
 
