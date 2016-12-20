@@ -2681,19 +2681,18 @@ void VerilogWriter::printMemoryVariables(bool top) {
    	                            "_b");
 
 	// print additional TMR signals
-	bool tmrInst = LEGUP_CONFIG->getParameterInt("TMR");
-	unsigned tmrIterNum = tmrInst? 3 : 1;
-	useReplicaNumberForAllVariables = tmrInst? true : false;
-	for (unsigned tmrIter=0; tmrIter<tmrIterNum; tmrIter++) {
-		currReplica = utostr(tmrIter);
-   	    Out << "\n";
-    	printMemoryVariablesSignals("memory_controller", inputPrefix, outputPrefix,
-    	                            "_a");
-    	printMemoryVariablesSignals("memory_controller", inputPrefix, outputPrefix,
-    	                            "_b");
-   	}
-	useReplicaNumberForAllVariables = false;
-	if (tmrInst) {
+	if (LEGUP_CONFIG->getParameterInt("TMR")) {
+		useReplicaNumberForAllVariables = true;
+		for (unsigned tmrIter=0; tmrIter<3; tmrIter++) {
+			currReplica = utostr(tmrIter);
+   		    Out << "\n";
+    		printMemoryVariablesSignals("memory_controller", inputPrefix, outputPrefix,
+    		                            "_a");
+    		printMemoryVariablesSignals("memory_controller", inputPrefix, outputPrefix,
+    		                            "_b");
+   		}
+		useReplicaNumberForAllVariables = false;
+
 		printMemoryAssignForTmr("_a");
 		printMemoryAssignForTmr("_b");
 	}
