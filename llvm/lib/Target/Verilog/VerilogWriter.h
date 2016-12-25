@@ -36,10 +36,12 @@ public:
     VerilogWriter(raw_ostream &StreamOut, Allocation *alloc, std::set<const
 		  Function*> AcceleratedFcts) : StreamOut(StreamOut), alloc(alloc),
 						AcceleratedFcts(AcceleratedFcts), usesSynchronization(false),
-	                    useReplicaNumberForAllVariables(false) {}
+	                    useReplicaNumberForAllVariables(false),
+	                    useFeedbackPostfixForBBModules(false) {}
     VerilogWriter(raw_ostream &StreamOut, Allocation *alloc) : StreamOut(StreamOut),
 							 alloc(alloc), usesSynchronization(false),
-	                         useReplicaNumberForAllVariables(false) {}
+	                         useReplicaNumberForAllVariables(false),
+	                         useFeedbackPostfixForBBModules(false) {}
     void print();
     
     void printRTL(const RTLModule *rtl);
@@ -176,6 +178,7 @@ private:
     void parseMIPSdisassembly();
     void printModelsimSignals(bool voidtype);
     void printDeclaration(const RTLSignal *signal, bool testBench=false);
+	void printConnectSignalDeclaration(const RTLSignal *signal, bool testBench=false);
     void printVerilogBitwidthPrefix(const RTLSignal *sig);
     //NC changes...
     //void printRamInstance(RAM *R);
@@ -221,11 +224,26 @@ private:
     std::map<std::string, std::string> globalAddresses;
     bool usesSynchronization;
 
+	void printBBModuleInstance(RTLBBModule *bbm);
+	void printBBModuleInstance(RTLBBModule *bbm, std::string postfix);
+	void printBBModuleBody(RTLBBModule *bbm);
+
 	// added for TMR
 	bool isTmrSig(const RTLSignal *sig);
+	bool isStateSig(const RTLSignal *sig);
+	bool isMemSig(const RTLSignal *sig);
+	bool isMemInputSig(const RTLSignal *sig);
+	bool isMemOutputSig(const RTLSignal *sig);
+	bool isBBModuleSig(const RTLSignal *sig);
+	std::string getTMRPostfix(const RTLSignal *sig);
+	bool isTopModuleSig(const RTLSignal *sig);
+	bool isSameBBFeedbackSig(const RTLSignal *sig);
 
+	// FIXME - use as global variables
 	std::string currReplica;
 	bool useReplicaNumberForAllVariables;
+	RTLBBModule *curBBModule;
+	bool useFeedbackPostfixForBBModules;
 };
 
 } // End legup namespace

@@ -41,6 +41,7 @@ class Allocation;
 class RTLOp;
 class RTLModule;
 class RAM;
+class RTLBBModule;
 
 /// RTLWidth - Represents the bitwidth of a RTLSignal i.e. [5:2]
 /// @brief RTLWidth
@@ -122,6 +123,8 @@ public:
     RTLSignal();
     RTLSignal(std::string name, std::string value, RTLWidth bitwidth=RTLWidth());
     virtual ~RTLSignal() {}
+
+	enum { NONE=0, SYNC_VOTER, PART_VOTER };
 
     std::string getValue() const { return value; }
     std::string getName() const { return name; }
@@ -332,6 +335,61 @@ public:
     }
 };
 
+class RTLBBModule {
+public:
+	RTLBBModule(std::string name) : name(name) {};
+	~RTLBBModule();
+
+	std::string getName() const { return name; }
+	void setName(std::string name) { name = name; }
+
+    typedef std::vector<RTLSignal*>::iterator signal_iterator;
+    typedef std::vector<RTLSignal*>::const_iterator const_signal_iterator;
+
+    signal_iterator       signals_begin()       { return signals.begin(); }
+    const_signal_iterator signals_begin() const { return signals.begin(); }
+    signal_iterator       signals_end()         { return signals.end(); }
+    const_signal_iterator signals_end()   const { return signals.end(); }
+
+    signal_iterator       inputs_begin()       { return inputs.begin(); }
+    const_signal_iterator inputs_begin() const { return inputs.begin(); }
+    signal_iterator       inputs_end()         { return inputs.end(); }
+    const_signal_iterator inputs_end()   const { return inputs.end(); }
+
+    signal_iterator       finputs_begin()       { return finputs.begin(); }
+    const_signal_iterator finputs_begin() const { return finputs.begin(); }
+    signal_iterator       finputs_end()         { return finputs.end(); }
+    const_signal_iterator finputs_end()   const { return finputs.end(); }
+
+    signal_iterator       outputs_begin()       { return outputs.begin(); }
+    const_signal_iterator outputs_begin() const { return outputs.begin(); }
+    signal_iterator       outputs_end()         { return outputs.end(); }
+    const_signal_iterator outputs_end()   const { return outputs.end(); }
+
+	void add_input(RTLSignal *in) {
+		if ((std::find(inputs.begin(), inputs.end(), in) == inputs.end())
+				&& (std::find(signals.begin(), signals.end(), in) == signals.end()))
+			inputs.push_back(in);
+	}
+	void add_finput(RTLSignal *in) { finputs.push_back(in); }
+	void add_output(RTLSignal *out) { outputs.push_back(out); }
+	void add_signal(RTLSignal *sig) { signals.push_back(sig); }
+
+	bool empty() { return signals.empty(); }
+
+	void remove_input(std::string name);
+	void remove_finput(std::string name);
+	void remove_output(std::string name);
+	void remove_signal(std::string name);
+
+private:
+	std::string name;
+	std::vector<RTLSignal *> signals;
+	std::vector<RTLSignal *> inputs;
+	std::vector<RTLSignal *> finputs;
+	std::vector<RTLSignal *> outputs;
+};
+
 /// RTLModule - Represents an RTL module.
 /// Contains lists of:
 ///  RTLSignal signals
@@ -518,6 +576,12 @@ public:
     const std::map<int, int>* dbgGetInstanceMapping() const { return &dbgInstanceMapping; }
 //    std::vector<RTLSignal*>* getDbgTracedSignals() { return &dbgTracedSignals; }
 //    void dbgCollectDescendentTraceSignals(std::vector<RTLSignal*>*collection);
+
+	//TMR
+	// Basic block modulerarization for DPR
+	std::vector<RTLBBModule*> bbModules;
+	const RTLSignal *getCurStateSignal() const;
+	void removeSignalInBBModule(std::string name);
 
 private:
     std::map<const RTLSignal*, Cell*> mapSignalCell;

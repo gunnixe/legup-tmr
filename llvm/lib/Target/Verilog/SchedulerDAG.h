@@ -23,6 +23,44 @@ namespace legup {
 class FiniteStateMachine;
 class LegupConfig;
 
+class BasicBlockNode {
+public:
+	BasicBlockNode (BasicBlock *B) : bb(B) {}
+
+	typedef std::vector<Instruction *>::iterator iterator; 
+	typedef std::vector<Instruction *>::const_iterator const_iterator; 
+
+	iterator       finput_begin()       { return finput.begin(); }
+	const_iterator finput_begin() const { return finput.begin(); }
+	iterator       finput_end()         { return finput.end(); }
+	const_iterator finput_end()   const { return finput.end(); }
+	iterator       input_begin()        { return input.begin(); }
+	const_iterator input_begin()  const { return input.begin(); }
+	iterator       input_end()          { return input.end(); }
+	const_iterator input_end()    const { return input.end(); }
+	iterator       output_begin()       { return output.begin(); }
+	const_iterator output_begin() const { return output.begin(); }
+	iterator       output_end()         { return output.end(); }
+	const_iterator output_end()   const { return output.end(); }
+
+	void addInput(Instruction *I) {
+		if (std::find(input.begin(), input.end(), I) == input.end())
+			input.push_back(I);
+	}
+	void addFeedbackInput(Instruction *I) {
+		if (std::find(finput.begin(), finput.end(), I) == finput.end())
+			finput.push_back(I);
+	}
+	void addOutput(Instruction *I) { output.push_back(I); }
+	BasicBlock* getBasicBlock() { return bb; }
+
+private:
+	BasicBlock *bb;
+	std::vector<Instruction *> input;
+	std::vector<Instruction *> finput;
+	std::vector<Instruction *> output;
+};
+
 /// InstructionNode - Container for Instructions to contain schedule-specific
 /// information. Contains memory dependencies.
 /// TODO: include pseudo-instructions, etc...
@@ -171,6 +209,10 @@ public:
         assert (nodeLookup.find(inst) != nodeLookup.end());
         return nodeLookup[inst];
     }
+	BasicBlockNode* getBasicBlockNode(BasicBlock *bb) {
+		assert (bbNodeLookup.find(bb) != bbNodeLookup.end());
+		return bbNodeLookup[bb];
+	}
 
     // print a .dot file for the dependency DFG of basic block BB
     void printDFGDot(formatted_raw_ostream &out, BasicBlock *BB);
@@ -192,10 +234,12 @@ public:
 	bool recursiveDFSToposort(const BasicBlock *BB,
                DenseMap<const BasicBlock *, int> &colorMap,
                std::vector<const BasicBlock *> &sortedBBs);
+	bool isSamePartition(std::vector<const BasicBlock *> path, const BasicBlock *useBB);
 
 	// TMR
 	SmallVector<std::pair<const BasicBlock*, const BasicBlock*>, 32> BackEdges;
 	std::queue<std::vector<const BasicBlock*> > DAGPaths;
+	std::vector<std::vector<const BasicBlock*> > Partitions;
 	Allocation *getAlloc() { return alloc; }
 
 private:
@@ -209,6 +253,7 @@ private:
     AliasAnalysis            *AliasA;
 
     DenseMap<Instruction *, InstructionNode*> nodeLookup;
+    DenseMap<BasicBlock *, BasicBlockNode*> bbNodeLookup;
     Allocation *alloc;
 };
 

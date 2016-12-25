@@ -367,6 +367,15 @@ RTLModule::~RTLModule() {
     }
 }
 
+const RTLSignal *RTLModule::getCurStateSignal() const {
+    for (const_signal_iterator i = signals.begin(), e = signals.end(); i != e; ++i) {
+		if ((*i)->getName() == "cur_state") {
+			return *i;
+		}
+    }
+	return 0;
+}
+
 RTLSignal *RTLModule::find(std::string signal) {
     RTLSignal *r = findExists(signal);
     if (!r) {
@@ -832,6 +841,7 @@ void RTLModule::removeSignalsWithoutFanout() {
         assert(c);
         if (!marked.count(c)) {
             //outs() << "Removing signal: " << (*i)->getName() << "\n";
+			removeSignalInBBModule((*i)->getName());
             delete *i;
             i = signals.erase(i);
         } else {
@@ -840,6 +850,16 @@ void RTLModule::removeSignalsWithoutFanout() {
     }
 }
 
+void RTLModule::removeSignalInBBModule(std::string name) {
+	for (std::vector<RTLBBModule *>::iterator bbm = bbModules.begin(),
+	                                          bbme = bbModules.end();
+	                                          bbm != bbme; ++bbm) {
+		(*bbm)->remove_input(name);
+		(*bbm)->remove_finput(name);
+		(*bbm)->remove_output(name);
+		(*bbm)->remove_signal(name);
+	}
+}
 
 void RTLModule::verifyConnections(const Allocation *alloc) const {
 
@@ -1004,6 +1024,50 @@ void RTLOp::setOperand(int i, RTLSignal *s) {
     }
 
     operands[i] = s;
+}
+
+void RTLBBModule::remove_input(std::string name) {
+	signal_iterator i = inputs.begin();
+	while (i != inputs.end()) {
+	    if ((*i)->getName() == name) {
+	        i = inputs.erase(i);
+	    } else {
+	        ++i;
+	    }
+	}
+}
+
+void RTLBBModule::remove_finput(std::string name) {
+	signal_iterator i = finputs.begin();
+	while (i != finputs.end()) {
+	    if ((*i)->getName() == name) {
+	        i = finputs.erase(i);
+	    } else {
+	        ++i;
+	    }
+	}
+}
+
+void RTLBBModule::remove_output(std::string name) {
+	signal_iterator i = outputs.begin();
+	while (i != outputs.end()) {
+	    if ((*i)->getName() == name) {
+	        i = outputs.erase(i);
+	    } else {
+	        ++i;
+	    }
+	}
+}
+
+void RTLBBModule::remove_signal(std::string name) {
+	signal_iterator i = signals.begin();
+	while (i != signals.end()) {
+	    if ((*i)->getName() == name) {
+	        i = signals.erase(i);
+	    } else {
+	        ++i;
+	    }
+	}
 }
 
 } // End legup namespace

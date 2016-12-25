@@ -80,7 +80,7 @@ sub summarize_in_csv {
 	my $current_design_delay = 0;
 	while(<FTIMH>) {
 		chomp;
-		if(/Maximum frequency: (\d+\.\d+)MHz/) {
+		if(/Maximum frequency:\s+(\d+\.\d+)MHz/) {
 			push @sim_max_freq_mhz, $1;
 			$current_design_delay = $1;
 			last;
@@ -113,7 +113,7 @@ sub summary_for_altera {
 	open(FH, '<', "top.fit.summary") or die "cannot open 'top.fit.summary' $!";
 	while(<FH>) {
 		chomp;
-		if(m/^Quartus II 64-Bit Version : 16/) {
+		if(m/^Quartus Prime Version : 16/) {
 			$altera_ver = 16;
 		}
 
@@ -154,16 +154,17 @@ sub summary_for_altera {
 
 	open(FH, '<', "top.sta.rpt") or die "cannot open 'top.sta.rpt' $!";
 	my $current_design_delay = 0;
+	my $found_string = 0;
 	while(<FH>) {
 		chomp;
 		if(m/^; Fmax\s+;/) {
-			my $line;
-			$line = readline(FH) for(1..2);
+			$found_string = 1;
+		} elsif($found_string==1) {
 			if(/^;\s+(\d+\.\d+) MHz ;/) {
-				push @sim_max_freq_mhz, $num;
-				$current_design_delay = $num;
+				push @sim_max_freq_mhz, $1;
+				$current_design_delay = $1;
+				last;
 			}
-			last;
 		}
 	}
 	die "cannot find string in 'top.sta.rpt'" if(eof FH);
@@ -222,24 +223,32 @@ sub write_csv_file {
 }
 
 if($fname eq "all") {
-	&do_work($_, $c, $f, $x) for(@example_list);
+	&do_work($_) for(@example_list);
 } else {
 	$dest_folder = "template/".$fname;
 	die "Folder '$dest_folder' is not exist\n" if(!-d $dest_folder);
-	&do_work($fname, $c, $f, $x);
+	&do_work($fname);
 }
 &write_csv_file();
 
 sub do_work {
 	my $fname = $_[0];
-	my $xilinx = $_[3];
+	# options
+	#-x : xilinx
+	#-c : create only
+	#-f : (finalize) summary only
+	#-s : simulation only
+	my $xilinx = $x;
 	my $flag_create = 1;
-	my $flag_exec = 1;
+	my $flag_synth = 1;
 	my $flag_summary = 1;
-	if($_[1]) {
-		($flag_create, $flag_exec, $flag_summary) = (1,0,0);
-	} elsif($_[2]) {
-		($flag_create, $flag_exec, $flag_summary) = (0,0,1);
+	my $flag_sim = 1;
+	if($c) {
+		($flag_create, $flag_sim, $flag_synth, $flag_summary) = (1,0,0,0);
+	} elsif($s) {
+		($flag_create, $flag_sim, $flag_synth, $flag_summary) = (1,1,0,0);
+	} elsif($f) {
+		($flag_create, $flag_sim, $flag_synth, $flag_summary) = (0,0,0,1);
 	}
 		
 
@@ -292,13 +301,13 @@ sub do_work {
 			&change_makefile($xilinx) if($flag_create);
 		
 			# do simulation
-			system("make | tee make.log;") if $flag_exec;
-			system("make v | tee vsim.log;") if $flag_exec;
-			system("make p; make f | tee synth.log;") if($flag_exec);
+			system("make | tee make.log;") if $flag_sim;
+			system("make v | tee vsim.log;") if $flag_sim;
+			system("make p; make f | tee synth.log;") if($flag_synth);
 	
 			# summarize
+			&make_report($cname, @arg_list) if ($flag_sim || $flag_summary);
 			if($flag_summary) {
-				&make_report($cname, @arg_list);
 				&summary_for_altera($cname) if $xilinx==0;
 				&summarize_in_csv($cname) if $xilinx==1;
 			}
@@ -317,7 +326,7 @@ sub make_report {
 	print FRH "\n#----- dir_name=$cname, TMR=$tmr, SYNC_VOTER_MODE=$smode, PART_VOTER_MODE=$pmode -----\n";
 	print FRH "#-----     LOCAL_RAM=$lram, USE_REG_VOTER_FOR_LOCAL_RAMS=$rvlram, pipeline=$pipe -----\n";
 
-	open(FH, '<', "vsim.log") or die "cannot open 'vsim.log' $!";
+	open(FH, '<', "vsim.log") or die "cannot open '$cname/vsim.log' $!";
 	while(<FH>) {
 		chomp;
 		if(m/^# Cycle: +\d+ Time: +\d+ +RESULT: \w+$/) {
@@ -329,7 +338,7 @@ sub make_report {
 			last;
 		}
 	}
-	die "cannot find string in 'vsim.log'" if(eof FH);
+	die "cannot find string in '$cname/vsim.log'" if(eof FH);
 	close(FH);
 }
 

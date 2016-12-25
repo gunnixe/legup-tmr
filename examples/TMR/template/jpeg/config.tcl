@@ -3,14 +3,14 @@ source ../../config.tcl
 # temporary: some getelmentptr instructions have
 # negative offsets which are not handled properly
 # by the OR gate
-set_parameter GROUP_RAMS_SIMPLE_OFFSET 0
 
 set_parameter LOCAL_RAMS 1
-#set_parameter GROUP_RAMS 1
-#set_parameter GROUP_RAMS_SIMPLE_OFFSET 1
+set_parameter GROUP_RAMS 1
+set_parameter GROUP_RAMS_SIMPLE_OFFSET 0
 set_parameter CASE_FSM 1
 
 set_parameter VSIM_NO_ASSERT 1
+set_parameter MB_MINIMIZE_HW 0
 
 set_parameter TMR 0
 set_parameter SYNC_VOTER_MODE 0

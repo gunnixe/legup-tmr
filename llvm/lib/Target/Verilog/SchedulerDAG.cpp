@@ -97,6 +97,7 @@ void SchedulerDAG::runToposort(const Function &F) {
 		}
 	} else {
 		errs() << " Sorting failed\n";
+		assert(0);
 	}
 
 	DAGPaths.push(sortedBBs);
@@ -271,6 +272,12 @@ SchedulerDAG::~SchedulerDAG() {
          i != e; ++i) {
         delete i->second;
     }
+	for (DenseMap<BasicBlock *, BasicBlockNode *>::iterator
+			i = bbNodeLookup.begin(),
+			e = bbNodeLookup.end();
+			i != e; ++i) {
+		delete i->second;
+	}
 }
 
 // hasNoDelay - detect instructions which have no delay. For example a shift by
@@ -401,7 +408,7 @@ void SchedulerDAG::insertSyncVoter(const BasicBlock* pred, const BasicBlock* suc
 	for (BasicBlock::const_iterator si = succ->begin();
 	     si != succ->end(); si++) {
 		const Instruction *i2 = si;
-		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
 			errs() << "    INSTRUCTION:" << getValueStr(i2) << "\n";
    		for (User::const_op_iterator i = i2->op_begin(), e = i2->op_end(); i != e;
    		     ++i) {
@@ -414,7 +421,7 @@ void SchedulerDAG::insertSyncVoter(const BasicBlock* pred, const BasicBlock* suc
 			     pi != pred->end(); pi++) {
 				const Instruction *i1 = pi;
 				if (foundBackwardDependency(use, i1, pred, succ, siIdx, piIdx)) {
-					if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+					if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
 						errs() << "      <-" << getValueStr(i1) << "\n";
 					//add backward information to InstructionNode
 					InstructionNode* iNode = getInstructionNode(const_cast<Instruction*>(i2));
@@ -422,10 +429,13 @@ void SchedulerDAG::insertSyncVoter(const BasicBlock* pred, const BasicBlock* suc
        				iNode->addBackDepInst(depNode);
        				depNode->addBackUseInst(iNode);
 
-					if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==3)// ||
+					if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==3) {
+						//FIXME - Now we do not support sync_voter_mode=3
+						errs() << "ERROR: 'SYNC_VOTER_MODE=3' is Not implemented yet!!!\n";
+						assert(0);
 					    //LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==5)
 						depNode->setBackward(); //def
-					else
+					} else
 						iNode->setBackward(); //use(phi)
 				}
 				piIdx++;
@@ -437,13 +447,13 @@ void SchedulerDAG::insertSyncVoter(const BasicBlock* pred, const BasicBlock* suc
 
 void SchedulerDAG::insertSyncVoter(Function &F) {
 	// add voter to the instruction which has backward edges
-	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
-		errs() << "\n\n# DEBUG_TMR=2 - Backward Edges\n";
+	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
+		errs() << "\n\n# DEBUG_TMR=3 - Backward Edges\n";
 	for (unsigned i = 0, e = BackEdges.size(); i != e; ++i) {
 		const BasicBlock *succ = BackEdges[i].second;
 		const BasicBlock *pred = BackEdges[i].first;
 
-		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
 			errs() << "  [" << i << "] " << getLabel(succ) << "<-" << getLabel(pred) << "\n";
 		insertSyncVoter(pred, succ);
 	}
@@ -544,37 +554,46 @@ void SchedulerDAG::insertPartitionVoter(Function &F) {
 		return;
 
 	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
-		errs() << "\n\n# DEBUG_TMR=2 - InsertPartitioningVoter\n";
+		errs() << "\n\n# DEBUG_TMR=3 - InsertPartitioningVoter\n";
 
 	std::vector<const BasicBlock *> path = DAGPaths.front();
 	unsigned areaTotal = 0;
 	unsigned areaLimit = LEGUP_CONFIG->getParameterInt("PARTITION_AREA_LIMIT");
 
 	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")!=0) {
+		std::vector<const BasicBlock *> partitionPath;
 		for (std::vector<const BasicBlock *>::const_reverse_iterator b = path.rbegin(),
 		                                                     be = path.rend();
 		                                                     b != be; ++b) {
 			const BasicBlock *BB = *b;
-			InstructionNode *prevNode;
 			for (BasicBlock::const_iterator instr = BB->begin(), ie = BB->end();
 			                                instr != ie; ++instr) {
 				const Instruction *I = instr;
-				InstructionNode *iNode = getInstructionNode(const_cast<Instruction *>(I));
+				//InstructionNode *iNode = getInstructionNode(const_cast<Instruction *>(I));
 				unsigned area = getInstructionArea(const_cast<Instruction *>(I));
-				if ((areaTotal+area > areaLimit) && (areaLimit!=0) && prevNode!=NULL) {
+				if ((areaTotal+area > areaLimit) && (areaLimit!=0)) {
 					if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
 						errs() << "  ---- Insert Part. Voter ----\n";
+					if (!partitionPath.empty()) {
+						Partitions.push_back(partitionPath);
+						partitionPath.clear();
+					} else {
+						errs() << "Error: PARTITION_AREA_LIMIT=" << areaLimit << " is too small\n";
+						errs() << "       Recommanded area = (larger than) " << (areaTotal+area) << "\n";
+						assert(0);
+					}
 					areaTotal = 0;
-					prevNode->setPartition();
 				}
 				areaTotal += area;
 				if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3) {
 					errs() << "  Area=(" << areaTotal << ") "
 					          << getLabel(*b) << ":" << getValueStr(instr) << "\n";
 				}
-				if (area>0)
-					prevNode = iNode;
 			}
+			partitionPath.push_back(*b);
+		}
+		if (!partitionPath.empty()) {
+			Partitions.push_back(partitionPath);
 		}
 	//} else {
 	//	errs() << "All paths of " << F.getName() << ":\n";
@@ -609,6 +628,33 @@ void SchedulerDAG::insertPartitionVoter(Function &F) {
 	//		DAGPaths.pop();
 	//	}
 	}
+
+	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2) {
+		errs() << "\n\n# DEBUG_TMR=2 - Partition List\n";
+		int cnt = 0;
+		for (std::vector<std::vector<const BasicBlock *> >::const_iterator p = Partitions.begin(),
+		                                                     pe = Partitions.end();
+		                                                     p != pe; ++p) {
+			std::vector<const BasicBlock *> path = *p;
+			errs() << " [" << cnt++ << "] ";
+			for (std::vector<const BasicBlock *>::const_iterator b = path.begin(),
+			                                                     be = path.end();
+			                                                     b != be; ++b) {
+				errs() << getLabel(*b) << " - ";
+			}
+			errs() << "\n";
+		}
+	}
+}
+
+bool SchedulerDAG::isSamePartition(std::vector<const BasicBlock *> path, const BasicBlock *useBB) {
+	for (std::vector<const BasicBlock *>::const_iterator b = path.begin(),
+	                                                     be = path.end();
+	                                                     b != be; ++b) {
+		if (*b == useBB)
+			return true;
+	}
+	return false;
 }
 
 bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
@@ -620,6 +666,8 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
 
     // generate Instruction to InstructionNode mapping
     for (Function::iterator b = F.begin(), be = F.end(); b != be; b++) {
+		BasicBlockNode *bNode = new BasicBlockNode(b);
+    	bbNodeLookup[b] = bNode;
         for (BasicBlock::iterator instr = b->begin(), ie = b->end();
              instr != ie; ++instr) {
     		InstructionNode *iNode = new InstructionNode(instr);
@@ -653,6 +701,80 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
         for (BasicBlock::iterator instr = b->begin(), ie = b->end();
              instr != ie; ++instr) {
             generateDependencies(instr);
+        }
+    }
+
+	// setPartition Bounday
+	for (std::vector<std::vector<const BasicBlock *> >::const_iterator p = Partitions.begin(),
+	                                                     pe = Partitions.end();
+	                                                     p != pe; ++p) {
+		std::vector<const BasicBlock *> path = *p;
+		for (std::vector<const BasicBlock *>::const_iterator b = path.begin(),
+		                                                     be = path.end();
+		                                                     b != be; ++b) {
+			BasicBlock *BB = const_cast<BasicBlock *>(*b);
+    		for (BasicBlock::iterator I = BB->begin(), ie = BB->end(); I != ie; ++I) {
+    			// these instructions are not scheduled
+    			if (isa<AllocaInst>(I))// || isa<PHINode>(I))
+    			    continue;
+
+    			for (User::op_iterator i = I->op_begin(), e = I->op_end(); i != e; ++i) {
+    			    // we only care about operands that are created by other instructions
+    			    Instruction *dep = dyn_cast<Instruction>(*i);
+
+    			    // also ignore if the dependency is an alloca
+    			    if (!dep || isa<AllocaInst>(dep))
+    			        continue;
+
+    			    // ignore operands from other basic blocks, these are
+    			    // guaranteed to be in another state
+    		    	InstructionNode *depNode = getInstructionNode(dep);
+    			    if (!isSamePartition(path, dep->getParent()))
+						//if (!depNode->getBackward())
+							depNode->setPartition();
+    			}
+    		}
+		}
+	}
+
+	// make BB input & output
+	//errs() << "---- BasicBlock inout analysis ----\n";
+    for (Function::iterator b = F.begin(), be = F.end(); b != be; b++) {
+		//errs() << "---- BB_" << getLabel(b) << "\n";
+		BasicBlockNode *bbNode = getBasicBlockNode(b);
+        for (BasicBlock::iterator instr = b->begin(), ie = b->end();
+             instr != ie; ++instr) {
+			Instruction *I = instr;
+			InstructionNode *iNode = getInstructionNode(I);
+
+			if (I->getType()->getTypeID() == Type::VoidTyID)
+				continue;
+			if (isa<AllocaInst>(I))
+				continue;
+			if (isaDummyCall(I))
+				continue;
+        	if (I->hasNUses(0))
+        	    continue; // ignore instructions with no uses
+
+    		for (User::op_iterator i = I->op_begin(), e = I->op_end(); i != e; ++i) {
+    		    // we only care about operands that are created by other instructions
+    		    Instruction *dep = dyn_cast<Instruction>(*i);
+
+   			    // also ignore if the dependency is an alloca
+   			    if (!dep)// || isa<AllocaInst>(dep))
+   			        continue;
+
+   		    	//InstructionNode *depNode = getInstructionNode(dep);
+				if (I->getParent() != dep->getParent()) {
+					bbNode->addInput(dep);
+					//errs() << "\tinput " << getValueStr(dep) << ",\n";
+				}
+				if (I->getParent()==dep->getParent() && (iNode->getBackward()))
+						//|| LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==1))
+					bbNode->addFeedbackInput(I);
+   			}
+			bbNode->addOutput(I);
+			//errs() << "\toutput " << getValueStr(I) << ",\n";
         }
     }
 

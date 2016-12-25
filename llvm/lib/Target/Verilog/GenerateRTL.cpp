@@ -6005,6 +6005,78 @@ void GenerateRTL::createRTLSignalsForInstructions() {
 		if (!rtl->exists(reg))
 			rtl->addReg(reg, w);
 	}
+
+	// grouping RTLSignals with BasicBlocks
+	//FIXME
+    for (Function::iterator b = Fp->begin(), be = Fp->end(); b != be; ++b) {
+		BasicBlockNode *bbNode = dag->getBasicBlockNode(b);
+
+		std::string bbModuleName = "BB_" + b->getParent()->getName().str() + verilogName(b);
+		RTLBBModule *bbm = new RTLBBModule(bbModuleName);
+
+		// add input ports
+		for (BasicBlockNode::iterator I = bbNode->input_begin(),
+		                              IE = bbNode->input_end();
+		                              I != IE; ++I) {
+			std::string wire = verilogName(*I);
+			std::string reg = verilogName(*I) + "_reg";
+			if (rtl->exists(wire)) {
+				RTLSignal *sig = rtl->find(wire);
+				RTLSignal *sig_reg = rtl->find(reg);
+				if (sig)
+					bbm->add_input(sig);
+				if (sig_reg)
+					bbm->add_input(sig_reg);
+			}
+		}
+
+		// add feedback input ports
+		for (BasicBlockNode::iterator I = bbNode->finput_begin(),
+		                              IE = bbNode->finput_end();
+		                              I != IE; ++I) {
+			std::string reg = verilogName(*I) + "_reg";
+			if (rtl->exists(reg)) {
+				RTLSignal *sig_reg = rtl->find(reg);
+				if (sig_reg)
+					bbm->add_finput(sig_reg);
+			}
+		}
+
+		// add output ports
+		for (BasicBlockNode::iterator I = bbNode->output_begin(),
+		                              IE = bbNode->output_end();
+		                              I != IE; ++I) {
+			std::string wire = verilogName(*I);
+			std::string reg = verilogName(*I) + "_reg";
+			if (rtl->exists(wire)) {
+				RTLSignal *sig = rtl->find(wire);
+				RTLSignal *sig_reg = rtl->find(reg);
+				if (sig)
+					bbm->add_output(sig);
+				if (sig_reg)
+					bbm->add_output(sig_reg);
+			}
+		}
+
+		// add related signals
+        for (BasicBlock::iterator instr = b->begin(), ie = b->end();
+		                          instr != ie; ++instr) {
+			std::string wire = verilogName(*instr);
+			std::string reg = verilogName(*instr) + "_reg";
+			if (rtl->exists(wire)) {
+				RTLSignal *sig = rtl->find(wire);
+				RTLSignal *sig_reg = rtl->find(reg);
+				if (sig) {
+					bbm->add_signal(sig);
+				}
+				if (sig_reg) {
+					bbm->add_signal(sig_reg);
+				}
+			}
+		}
+
+		rtl->bbModules.push_back(bbm);
+	}
 }
 
 void GenerateRTL::createRTLSignalsForLocalRams() {
@@ -6500,7 +6572,56 @@ RTLModule* GenerateRTL::generateRTL(MinimizeBitwidth *_MBW) {
 	// add voter tag
 	updateVoterSignal(dag);
 
+	// update BB Module input port list
+	updateBBModuleInputs();
+
 	return rtl;
+}
+
+void GenerateRTL::addOpToInput(RTLBBModule *bbm, RTLOp *op) {
+	for (unsigned j=0; j<op->getNumOperands(); ++j) {
+		RTLSignal *operand = op->getOperand(j);
+		addSensitiveListToInput(bbm, operand);
+	}
+}
+
+void GenerateRTL::addSensitiveListToInput(RTLBBModule *bbm, RTLSignal *sig) {
+	if (sig->isOp()) {
+		addOpToInput(bbm, (RTLOp*)sig);
+	} else {
+		if (sig->getValue().empty()) {
+			bbm->add_input(sig);
+		}
+	}
+}
+
+void GenerateRTL::updateBBModuleInputs() {
+	for (std::vector<RTLBBModule *>::iterator bbm = rtl->bbModules.begin(),
+	                                          bbme = rtl->bbModules.end();
+	                                          bbm != bbme; ++bbm) {
+		// add additional (cannot be detected from instruction analysis)
+		// input ports
+		for (RTLBBModule::signal_iterator i = (*bbm)->signals_begin(),
+		                                  e = (*bbm)->signals_end();
+		                                  i != e; ++i) {
+			RTLSignal *sig = *i;
+			unsigned numCondition = sig->getNumConditions();
+			if (numCondition == 0) { //single driver
+    			RTLSignal *driver = sig->getDriver(0);
+				addSensitiveListToInput(*bbm, driver);
+			} else {
+				for (unsigned i=0; i<numCondition; ++i) {
+    				RTLSignal *driver = sig->getDriver(i);
+					addSensitiveListToInput(*bbm, driver);
+					//if (driver->getName()!="")
+					//	(*bbm)->add_input(driver);
+
+    				RTLSignal *condition = sig->getCondition(i);
+					addSensitiveListToInput(*bbm, condition);
+				}
+			}
+		}
+	}
 }
 
 void GenerateRTL::updateVoterSignal(SchedulerDAG *dag) {
@@ -6516,8 +6637,8 @@ void GenerateRTL::updateVoterSignal(SchedulerDAG *dag) {
 		if (iNode->getBackward()) {
 			RTLSignal *sig_wire = rtl->find(verilogName(*I));
 			RTLSignal *sig_reg = rtl->find(verilogName(*I) + "_reg");
-			sig_wire->setVoter(1);
-			sig_reg->setVoter(1);
+			sig_wire->setVoter(RTLSignal::SYNC_VOTER);
+			sig_reg->setVoter(RTLSignal::SYNC_VOTER);
 
 			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
 				std::cerr << "    " << getValueStr(I) << endl;
@@ -6528,7 +6649,7 @@ void GenerateRTL::updateVoterSignal(SchedulerDAG *dag) {
 		//	if (Instruction *use = dyn_cast<Instruction>(*i)) {
 		//		std::string wire = verilogName(*use);
 		//		RTLSignal *sig = rtl->find(wire);
-		//		sig->setVoter(1);
+		//		sig->setVoter(RTLSignal::SYNC_VOTER);
 		//	}
 		//}
 	}
@@ -6544,8 +6665,8 @@ void GenerateRTL::updateVoterSignal(SchedulerDAG *dag) {
 		if (iNode->getPartition()) {
 			RTLSignal *sig_wire = rtl->find(verilogName(*I));
 			RTLSignal *sig_reg = rtl->find(verilogName(*I) + "_reg");
-			sig_wire->setVoter(2);
-			sig_reg->setVoter(2);
+			sig_wire->setVoter(RTLSignal::PART_VOTER);
+			sig_reg->setVoter(RTLSignal::PART_VOTER);
 
 			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
 				std::cerr << "    " << getValueStr(I) << endl;

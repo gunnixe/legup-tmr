@@ -154,6 +154,9 @@ public:
 	// voter
 	void updateVoterSignal(SchedulerDAG *dag);
 	void printDebugSignal(std::string chr);
+	void addOpToInput(RTLBBModule *bbm, RTLOp *op);
+	void addSensitiveListToInput(RTLBBModule *bbm, RTLSignal *sig);
+	void updateBBModuleInputs();
 
     void scheduleOperations();
 

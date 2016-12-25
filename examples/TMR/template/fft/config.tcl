@@ -5,6 +5,9 @@ source ../../config.tcl
 #set_parameter LOCAL_RAMS 1
 #loop_pipeline "loop"
 
+set_parameter PARTITION_AREA_LIMIT 300
+set_parameter MB_MINIMIZE_HW 1
+
 set_parameter TMR 1
 set_parameter SYNC_VOTER_MODE 2
 # VOTER_MODE 0=output only,

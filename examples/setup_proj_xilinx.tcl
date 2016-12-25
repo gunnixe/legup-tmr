@@ -58,10 +58,16 @@ project set top [lindex $argv 3]
 project set "FSM Encoding Algorithm" "One-Hot" -process "Synthesize - XST"
 
 # XST was crashing without this - See http://forums.xilinx.com/t5/Synthesis/Synthesis-Error-INTERNAL-ERROR-Xst-cmain-c-3423-1-29-Process/td-p/290491
-project set "Other XST Command Line Options" "-keep_hierarchy soft" -process "Synthesize - XST"
+#project set "Other XST Command Line Options" "-keep_hierarchy soft" -process "Synthesize - XST"
+project set "Keep Hierarchy" "Soft" -process "Synthesize - XST"
 project set "Generate Detailed MAP Report" "true" -process "Map"
 
+# TMR specific options
 project set "Allow Unexpanded Blocks" "true" -process "Translate"
+#project set "Safe Implementation" "Yes" -process "Synthesize - XST"
+project set "Equivalent Register Removal" "false" -process "Synthesize - XST"
+project set "LUT Combining" "No" -process "Synthesize - XST"
+project set "Resource Sharing" "false" -process "Synthesize - XST"
 
 #set_global_assignment -name SEARCH_PATH $search_path
 
