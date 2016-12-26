@@ -6,6 +6,7 @@ set_parameter LOCAL_RAMS 1
 set_parameter CASE_FSM 1
 
 set_parameter VSIM_NO_ASSERT 1
+#set_parameter PARTITION_AREA_LIMIT 4349
 
 set_parameter TMR 1
 set_parameter SYNC_VOTER_MODE 2

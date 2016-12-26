@@ -5,7 +5,7 @@ source ../../config.tcl
 #set_parameter LOCAL_RAMS 1
 #loop_pipeline "loop"
 
-set_parameter PARTITION_AREA_LIMIT 300
+#set_parameter PARTITION_AREA_LIMIT 300
 set_parameter MB_MINIMIZE_HW 1
 
 set_parameter TMR 1

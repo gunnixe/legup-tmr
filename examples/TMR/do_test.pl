@@ -301,7 +301,7 @@ sub do_work {
 			&change_makefile($xilinx) if($flag_create);
 		
 			# do simulation
-			system("make | tee make.log;") if $flag_sim;
+			system("make 2>&1 | tee make.log;") if $flag_create;
 			system("make v | tee vsim.log;") if $flag_sim;
 			system("make p; make f | tee synth.log;") if($flag_synth);
 	

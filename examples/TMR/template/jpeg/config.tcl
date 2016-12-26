@@ -11,6 +11,7 @@ set_parameter CASE_FSM 1
 
 set_parameter VSIM_NO_ASSERT 1
 set_parameter MB_MINIMIZE_HW 0
+#set_parameter PARTITION_AREA_LIMIT 2605
 
 set_parameter TMR 0
 set_parameter SYNC_VOTER_MODE 0
