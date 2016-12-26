@@ -557,8 +557,10 @@ void SchedulerDAG::insertPartitionVoter(Function &F) {
 		errs() << "\n\n# DEBUG_TMR=3 - InsertPartitioningVoter\n";
 
 	std::vector<const BasicBlock *> path = DAGPaths.front();
-	unsigned areaTotal = 0;
 	unsigned areaLimit = LEGUP_CONFIG->getParameterInt("PARTITION_AREA_LIMIT");
+	unsigned areaRecommand = 0;
+	unsigned areaLimitViolation = false;
+	unsigned areaTotal = 0;
 
 	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")!=0) {
 		std::vector<const BasicBlock *> partitionPath;
@@ -577,12 +579,11 @@ void SchedulerDAG::insertPartitionVoter(Function &F) {
 					if (!partitionPath.empty()) {
 						Partitions.push_back(partitionPath);
 						partitionPath.clear();
+						areaTotal = 0;
 					} else {
-						errs() << "Error: PARTITION_AREA_LIMIT=" << areaLimit << " is too small\n";
-						errs() << "       Recommanded area = (larger than) " << (areaTotal+area) << "\n";
-						assert(0);
+						areaLimitViolation = true;
+						areaLimit = areaTotal + area + 1;
 					}
-					areaTotal = 0;
 				}
 				areaTotal += area;
 				if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3) {
@@ -591,6 +592,8 @@ void SchedulerDAG::insertPartitionVoter(Function &F) {
 				}
 			}
 			partitionPath.push_back(*b);
+			if (areaRecommand < areaTotal)
+				areaRecommand = areaTotal;
 		}
 		if (!partitionPath.empty()) {
 			Partitions.push_back(partitionPath);
@@ -627,6 +630,13 @@ void SchedulerDAG::insertPartitionVoter(Function &F) {
 
 	//		DAGPaths.pop();
 	//	}
+	}
+
+	if(areaLimitViolation) {
+		unsigned areaLimit = LEGUP_CONFIG->getParameterInt("PARTITION_AREA_LIMIT");
+		errs() << "Error: PARTITION_AREA_LIMIT=" << areaLimit << " is too small\n";
+		errs() << "       Recommanded area = (larger than) " << (areaRecommand) << "\n";
+		//assert(0);
 	}
 
 	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2) {
