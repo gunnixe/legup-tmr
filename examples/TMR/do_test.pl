@@ -12,6 +12,7 @@ my @example_list;
 # adpcm have an error for local memory alias analysis
 # jpeg & dfsin too large
 @example_list = (@example_list,qw(adpcm jpeg dfsin));
+@example_list = (@example_list,qw(satd sobel bellmanford));
 
 my ($fname) = @ARGV;
 die "Need folder name\n" if(not defined $fname);
@@ -278,12 +279,15 @@ sub do_work {
 					|| ($fname eq "adpcm")
 					|| ($fname eq "jpeg")
 					|| ($fname eq "dfsin")
+					|| ($fname eq "bellmanford")
 			  ) {
 				$arg_list[4] = 0;
 			}
 
 			# - need to skip localmemory use
 			if(($fname eq "adpcm")
+					|| ($fname eq "aes")
+					|| ($fname eq "bellmanford")
 			  ) {
 				$arg_list[3] = 0;
 			}
