@@ -3,15 +3,15 @@
 my @example_list;
 
 #simplelist
-@example_list = (@example_list,qw(add fir_opt matrixmultiply qsort fft));
+#@example_list = (@example_list,qw(add fir_opt matrixmultiply qsort fft));
 
 #dhrystone benchmark example
-@example_list = (@example_list,qw(aes gsm blowfish motion));
-@example_list = (@example_list,qw(dfadd dfmul dfdiv));
+#@example_list = (@example_list,qw(aes gsm blowfish motion));
 @example_list = (@example_list,qw(mips sha));
+#@example_list = (@example_list,qw(dfadd dfmul dfdiv dfsin));
 # adpcm have an error for local memory alias analysis
 # jpeg & dfsin too large
-@example_list = (@example_list,qw(adpcm jpeg dfsin));
+@example_list = (@example_list,qw(adpcm jpeg));
 @example_list = (@example_list,qw(satd sobel bellmanford));
 
 my ($fname) = @ARGV;
@@ -25,25 +25,131 @@ my @number_of_bounded_iobs;
 my @number_of_ramb36e1s;
 my @number_of_ramb18e1s;
 my @number_of_dsp48e1s;
-my @sensitive_bits_total;
-my @sensitive_interconnection_bits;
-my @sensitive_interface_bits;
-my @sensitive_block_configuration_bits;
-my @sensitive_interconnection_frames;
-my @sensitive_interface_frames;
-my @sensitive_block_configuration_frames;
-my @sensitive_frames;
-my @device_interconnection_frames;
-my @device_interface_frames;
-my @device_block_configuration_frames;
-my @device_frames;
 my @sim_max_freq_mhz;
 my @sim_number_of_clock_cycles;
 my @sim_wall_clock_us;
-my @fault_injection_recoverable;
-my @fault_injection_unrecoverable;
+my @sensitive_01;
+my @sensitive_02;
+my @sensitive_03;
+my @sensitive_04;
+my @sensitive_05;
+my @sensitive_06;
+my @sensitive_07;
+my @sensitive_08;
+my @sensitive_09;
+my @sensitive_0A;
+my @sensitive_0B;
+my @sensitive_0C;
+my @sensitive_0D;
+my @sensitive_0E;
+my @sensitive_0F;
+my @sensitive_10;
+my @sensitive_11;
+my @sensitive_12;
+my @sensitive_13;
+my @sensitive_14;
+my @sensitive_15;
+my @sensitive_16;
+my @sensitive_17;
+my @sensitive_18;
+my @sensitive_19;
+my @sensitive_1A;
+my @sensitive_1B;
 
-sub summarize_in_csv {
+sub summarize_essential_bits {
+	my ($cname) = @_;
+	my $sname = "/home/legup/Dropbox/FCCM/results/SensitivityAnalysis/".$cname."_log.txt";
+	open(FEH, '<', "$sname") or die "cannot open '$sname' $!";
+	while(<FEH>) {
+		chomp;
+		if(/#01=(\d+)#/) { push @sensitive_01, $1; }
+		elsif(/#02=(\d+)#/) { push @sensitive_02, $1; }
+		elsif(/#03=(\d+)#/) { push @sensitive_03, $1; }
+		elsif(/#04=(\d+)#/) { push @sensitive_04, $1; }
+		elsif(/#05=(\d+)#/) { push @sensitive_05, $1; }
+		elsif(/#06=(\d+)#/) { push @sensitive_06, $1; }
+		elsif(/#07=(\d+)#/) { push @sensitive_07, $1; }
+		elsif(/#08=(\d+)#/) { push @sensitive_08, $1; }
+		elsif(/#09=(\d+)#/) { push @sensitive_09, $1; }
+		elsif(/#0A=(\d+)#/) { push @sensitive_0A, $1; }
+		elsif(/#0B=(\d+)#/) { push @sensitive_0B, $1; }
+		elsif(/#0C=(\d+)#/) { push @sensitive_0C, $1; }
+		elsif(/#0D=(\d+)#/) { push @sensitive_0D, $1; }
+		elsif(/#0E=(\d+)#/) { push @sensitive_0E, $1; }
+		elsif(/#0F=(\d+)#/) { push @sensitive_0F, $1; }
+		elsif(/#10=(\d+)#/) { push @sensitive_10, $1; }
+		elsif(/#11=(\d+)#/) { push @sensitive_11, $1; }
+		elsif(/#12=(\d+)#/) { push @sensitive_12, $1; }
+		elsif(/#13=(\d+)#/) { push @sensitive_13, $1; }
+		elsif(/#14=(\d+)#/) { push @sensitive_14, $1; }
+		elsif(/#15=(\d+)#/) { push @sensitive_15, $1; }
+		elsif(/#16=(\d+)#/) { push @sensitive_16, $1; }
+		elsif(/#17=(\d+)#/) { push @sensitive_17, $1; }
+		elsif(/#18=(\d+)#/) { push @sensitive_18, $1; }
+		elsif(/#19=(\d+)#/) { push @sensitive_19, $1; }
+		elsif(/#1A=(\d+)#/) { push @sensitive_1A, $1; }
+		elsif(/#1B=(\d+)#/) { push @sensitive_1B, $1; }
+	}
+	close(FEH);
+}
+
+sub summarize_with_only_syn_report {
+	my ($cname) = @_;
+	push @name_list, $cname;
+
+	open(FXH, '<', "ML605.syr") or die "cannot open 'ML605.syr' $!";
+	while(<FXH>) {
+		chomp;
+		if(/\s+Number of Slice Registers:\s+(\d+)/) {
+			$num = $1; $num =~ s/,//g;
+			push @number_of_slice_registers, $num;
+		} elsif(/\s+Number of Slice LUTs:\s+(\d+)/) {
+			$num = $1; $num =~ s/,//g;
+			push @number_of_slice_luts, $num;
+		} elsif(/\s+Number of occupied Slices:\s+([\d,]+)/) {
+			$num = $1; $num =~ s/,//g;
+			push @number_of_occupied_slices, $num;
+		} elsif(/\s+Number of bonded IOBs:\s+([\d,]+)/) {
+			$num = $1; $num =~ s/,//g;
+			push @number_of_bounded_iobs, $num;
+		} elsif(/\s+Number of Block RAM\/FIFO:\s+([\d,]+)/) {
+			$num = $1; $num =~ s/,//g;
+			push @number_of_ramb36e1s, $num;
+		} elsif(/\s+Number of DSP48E1s:\s+([\d,]+)/) {
+			$num = $1; $num =~ s/,//g;
+			push @number_of_dsp48e1s, $num;
+		} elsif(/Maximum Frequency:\s+(\d+\.\d+)MHz/) {
+			push @sim_max_freq_mhz, $1;
+			$current_design_delay = $1;
+			last;
+		}
+	}
+	if(@number_of_dsp48e1s < @number_of_slice_luts) {
+		push @number_of_dsp48e1s, "-";
+	}
+	if(@number_of_ramb36e1s < @number_of_slice_luts) {
+		push @number_of_ramb36e1s, "-";
+	}
+	die "cannot find string in 'ML605.syr'" if(eof FXH);
+	close(FXH);
+
+	open(FSIMH, '<', "vsim.log") or die "cannot open 'vsim.log' $!";
+	while(<FSIMH>) {
+		chomp;
+		if(/^# Cycle: +\d+ Time: +\d+ +RESULT: (\w+)$/) {
+			die "simulation fail" if($1 eq "FAIL");
+		} elsif(/^# Cycles:\s+(\d+)$/) {
+			push @sim_number_of_clock_cycles, $1;
+			my $current_design_wall_clock = $1/$current_design_delay;
+			push @sim_wall_clock_us, $current_design_wall_clock;
+			last;
+		}
+	}
+	die "cannot find string in 'vsim.log'" if(eof FSIMH);
+	close(FSIMH);
+}
+
+sub summarize_for_xilinx {
 	my ($cname) = @_;
 	push @name_list, $cname;
 
@@ -220,6 +326,36 @@ sub write_csv_file {
 	print FCSV ",$_" for(@sim_wall_clock_us);
 	print FCSV ",\n";
 
+	print FCSV ",\nSensitive bits (total)";                     print FCSV ",$_" for(@sensitive_01);
+	print FCSV ",\nSensitive interconnection bits";             print FCSV ",$_" for(@sensitive_02);
+	print FCSV ",\nSensitive interface bits";                   print FCSV ",$_" for(@sensitive_03);
+	print FCSV ",\nSensitive block configuration bits";         print FCSV ",$_" for(@sensitive_04);
+	print FCSV ",\nIOBs Sensitive interconnection bits";        print FCSV ",$_" for(@sensitive_05);
+	print FCSV ",\nIOBs Sensitive interface bits";              print FCSV ",$_" for(@sensitive_06);
+	print FCSV ",\nIOBs Sensitive block configuration bits";    print FCSV ",$_" for(@sensitive_07);
+	print FCSV ",\nCLBs Sensitive interconnection bits";        print FCSV ",$_" for(@sensitive_08);
+	print FCSV ",\nCLBs Sensitive interface bits";              print FCSV ",$_" for(@sensitive_09);
+	print FCSV ",\nCLBs Sensitive block configuration bits";    print FCSV ",$_" for(@sensitive_0A);
+	print FCSV ",\nBRAMs Sensitive interconnection bits";       print FCSV ",$_" for(@sensitive_0B);
+	print FCSV ",\nBRAMs Sensitive interface bits";             print FCSV ",$_" for(@sensitive_0C);
+	print FCSV ",\nBRAMs Sensitive block configuration bits";   print FCSV ",$_" for(@sensitive_0D);
+	print FCSV ",\nDSPs Sensitive interconnection bits";        print FCSV ",$_" for(@sensitive_0E);
+	print FCSV ",\nDSPs Sensitive interface bits";              print FCSV ",$_" for(@sensitive_0F);
+	print FCSV ",\nDSPs Sensitive block configuration bits";    print FCSV ",$_" for(@sensitive_10);
+	print FCSV ",\nCLKs Sensitive interconnection bits";        print FCSV ",$_" for(@sensitive_11);
+	print FCSV ",\nCLKs Sensitive interface bits";              print FCSV ",$_" for(@sensitive_12);
+	print FCSV ",\nCLKs Sensitive block configuration bits";    print FCSV ",$_" for(@sensitive_13);
+	print FCSV ",\n";                                           
+	print FCSV ",\nSensitive interconnection frames";           print FCSV ",$_" for(@sensitive_14);
+	print FCSV ",\nSensitive interface frames";                 print FCSV ",$_" for(@sensitive_15);
+	print FCSV ",\nSensitive block configuration frames";       print FCSV ",$_" for(@sensitive_16);
+	print FCSV ",\nSensitive frames";                           print FCSV ",$_" for(@sensitive_17);
+	print FCSV ",\n";                                           
+	print FCSV ",\nDevice interconnection frames";              print FCSV ",$_" for(@sensitive_18);
+	print FCSV ",\nDevice interface frames";                    print FCSV ",$_" for(@sensitive_19);
+	print FCSV ",\nDevice block configuration frames";          print FCSV ",$_" for(@sensitive_1A);
+	print FCSV ",\nDevice frames";                              print FCSV ",$_" for(@sensitive_1B);
+
 	close (FCSV);
 }
 
@@ -230,7 +366,7 @@ if($fname eq "all") {
 	die "Folder '$dest_folder' is not exist\n" if(!-d $dest_folder);
 	&do_work($fname);
 }
-&write_csv_file();
+&write_csv_file($x);
 
 sub do_work {
 	my $fname = $_[0];
@@ -307,13 +443,18 @@ sub do_work {
 			# do simulation
 			system("make 2>&1 | tee make.log;") if $flag_create;
 			system("make v | tee vsim.log;") if $flag_sim;
-			system("make p; make f | tee synth.log;") if($flag_synth);
+			system("make p; make q | tee synth.log;") if($flag_synth);
 	
 			# summarize
 			&make_report($cname, @arg_list) if ($flag_sim || $flag_summary);
 			if($flag_summary) {
 				&summary_for_altera($cname) if $xilinx==0;
-				&summarize_in_csv($cname) if $xilinx==1;
+				#&summarize_for_xilinx($cname) if $xilinx==1;
+				&summarize_with_only_syn_report($cname) if $xilinx==1;
+			}
+
+			if($flag_summary && $e) { #essential bit analysis
+				&summarize_essential_bits($cname) if $xilinx==1;
 			}
 
 			# finalize work dir
