@@ -4,6 +4,7 @@ source ../../config.tcl
 
 
 #set_parameter SDC_NO_CHAINING 1
+set_parameter MB_MINIMIZE_HW 0
 
 # SVOTER_MODE 0=output only,
 #             1=all reigisters,
