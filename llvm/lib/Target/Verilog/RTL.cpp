@@ -165,9 +165,10 @@ bool RTLSignal::driveFromVoter() const {
 	bool ret = false;
 	int svoterMode = LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE");
 	int pvoterMode = LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE");
+	bool voterBeforeFsm = (LEGUP_CONFIG->getParameterInt("VOTER_BEFORE_FSM")==1);
 
 	if (!LEGUP_CONFIG->getParameterInt("TMR")) return false;
-	else if (getName()=="cur_state") return true;
+	else if (getName()=="cur_state") return !voterBeforeFsm;
 	else if (svoterMode==0 && pvoterMode==0) return false;
 
 	// This mode alway returns 1 when a signal is register

@@ -67,17 +67,22 @@ jpeg2bmp_main()
 
 	for(i=0; i<RGB_NUM; i++){
 		for(j=0; j<BMP_OUT_SIZE; j++){
-			if(OutData_comp_buf[i][j] == hana_bmp[i][j]){
-				main_result++;
-			}
+			//if(OutData_comp_buf[i][j] == hana_bmp[i][j]){
+			//	main_result++;
+			//}
+			main_result += OutData_comp_buf[i][j];
 		}
 	}
-	if(OutData_image_width == out_width){
-		main_result++;
-	}
-	if(OutData_image_height == out_length){
-		main_result++;
-	}
+	main_result += OutData_image_width;
+	main_result += OutData_image_height;
+
+	//if(OutData_image_width == out_width){
+	//	main_result++;
+	//}
+	//if(OutData_image_height == out_length){
+	//	main_result++;
+	//}
+
     return(0);
 }
 

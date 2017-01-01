@@ -23,7 +23,7 @@ static LegupConfig LegupConfigObj;
 
 LegupConfig *LEGUP_CONFIG = &LegupConfigObj;
 
-#define NUM_PARAMETERS 132
+#define NUM_PARAMETERS 133
 const std::string validParameters[NUM_PARAMETERS] = {
     "ALIAS_ANALYSIS", "CLOCK_PERIOD", "DEBUG_MODULO_DEPENDENT",
     "DEBUG_MODULO_TABLE", "DEBUG_PERTURBATION", "DEBUG_VERIFY_INCR_SDC",
@@ -58,7 +58,7 @@ const std::string validParameters[NUM_PARAMETERS] = {
 
 	// Added for TMR
     "TMR", "SYNC_VOTER_MODE", "PART_VOTER_MODE",
-	"DEBUG_TMR", "PARTITION_AREA_LIMIT",
+	"DEBUG_TMR", "PARTITION_AREA_LIMIT", "VOTER_BEFORE_FSM",
 	"USE_REG_VOTER_FOR_LOCAL_RAMS", //FIXME
 
 	// DEBUG

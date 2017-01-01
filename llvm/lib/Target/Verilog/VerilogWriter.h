@@ -231,6 +231,7 @@ private:
 	// added for TMR
 	bool isTmrSig(const RTLSignal *sig);
 	bool isStateSig(const RTLSignal *sig);
+	bool alwaysVoteMode(const RTLSignal *sig);
 	bool isMemSig(const RTLSignal *sig);
 	bool isMemInputSig(const RTLSignal *sig);
 	bool isMemOutputSig(const RTLSignal *sig);

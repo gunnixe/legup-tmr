@@ -6806,8 +6806,8 @@ void VerilogWriter::printDeclaration(const RTLSignal *signal, bool testBench) {
 				LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==2)
 			isRegVoter = true;
 
-		if ((signal->getName()=="cur_state")
-		         || isLocalMemSignal(signal, true)
+		if (isLocalMemSignal(signal, true)
+			     || (signal->getName()=="cur_state" && LEGUP_CONFIG->getParameterInt("VOTER_BEFORE_FSM")==0)
 			     || needSyncVoter(signal)
 		         || needPartVoter(signal)) {
 			printTmrSignal(signal, "_v");
@@ -6822,9 +6822,21 @@ void VerilogWriter::printDeclaration(const RTLSignal *signal, bool testBench) {
     	        << " next_state_r0,"
     	        << " next_state_r1,"
     	        << " next_state_r2";
-			if (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT")!="xilinx")
-				Out << " /*synthesis keep*/";
-			Out << ";\n";
+
+			if (LEGUP_CONFIG->getParameterInt("VOTER_BEFORE_FSM")) {
+				Out << ";\n";
+				if (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT")=="xilinx")
+					Out << "(* KEEP=\"TRUE\" *) ";
+    	    	Out << "reg " << signal->getWidth().str()
+    	    	    << " next_state_v0,"
+    	    	    << " next_state_v1,"
+    	    	    << " next_state_v2;\n";
+				printTmrVoter("next_state", lo, hi, false);
+			} else {
+				if (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT")!="xilinx")
+					Out << " /*synthesis keep*/";
+				Out << ";\n";
+			}
 				
     	    //Out << "reg " << signal->getWidth().str()
     	    //    << " next_state_v0,"
@@ -6871,7 +6883,15 @@ bool VerilogWriter::isMemOutputSig(const RTLSignal *sig) {
 }
 
 bool VerilogWriter::isStateSig(const RTLSignal *sig) {
-	if (sig->getName()=="cur_state")
+	if (sig->getName()=="cur_state" && LEGUP_CONFIG->getParameterInt("VOTER_BEFORE_FSM")==0)
+		return true;
+	return false;
+}
+
+bool VerilogWriter::alwaysVoteMode(const RTLSignal *sig) {
+	if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==1
+			&& sig->isReg()
+			&& sig->getName()!="cur_state")
 		return true;
 	return false;
 }
@@ -6950,7 +6970,7 @@ void VerilogWriter::printBBModuleInstance(RTLBBModule *bbm, std::string postfix)
 		//	name += "_v";
 		std::string sigName = (*i)->getName();
 		if (postfix!="" && !isTopModuleSig(*i)) {
-			if ((LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==1 && (*i)->isReg())
+			if (alwaysVoteMode(*i)
 					|| isMemOutputSig(*i) || isStateSig(*i))
 				sigName += "_v" + postfix.substr(2,2);
 			else
@@ -7365,9 +7385,11 @@ void VerilogWriter::printCaseFSM(const RTLSignal *signal,
 
 	std::string curState = "cur_state";
 	std::string nextState = "next_state";
+	std::string nextState_v = "next_state";
 	if (isTmrSig(signal)) {
 		curState += "_r" + currReplica;
 		nextState += "_r" + currReplica;
+		nextState_v += "_v" + currReplica;
 	}
 
     // first we print out the always block for the sequential logic
@@ -7382,8 +7404,11 @@ void VerilogWriter::printCaseFSM(const RTLSignal *signal,
 		    << " <= " << curState << ";\n";
     }
     Out << "\telse\n";
-    Out << "\t\t" << curState
-	    << " <= " << nextState << ";\n";
+    Out << "\t\t" << curState << " <= ";
+	if (LEGUP_CONFIG->getParameterInt("VOTER_BEFORE_FSM"))
+		Out << nextState_v << ";\n";
+	else
+		Out << nextState << ";\n";
     Out << "end\n\n";
 
     Out << "always @(*)\n"; // now this is the always block for the "next state"

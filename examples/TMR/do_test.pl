@@ -3,16 +3,18 @@
 my @example_list;
 
 #simplelist
-#@example_list = (@example_list,qw(add fir_opt matrixmultiply qsort fft));
+@example_list = (@example_list,qw(add fir_opt matrixmultiply qsort fft));
 
 #dhrystone benchmark example
-#@example_list = (@example_list,qw(aes gsm blowfish motion));
+@example_list = (@example_list,qw(aes gsm blowfish motion));
 @example_list = (@example_list,qw(mips sha));
-#@example_list = (@example_list,qw(dfadd dfmul dfdiv dfsin));
-# adpcm have an error for local memory alias analysis
-# jpeg & dfsin too large
-@example_list = (@example_list,qw(adpcm jpeg));
-@example_list = (@example_list,qw(satd sobel bellmanford));
+@example_list = (@example_list,qw(dfadd dfmul dfdiv dfsin));
+@example_list = (@example_list,qw(adpcm));
+@example_list = (@example_list,qw(jpeg));
+
+#hls_study example
+@example_list = (@example_list,qw(satd bellmanford));
+@example_list = (@example_list,qw(sobel));
 
 my ($fname) = @ARGV;
 die "Need folder name\n" if(not defined $fname);
@@ -375,6 +377,7 @@ sub do_work {
 	#-c : create only
 	#-f : (finalize) summary only
 	#-s : simulation only
+	#-q : quick synthesis
 	my $xilinx = $x;
 	my $flag_create = 1;
 	my $flag_synth = 1;
@@ -415,6 +418,7 @@ sub do_work {
 					|| ($fname eq "adpcm")
 					|| ($fname eq "jpeg")
 					|| ($fname eq "dfsin")
+					|| ($fname eq "aes")
 					|| ($fname eq "bellmanford")
 			  ) {
 				$arg_list[4] = 0;
@@ -422,7 +426,6 @@ sub do_work {
 
 			# - need to skip localmemory use
 			if(($fname eq "adpcm")
-					|| ($fname eq "aes")
 					|| ($fname eq "bellmanford")
 			  ) {
 				$arg_list[3] = 0;
@@ -443,18 +446,19 @@ sub do_work {
 			# do simulation
 			system("make 2>&1 | tee make.log;") if $flag_create;
 			system("make v | tee vsim.log;") if $flag_sim;
-			system("make p; make q | tee synth.log;") if($flag_synth);
+			system("make p; make f | tee synth.log;") if($flag_synth && $q==0);
+			system("make p; make q | tee synth.log;") if($flag_synth && $q==1);
 	
 			# summarize
 			&make_report($cname, @arg_list) if ($flag_sim || $flag_summary);
 			if($flag_summary) {
-				&summary_for_altera($cname) if $xilinx==0;
-				#&summarize_for_xilinx($cname) if $xilinx==1;
-				&summarize_with_only_syn_report($cname) if $xilinx==1;
+				&summary_for_altera($cname) if ($x==0);
+				&summarize_with_only_syn_report($cname) if ($x==1 && $q==1);
+				&summarize_for_xilinx($cname) if ($x==1 && $q==0);
 			}
 
 			if($flag_summary && $e) { #essential bit analysis
-				&summarize_essential_bits($cname) if $xilinx==1;
+				&summarize_essential_bits($cname) if $x==1;
 			}
 
 			# finalize work dir

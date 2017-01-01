@@ -54,7 +54,7 @@ main ()
       jpeg2bmp_main ();
 
       printf ("Result: %d\n", main_result);
-      if (main_result == 21745) {
+      if (main_result == 1492056) {
           printf("RESULT: PASS\n");
       } else {
           printf("RESULT: FAIL\n");
