@@ -4,6 +4,7 @@ set_parameter PRINTF_CYCLES 1
 set_parameter DEBUG_TMR 2
 set_parameter PARTITION_AREA_LIMIT 1000
 set_parameter MB_MINIMIZE_HW 1
+set_parameter VOTER_BEFORE_FSM 1
 
 #set_operation_latency multiply 1
 set_parameter VSIM_NO_ASSERT 1

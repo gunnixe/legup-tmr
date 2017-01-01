@@ -34,8 +34,9 @@ using namespace legup;
 namespace legup {
 
 bool VerilogWriter::isTmrSig(const RTLSignal *sig) {
+	std::string type = sig->getType();
 	if (LEGUP_CONFIG->getParameterInt("TMR") &&
-	            (sig->getType() == "reg" || sig->getType() == "wire")) {
+	            (type == "reg" || type == "wire" || isMemSig(sig))) {
 		assert(currReplica=="0" || currReplica=="1" || currReplica=="2");
 		return true;
 	}
@@ -2577,48 +2578,55 @@ void VerilogWriter::printAltSyncRAMModule(bool readonly) {
 
 void VerilogWriter::printMemoryAssignForTmr(std::string postfix) {
 
-    Out << "assign " << "memory_controller_enable" << postfix << "_r0 = "
-		<< "    " << "memory_controller_enable" << postfix << ";\n";
-    Out << "assign " << "memory_controller_enable" << postfix << "_r1 = "
-		<< "    " << "memory_controller_enable" << postfix << ";\n";
-    Out << "assign " << "memory_controller_enable" << postfix << "_r2 = "
-		<< "    " << "memory_controller_enable" << postfix << ";\n";
+    //Out << "assign " << "memory_controller_enable" << postfix << "_r0 = "
+	//	<< "    " << "memory_controller_enable" << postfix << ";\n";
+    //Out << "assign " << "memory_controller_enable" << postfix << "_r1 = "
+	//	<< "    " << "memory_controller_enable" << postfix << ";\n";
+    //Out << "assign " << "memory_controller_enable" << postfix << "_r2 = "
+	//	<< "    " << "memory_controller_enable" << postfix << ";\n";
 
-    Out << "assign " << "memory_controller_address" << postfix << "_r0 = "
-    	<< "    " << "memory_controller_address" << postfix << ";\n";
-    Out << "assign " << "memory_controller_address" << postfix << "_r1 = "
-    	<< "    " << "memory_controller_address" << postfix << ";\n";
-    Out << "assign " << "memory_controller_address" << postfix << "_r2 = "
-    	<< "    " << "memory_controller_address" << postfix << ";\n";
+    //Out << "assign " << "memory_controller_address" << postfix << "_r0 = "
+    //	<< "    " << "memory_controller_address" << postfix << ";\n";
+    //Out << "assign " << "memory_controller_address" << postfix << "_r1 = "
+    //	<< "    " << "memory_controller_address" << postfix << ";\n";
+    //Out << "assign " << "memory_controller_address" << postfix << "_r2 = "
+    //	<< "    " << "memory_controller_address" << postfix << ";\n";
 
-    Out << "assign " << "memory_controller_write_enable" << postfix << "_r0 = "
-    	<< "    " << "memory_controller_write_enable" << postfix << ";\n";
-    Out << "assign " << "memory_controller_write_enable" << postfix << "_r1 = "
-    	<< "    " << "memory_controller_write_enable" << postfix << ";\n";
-    Out << "assign " << "memory_controller_write_enable" << postfix << "_r2 = "
-    	<< "    " << "memory_controller_write_enable" << postfix << ";\n";
+    //Out << "assign " << "memory_controller_write_enable" << postfix << "_r0 = "
+    //	<< "    " << "memory_controller_write_enable" << postfix << ";\n";
+    //Out << "assign " << "memory_controller_write_enable" << postfix << "_r1 = "
+    //	<< "    " << "memory_controller_write_enable" << postfix << ";\n";
+    //Out << "assign " << "memory_controller_write_enable" << postfix << "_r2 = "
+    //	<< "    " << "memory_controller_write_enable" << postfix << ";\n";
 
-    Out << "assign " << "memory_controller_in" << postfix << "_r0 = "
-    	<< "    " << "memory_controller_in" << postfix << ";\n";
-    Out << "assign " << "memory_controller_in" << postfix << "_r1 = "
-    	<< "    " << "memory_controller_in" << postfix << ";\n";
-    Out << "assign " << "memory_controller_in" << postfix << "_r2 = "
-    	<< "    " << "memory_controller_in" << postfix << ";\n";
+    //Out << "assign " << "memory_controller_in" << postfix << "_r0 = "
+    //	<< "    " << "memory_controller_in" << postfix << ";\n";
+    //Out << "assign " << "memory_controller_in" << postfix << "_r1 = "
+    //	<< "    " << "memory_controller_in" << postfix << ";\n";
+    //Out << "assign " << "memory_controller_in" << postfix << "_r2 = "
+    //	<< "    " << "memory_controller_in" << postfix << ";\n";
 
-    if (alloc->usesGenericRAMs()) {
-    	Out << "assign " << "memory_controller_size" << postfix << "_r0 = "
-    		<< "    " << "memory_controller_size" << postfix << ";\n";
-    	Out << "assign " << "memory_controller_size" << postfix << "_r1 = "
-    		<< "    " << "memory_controller_size" << postfix << ";\n";
-    	Out << "assign " << "memory_controller_size" << postfix << "_r2 = "
-    		<< "    " << "memory_controller_size" << postfix << ";\n";
-	}
+    //if (alloc->usesGenericRAMs()) {
+    //	Out << "assign " << "memory_controller_size" << postfix << "_r0 = "
+    //		<< "    " << "memory_controller_size" << postfix << ";\n";
+    //	Out << "assign " << "memory_controller_size" << postfix << "_r1 = "
+    //		<< "    " << "memory_controller_size" << postfix << ";\n";
+    //	Out << "assign " << "memory_controller_size" << postfix << "_r2 = "
+    //		<< "    " << "memory_controller_size" << postfix << ";\n";
+	//}
 
 	std::string r0 = "memory_controller_out" + postfix + "_r0";
 	std::string r1 = "memory_controller_out" + postfix + "_r1";
 	std::string r2 = "memory_controller_out" + postfix + "_r2";
-    Out << "assign " << "memory_controller_out" << postfix << " = "
+    Out << "wire [`MEMORY_CONTROLLER_DATA_SIZE-1:0] "
+		<< "memory_controller_out" << postfix << "_v0 = "
 		<< "(" << r0 << "==" << r1 << ")? " << r0 << " : " << r2 << ";\n";
+    Out << "wire [`MEMORY_CONTROLLER_DATA_SIZE-1:0] "
+		<< "memory_controller_out" << postfix << "_v1 = "
+		<< "(" << r1 << "==" << r2 << ")? " << r1 << " : " << r0 << ";\n";
+    Out << "wire [`MEMORY_CONTROLLER_DATA_SIZE-1:0] "
+		<< "memory_controller_out" << postfix << "_v2 = "
+		<< "(" << r2 << "==" << r1 << ")? " << r2 << " : " << r1 << ";\n";
     Out << "\n";
 }
 
@@ -2675,11 +2683,6 @@ void VerilogWriter::printMemoryVariables(bool top) {
             << "_waitrequest;\n";
     }
 
-   	printMemoryVariablesSignals("memory_controller", inputPrefix, outputPrefix,
-   	                            "_a");
-   	printMemoryVariablesSignals("memory_controller", inputPrefix, outputPrefix,
-   	                            "_b");
-
 	// print additional TMR signals
 	if (LEGUP_CONFIG->getParameterInt("TMR")) {
 		useReplicaNumberForAllVariables = true;
@@ -2695,7 +2698,13 @@ void VerilogWriter::printMemoryVariables(bool top) {
 
 		printMemoryAssignForTmr("_a");
 		printMemoryAssignForTmr("_b");
+	} else {
+   		printMemoryVariablesSignals("memory_controller", inputPrefix, outputPrefix,
+   		                            "_a");
+   		printMemoryVariablesSignals("memory_controller", inputPrefix, outputPrefix,
+   		                            "_b");
 	}
+
 
     if (alloc->getDbgInfo()->isDebugRtlEnabled()) {
         // Debugger has multiplexed access to memory controller, so another set
@@ -6264,14 +6273,25 @@ void VerilogWriter::printMainInstance(const bool usesPthreads) {
 
             // A bit of a hack for the debugger, since the memory controller
             // signals coming out of 'main' need to be prefixed with 'main_'
+            std::string portName = propSignal->getName();
             std::string signalName = propSignal->getName();
             if (alloc->getDbgInfo()->isDebugRtlEnabled()) {
                 if (stringStartsWith(signalName, "memory_controller")) {
                     signalName = "main_" + signalName;
                 }
             }
-            Out << ",\n\t." << propSignal->getName() << "(" << signalName
-                << ")";
+			std::string prefix = "_r";
+			if(signalName.find("memory_controller_out")!=std::string::npos)
+				prefix = "_v";
+            if (LEGUP_CONFIG->getParameterInt("TMR")
+					&& stringStartsWith(signalName, "memory_controller")
+					&& signalName.find("waitrequest") == std::string::npos) {
+            	Out << ",\n\t." << portName << "_r0(" << signalName << prefix << "0)";
+            	Out << ",\n\t." << portName << "_r1(" << signalName << prefix << "1)";
+            	Out << ",\n\t." << portName << "_r2(" << signalName << prefix << "2)";
+			} else {
+            	Out << ",\n\t." << portName << "(" << signalName << ")";
+			}
         }
     }
 
@@ -6337,65 +6357,54 @@ void VerilogWriter::printMemoryControllerInstance() {
 	//}
 }
 
-void VerilogWriter::printMemoryControllerInstanceDual() {
-	std::string instName = "memory_controller_inst";
-	std::string out_a = "memory_controller_out_a";
-	std::string out_b = "memory_controller_out_b";
-
+void VerilogWriter::printMemoryControllerInstanceConnect(std::string postfix) {
+	std::string ipfix = postfix;
 	if (LEGUP_CONFIG->getParameterInt("TMR")) {
-		instName += "_r" + currReplica;
-		out_a += "_r" + currReplica;
-		out_b += "_r" + currReplica;
+		ipfix += "_r" + currReplica;
 	}
 
-	Out << "memory_controller " << instName << " (\n"
-	    << "\t.clk( clk ),\n";
 	// if (LEGUP_CONFIG->numAccelerators() > 0) {
 	if (LEGUP_CONFIG->isHybridFlow() || LEGUP_CONFIG->isPCIeFlow()) {
-	    Out << "\t.flag_to_sharedMemory_a( flag_to_sharedMemory_a ),\n";
-	    Out << "\t.flag_to_sharedMemory_b( flag_to_sharedMemory_b ),\n";
+	    Out << "\t.flag_to_sharedMemory" << postfix << "( flag_to_sharedMemory" << ipfix << "),\n";
 	}
-	Out << "\t.memory_controller_enable_a( memory_controller_enable_a ),\n"
-	    << "\t.memory_controller_enable_b( memory_controller_enable_b ),\n"
-	    << "\t.memory_controller_address_a( memory_controller_address_a "
-	       "),\n"
-	    << "\t.memory_controller_address_b( memory_controller_address_b "
-	       "),\n"
-	    << "\t.memory_controller_write_enable_a( "
-	       "memory_controller_write_enable_a ),\n"
-	    << "\t.memory_controller_write_enable_b( "
-	       "memory_controller_write_enable_b ),\n"
-	    << "\t.memory_controller_in_a( memory_controller_in_a ),\n"
-	       "\t.memory_controller_in_b( memory_controller_in_b ),\n";
+	Out << "\t.memory_controller_enable" << postfix << "( memory_controller_enable" << ipfix << " ),\n"
+	    << "\t.memory_controller_address" << postfix << "( memory_controller_address" << ipfix << " ),\n"
+	    << "\t.memory_controller_write_enable" << postfix << "( " "memory_controller_write_enable" << ipfix << " ),\n"
+	    << "\t.memory_controller_in" << postfix << "( memory_controller_in" << ipfix << " ),\n";
 	if (alloc->usesGenericRAMs()) {
 	    // if (LEGUP_CONFIG->numAccelerators() > 0) {
 	    if (LEGUP_CONFIG->isHybridFlow() || LEGUP_CONFIG->isPCIeFlow()) {
-	        Out << "\t.memory_controller_size_a( memory_size_a ),\n"
-	            << "\t.memory_controller_size_b( memory_size_b ),\n";
+	        Out << "\t.memory_controller_size" << postfix << "( memory_size" << ipfix << " ),\n";
 	    } else {
-	        Out << "\t.memory_controller_size_a( memory_controller_size_a "
-	               "),\n"
-	            << "\t.memory_controller_size_b( memory_controller_size_b "
-	               "),\n";
+	        Out << "\t.memory_controller_size" << postfix << "( memory_controller_size" << ipfix << " ),\n";
 	    }
 	}
 	// If we remove the output register of the memory controller, the port
 	// names
 	// are slightly different
 	if (LEGUP_CONFIG->duplicate_load_reg()) {
-	    Out << "\t.memory_controller_waitrequest( "
-	           "memory_controller_waitrequest ),\n"
-	        << "\t.memory_controller_out_a( " << out_a << " ),\n"
-	        << "\t.memory_controller_out_b( " << out_b << " )\n"
-	        << ");\n\n";
+		Out << "\t.memory_controller_out" << postfix << "( memory_controller_out" << ipfix << " )";
 	} else {
-	    Out << "\t.memory_controller_waitrequest( "
-	           "memory_controller_waitrequest ),\n"
-	        << "\t.memory_controller_out_reg_a( " << out_a << " "
-	           "),\n"
-	        << "\t.memory_controller_out_reg_b( " << out_b << " )\n"
-	        << ");\n\n";
+		Out << "\t.memory_controller_out_reg" << postfix << "( memory_controller_out" << ipfix << " )";
 	}
+}
+
+void VerilogWriter::printMemoryControllerInstanceDual() {
+	std::string instName = "memory_controller_inst";
+	if (LEGUP_CONFIG->getParameterInt("TMR")) {
+		instName += "_r" + currReplica;
+	}
+
+	Out << "memory_controller " << instName << " (\n"
+	    << "\t.clk( clk ),\n";
+	Out << "\t.memory_controller_waitrequest( memory_controller_waitrequest ),\n";
+
+	printMemoryControllerInstanceConnect("_a");
+	Out << ",\n";
+	printMemoryControllerInstanceConnect("_b");
+	Out << "\n";
+
+	Out << ");\n\n";
 }
 
 void VerilogWriter::printMemoryControllerInstanceNormal() {
@@ -6590,11 +6599,18 @@ void VerilogWriter::printModuleHeader() {
 
     for (RTLModule::const_signal_iterator i = rtl->port_begin(),
                                           e = rtl->port_end();
-         i != e; ++i) {
-        Out << "\t" << (*i)->getName();
-        if (i != rtl->port_end() - 1)
-            Out << ",";
-        Out << "\n";
+                                          i != e; ++i) {
+		
+    	if (LEGUP_CONFIG->getParameterInt("TMR") && isMemSig(*i)) {
+        	Out << "\t" << (*i)->getName() << "_r0,";
+        	Out << "\t" << (*i)->getName() << "_r1,";
+        	Out << "\t" << (*i)->getName() << "_r2";
+		} else {
+        	Out << "\t" << (*i)->getName();
+		}
+       	if (i != rtl->port_end() - 1)
+       	    Out << ",";
+       	Out << "\n";
     }
     Out << ");"
         << "\n\n";
@@ -6761,7 +6777,15 @@ void VerilogWriter::printDeclaration(const RTLSignal *signal, bool testBench) {
         }
     }
     Out << signal->getWidth().str() << " ";
-    Out << signal->getName();
+
+	if (LEGUP_CONFIG->getParameterInt("TMR") && isMemSig(signal)
+			&& (type=="output" || type=="input")) {
+    	Out << signal->getName() << "_r0, ";
+    	Out << signal->getName() << "_r1, ";
+    	Out << signal->getName() << "_r2";
+	} else {
+    	Out << signal->getName();
+	}
 
     if (LEGUP_CONFIG->getParameterInt("CASE_FSM") &&
         signal->getName() == "cur_state")
@@ -6870,6 +6894,8 @@ bool VerilogWriter::isMemSig(const RTLSignal *sig) {
 
 bool VerilogWriter::isMemInputSig(const RTLSignal *sig) {
 	std::string name = sig->getName();
+	if (name.find("_enable_") != std::string::npos) return true;
+	if (name.find("_size_") != std::string::npos) return true;
 	if (name.find("_address_") != std::string::npos) return true;
 	if (name.find("_write_enable_") != std::string::npos) return true;
 	if (name.find("_in_") != std::string::npos) return true;
@@ -6914,9 +6940,17 @@ bool VerilogWriter::isTopModuleSig(const RTLSignal *sig) {
     for (RTLModule::const_signal_iterator i = rtl->port_begin(),
                                           e = rtl->port_end();
                                           i != e; ++i) {
-        if ((*i)->getName() == sig->getName())
+        if ((*i)->getName() == sig->getName() && !isMemSig(sig))
 			return true;
 	}
+	return false;
+}
+
+bool VerilogWriter::isLocalMemOutputSig(const RTLSignal *sig) {
+	std::string name = sig->getName();
+	if (name.find("_out_") != std::string::npos
+			&& name.find("memory_controller") == std::string::npos)
+		return true;
 	return false;
 }
 
@@ -6970,8 +7004,8 @@ void VerilogWriter::printBBModuleInstance(RTLBBModule *bbm, std::string postfix)
 		//	name += "_v";
 		std::string sigName = (*i)->getName();
 		if (postfix!="" && !isTopModuleSig(*i)) {
-			if (alwaysVoteMode(*i)
-					|| isMemOutputSig(*i) || isStateSig(*i))
+			if (alwaysVoteMode(*i) || isStateSig(*i)
+					|| isLocalMemOutputSig(*i))
 				sigName += "_v" + postfix.substr(2,2);
 			else
 				sigName += postfix;
@@ -7167,7 +7201,7 @@ void VerilogWriter::printRTL(const RTLModule *rtl) {
     	for (RTLModule::const_signal_iterator i = rtl->signals_begin(),
     	                                      e = rtl->signals_end();
     	     i != e; ++i) {
-			if (isTmrSig(*i))// && !isBBModuleSig(*i))
+			if (isTmrSig(*i) && !isMemSig(*i))// && !isBBModuleSig(*i))
 				printVoter(*i);
 		}
 	}
@@ -7178,7 +7212,16 @@ void VerilogWriter::printRTL(const RTLModule *rtl) {
     for (RTLModule::const_signal_iterator i = rtl->port_begin(),
                                           e = rtl->port_end();
          i != e; ++i) {
-       	printSignal(*i);
+    	if (LEGUP_CONFIG->getParameterInt("TMR") && isMemSig(*i)) {
+			useReplicaNumberForAllVariables = true;
+			for (int tmrIter=0; tmrIter<3; tmrIter++) {
+				currReplica = utostr(tmrIter);
+				printSignal(*i);
+			}
+			useReplicaNumberForAllVariables = false;
+		} else {
+       		printSignal(*i);
+		}
     }
 
     Out << rtl->getBody() << "\n";

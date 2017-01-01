@@ -62,12 +62,14 @@ public:
 	void printTmrVoter(const std::string sigName, const std::string lo, const std::string hi,
 	        bool isRegVoter=false, bool isModuleBoundary=false);
 	bool isLocalMemSignal(const RTLSignal *signal, bool checkOutSig=false);
+	bool isLocalMemOutputSig(const RTLSignal *signal);
 	bool needSyncVoter(const RTLSignal *signal);
 	bool needPartVoter(const RTLSignal *signal);
 	bool isBasicOperation(const RTLModule *rtl);
 	void printMemoryAssignForTmr(std::string postfix);
 	void printMemoryControllerInstanceNormal();
 	void printMemoryControllerInstanceDual();
+	void printMemoryControllerInstanceConnect(std::string postfix);
     //
     
 private:
