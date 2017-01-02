@@ -3284,7 +3284,7 @@ void VerilogWriter::printMemoryControllerSignals(std::string postfix) {
     //      set_memory_global <ram_name>
     // to force the local ram to global memory
     if (LEGUP_CONFIG->getParameterInt("LOCAL_RAMS")) {
-        Out << "always @(*)\n"
+        Out << "always @(posedge clk)\n"
             << "if (memory_controller_enable" << postfix << " & (tag" << postfix
             << " == 0))\n"
             << "begin\n"
@@ -7294,10 +7294,26 @@ void VerilogWriter::printModuleInstance(std::stringstream &Out,
         unsigned sigWidth = s->getWidth().numBits(rtl, alloc);
         const RTLSignal *d = s->getDriver(0);
         assert(d && "Connection doesn't exist!\n");
-        Out << "\t." << s->getName() << " (";
-        printValue(d, sigWidth, true);
-        Out << bitsForSignalAndModuleName(d, mod->getName());
-        Out << ")";
+
+		if (LEGUP_CONFIG->getParameterInt("TMR") && isMemSig(s)) {
+        	Out << "\t." << s->getName() << "_r0 (";
+        	printValue(d, sigWidth, true);
+        	Out << "_r0" << bitsForSignalAndModuleName(d, mod->getName());
+        	Out << "),\n";
+        	Out << "\t." << s->getName() << "_r1 (";
+        	printValue(d, sigWidth, true);
+        	Out << "_r1" << bitsForSignalAndModuleName(d, mod->getName());
+        	Out << "),\n";
+        	Out << "\t." << s->getName() << "_r2 (";
+        	printValue(d, sigWidth, true);
+        	Out << "_r2" << bitsForSignalAndModuleName(d, mod->getName());
+        	Out << ")";
+		} else {
+        	Out << "\t." << s->getName() << " (";
+        	printValue(d, sigWidth, true);
+        	Out << bitsForSignalAndModuleName(d, mod->getName());
+        	Out << ")";
+		}
         if (i != mod->port_end() - 1) {
             Out << ",";
         }
@@ -8076,7 +8092,7 @@ bool VerilogWriter::isSameBBFeedbackSig(const RTLSignal *sig) {
 
 std::string VerilogWriter::getTMRPostfix(const RTLSignal *sig) {
 	std::string postfix = "";
-	if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")>1
+	if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")>=1
 			&& isSameBBFeedbackSig(sig)) {
 		postfix = "_v";
 	} else if (useReplicaNumberForAllVariables && isTmrSig(sig)) {

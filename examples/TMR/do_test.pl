@@ -418,7 +418,6 @@ sub do_work {
 					|| ($fname eq "adpcm")
 					|| ($fname eq "jpeg")
 					|| ($fname eq "dfsin")
-					|| ($fname eq "aes")
 					|| ($fname eq "bellmanford")
 			  ) {
 				$arg_list[4] = 0;
