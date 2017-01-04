@@ -2288,33 +2288,45 @@ void VerilogWriter::printInferredRAMModule(bool readonly) {
             << "input [width_be_a-1:0] byteena_a;\n"
             << "input [width_be_b-1:0] byteena_b;\n";
     }
-    Out << "\n" <<
+    Out << "\n";
+    // RAM Verilog attributes are not relevant for Xilinx
+    if (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT") != "xilinx") {
         // ramstyle = \"M9K, no_rw_check\"
-        "(* ramstyle = \"no_rw_check\", ram_init_file = init_file *) "
-        << "reg [width_a-1:0] ram[numwords_a-1:0];\n"
-        << "\n"
-        << "/* synthesis translate_off */\n"
-        << "integer i;\n"
-        << "ALTERA_MF_MEMORY_INITIALIZATION mem ();\n"
-        << "reg [8*256:1] ram_ver_file;\n"
-        << "initial begin\n"
-        << "	if (init_file == \"UNUSED.mif\")\n"
-        << "    begin\n"
-        << "		for (i = 0; i < numwords_a; i = i + 1)\n"
-        << "			ram[i] = 0;\n"
-        << "    end\n"
-        << "	else\n"
-        << "    begin\n"
-        << "        // modelsim can't read .mif files directly. So use Altera "
-           "function to\n"
-        << "        // convert them to .ver files\n"
-        << "        mem.convert_to_ver_file(init_file, width_a, "
-           "ram_ver_file);\n"
-        << "        $readmemh(ram_ver_file, ram);\n"
-        << "    end\n"
-        << "end\n"
-        << "/* synthesis translate_on */\n"
+        Out << "(* ramstyle = \"no_rw_check\", ram_init_file = init_file *) ";
+    }
+    Out << "reg [width_a-1:0] ram[numwords_a-1:0];\n"
         << "\n";
+    // Xilinx does not have Altera function to convert MIF to VER
+    if (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT") != "xilinx") {
+        Out << "/* synthesis translate_off */\n"
+            << "integer i;\n"
+            << "ALTERA_MF_MEMORY_INITIALIZATION mem ();\n"
+            << "reg [8*256:1] ram_ver_file;\n"
+            << "initial begin\n"
+            << "	if (init_file == \"UNUSED.mif\")\n"
+            << "    begin\n"
+            << "		for (i = 0; i < numwords_a; i = i + 1)\n"
+            << "			ram[i] = 0;\n"
+            << "    end\n"
+            << "	else\n"
+            << "    begin\n"
+            << "        // modelsim can't read .mif files directly. So use "
+               "Altera "
+               "function to\n"
+            << "        // convert them to .ver files\n"
+            << "        mem.convert_to_ver_file(init_file, width_a, "
+               "ram_ver_file);\n"
+            << "        $readmemh(ram_ver_file, ram);\n"
+            << "    end\n"
+            << "end\n"
+            << "/* synthesis translate_on */\n";
+    } else {
+        // Instead, Xilinx only supports readmemh (of a "raw" file)
+        Out << "initial\n"
+            << "    if (init_file != \"UNUSED.mif\")\n"
+            << "        $readmemh(init_file, ram);\n";
+    }
+    Out << "\n";
     if (readonly) {
         Out << "always @ (posedge clk)\n"
             << "if (clken)\n"
@@ -2396,26 +2408,29 @@ void VerilogWriter::printRAMModule() {
         // array. The Quartus synthesis directives are hard to parameterize.
         // Instead just make a zero mif file called UNUSED.mif
 
-        std::string ErrorInfo;
-        std::string mifname = "UNUSED.mif";
-        raw_fd_ostream File(mifname.c_str(), ErrorInfo, llvm::sys::fs::F_None);
+        if (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT") != "xilinx") {
+            std::string ErrorInfo;
+            std::string mifname = "UNUSED.mif";
+            raw_fd_ostream File(mifname.c_str(), ErrorInfo,
+                                llvm::sys::fs::F_None);
 
-        if (!ErrorInfo.empty()) {
-            errs() << "Error: " << ErrorInfo << '\n';
-            assert(0);
+            if (!ErrorInfo.empty()) {
+                errs() << "Error: " << ErrorInfo << '\n';
+                assert(0);
+            }
+
+            File << "Depth = 1;\n"
+                 << "Width = 64;\n"
+                 << "Address_radix = dec;\n"
+                 << "Data_radix = hex;\n"
+                 << "Content\n"
+                 << "Begin\n" <<
+                // even though we are missing entries here, Quartus will zero
+                // fill
+                // the rest by default
+                "0: 0;\n"
+                 << "End;\n";
         }
-
-        File << "Depth = 1;\n"
-             << "Width = 64;\n"
-             << "Address_radix = dec;\n"
-             << "Data_radix = hex;\n"
-             << "Content\n"
-             << "Begin\n" <<
-            // even though we are missing entries here, Quartus will zero fill
-            // the rest by default
-            "0: 0;\n"
-             << "End;\n";
-
         printInferredRAMModule(/*readonly=*/false);
         printInferredRAMModule(/*readonly=*/true);
     } else {
@@ -6904,7 +6919,8 @@ bool VerilogWriter::isMemInputSig(const RTLSignal *sig) {
 
 bool VerilogWriter::isMemOutputSig(const RTLSignal *sig) {
 	std::string name = sig->getName();
-	if (name.find("_out_") != std::string::npos) return true;
+	if (name.find("_out_") != std::string::npos
+			&& name.find("arg_") == std::string::npos) return true;
 	return false;
 }
 
@@ -7671,6 +7687,7 @@ void VerilogWriter::printIndividualCondition(const RTLSignal *signal,
         signal->getCheckXs()) {
         // only check after the module has started
         // the start signal is high for one cycle then goes low
+        Out << "\t\t/* synthesis translate_off */\n";
         Out << "\t\tif (start == 1'b0 && ^(";
         // Out << "\t\tif (reset == 1'b0 && ^(";
         printValue(driver, sigWidth);
@@ -7678,6 +7695,7 @@ void VerilogWriter::printIndividualCondition(const RTLSignal *signal,
             << "$display (\"ERROR: Right hand side is 'X'. Assigned to "
             << destName << "\");"
             << " $finish; end\n";
+        Out << "\t\t/* synthesis translate_on */\n";
     }
 
     if (ifcond)
@@ -7716,6 +7734,7 @@ void VerilogWriter::printSignal(const RTLSignal *signal) {
     std::string assignOp = "<=";
     if (signal == rtl->getUnsynthesizableSignal()) {
         Out << "/* Unsynthesizable Statements */\n";
+        Out << "/* synthesis translate_off */\n";
         Out << "always @(posedge clk)\n";
         Out << "\tif (!memory_controller_waitrequest) begin\n";
     } else {
@@ -7767,6 +7786,8 @@ void VerilogWriter::printSignal(const RTLSignal *signal) {
     }
 
     Out << "end\n";
+    if (signal == rtl->getUnsynthesizableSignal())
+        Out << "/* synthesis translate_on */\n";
 }
 
 void VerilogWriter::printTmrSignal(const RTLSignal *sig, std::string postfix) {

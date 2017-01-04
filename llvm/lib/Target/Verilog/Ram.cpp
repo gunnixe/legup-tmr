@@ -542,14 +542,15 @@ void RAM::buildInitializer() {
 
 // write out a .mif file for ram initialization
 void RAM::generateMIFHeader(raw_fd_ostream &File, int depth, int width) {
-
-    File << "Depth = " << depth << ";\n";
-    File << "Width = " << width << ";\n";
-    File << "Address_radix = dec;\n";
-    File << "Data_radix = hex;\n";
-    File << "Content\n";
-    File << "Begin\n";
-
+    // Xilinx does not support MIF files, only "raw" files
+    if (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT") != "xilinx") {
+        File << "Depth = " << depth << ";\n";
+        File << "Width = " << width << ";\n";
+        File << "Address_radix = dec;\n";
+        File << "Data_radix = hex;\n";
+        File << "Content\n";
+        File << "Begin\n";
+    }
 }
 
 void RAM::generateMIFContent(raw_fd_ostream &File, std::string name) {
@@ -566,50 +567,63 @@ void RAM::generateMIFContent(raw_fd_ostream &File, std::string name) {
         offset = phyRAM->getOffset(this) / bytes;
     }
 
-//Check if the array is floating point or integer
-    if (FPinitial.size()>initial.size()){
+    // Xilinx does not support MIF files, only "raw" files
+    bool xilinx =
+        (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT") == "xilinx");
+
+    // Check if the array is floating point or integer
+    if (FPinitial.size() > initial.size()) {
         for (unsigned i = 0; i < elements; i++) {
-            File << i+offset << ": ";
+            File << i + offset << ": ";
             //check if floating point array is float or double.
             char buffer[17] = {0};
             // Warning: do not try to use a single 'temp' variable. temp
             // must be either 'float' or 'double' for hex_string to work
             if (getDataWidth() == 32) {
-                float temp = FPinitial[i].convertToFloat(); //APFloat -> Float
-                hex_string(buffer, (char*)&temp, 4);
+                float temp = FPinitial[i].convertToFloat(); // APFloat -> Float
+                hex_string(buffer, (char *)&temp, 4);
 
-                File << buffer << ";\t-- " << name << "[" << i
-                    << "] = " << temp << "\n";
+                File << buffer;
+                if (!xilinx)
+                    File << ";\t-- " << name << "[" << i << "] = " << temp;
+                File << "\n";
             } else {
-                double temp = FPinitial[i].convertToDouble(); //APFloat -> Double
-                hex_string(buffer, (char*)&temp, 8);
+                double temp =
+                    FPinitial[i].convertToDouble(); // APFloat -> Double
+                hex_string(buffer, (char *)&temp, 8);
 
-                File << buffer << ";\t-- " << name << "[" << i
-                    << "] = " << temp << "\n";
+                File << buffer;
+                if (!xilinx)
+                    File << ";\t-- " << name << "[" << i << "] = " << temp;
+                File << "\n";
             }
         }
-    }
-    else
+    } else
         for (unsigned i = 0; i < elements; i++) {
-            File << i+offset << ": ";
+            if (!xilinx)
+                File << i + offset << ": ";
             SmallString<40> E;
             // todo: signed values!
             initial[i].toStringUnsigned(E, 16);
             // todo: add this for comments
             //File.PadToColumn(20);
             unsigned leadingZeros = initial[i].countLeadingZeros() / 4;
-            if (initial[i] == 0 && leadingZeros > 1) leadingZeros--;
+            if (initial[i] == 0 && leadingZeros > 1)
+                leadingZeros--;
             std::string zeroPad = std::string(leadingZeros, '0');
-            File << zeroPad << E.str() << ";";
+            File << zeroPad << E.str();
             // put decimal value in comment
-            File << "\t-- " << name << "[" << i << "] = " << initial[i] << "\n";
+            if (!xilinx)
+                File << ";\t-- " << name << "[" << i << "] = " << initial[i];
+            File << "\n";
         }
 }
 
 void RAM::generateMIFFooter(raw_fd_ostream &File) {
-    File << "End;\n";
+    // Xilinx does not support MIF files, only "raw" files
+    if (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT") != "xilinx")
+        File << "End;\n";
 }
-
 
 void RAM::getRAMTypeForArray(ArrayType *ATy) {
     elements = ATy->getNumElements();

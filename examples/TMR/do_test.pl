@@ -377,6 +377,7 @@ sub do_work {
 	#-c : create only
 	#-f : (finalize) summary only
 	#-s : simulation only
+	#-p : full (pnr) synthesis only
 	#-q : quick synthesis
 	my $xilinx = $x;
 	my $flag_create = 1;
@@ -389,8 +390,10 @@ sub do_work {
 		($flag_create, $flag_sim, $flag_synth, $flag_summary) = (1,1,0,0);
 	} elsif($f) {
 		($flag_create, $flag_sim, $flag_synth, $flag_summary) = (0,0,0,1);
+	} elsif($p) {
+		($flag_create, $flag_sim, $flag_synth, $flag_summary) = (0,0,1,1);
 	}
-		
+
 
 	system("mkdir -p output") if(!-d "outout");
 	my $report_name = "output/".$fname.".rpt";
@@ -401,6 +404,19 @@ sub do_work {
 	while(<FSH>) {
 		chomp;
 		next if /^#/; #discard comments
+
+		if(
+			$scenario_cnt==1
+			|| $scenario_cnt==4
+			|| $scenario_cnt==6
+			|| $scenario_cnt==7
+			|| $scenario_cnt==8
+			|| $scenario_cnt==10
+			|| $scenario_cnt==11
+		  ) {
+			$scenario_cnt = $scenario_cnt + 1;
+			next;
+		}
 
 		if(m/^\d \d \d \d \d \d$/) {
 			@arg_list = split(/ /, $_, 6);
