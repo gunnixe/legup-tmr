@@ -6,7 +6,7 @@ my @example_list;
 @example_list = (@example_list,qw(add fir_opt matrixmultiply qsort fft));
 
 #dhrystone benchmark example
-@example_list = (@example_list,qw(aes gsm blowfish motion));
+@example_list = (@example_list,qw(aes aesdec gsm blowfish motion));
 @example_list = (@example_list,qw(mips sha));
 @example_list = (@example_list,qw(dfadd dfmul dfdiv dfsin));
 @example_list = (@example_list,qw(adpcm));
@@ -395,7 +395,7 @@ sub do_work {
 	}
 
 
-	system("mkdir -p output") if(!-d "outout");
+	system("mkdir -p output") if(!-d "output");
 	my $report_name = "output/".$fname.".rpt";
 	open(FRH, '>', $report_name) or die "cannot open '$report_name' $!";
 	
@@ -405,18 +405,18 @@ sub do_work {
 		chomp;
 		next if /^#/; #discard comments
 
-		if(
-			$scenario_cnt==1
-			|| $scenario_cnt==4
-			|| $scenario_cnt==6
-			|| $scenario_cnt==7
-			|| $scenario_cnt==8
-			|| $scenario_cnt==10
-			|| $scenario_cnt==11
-		  ) {
-			$scenario_cnt = $scenario_cnt + 1;
-			next;
-		}
+		#if(
+		#	$scenario_cnt==1
+		#	|| $scenario_cnt==4
+		#	|| $scenario_cnt==6
+		#	|| $scenario_cnt==7
+		#	|| $scenario_cnt==8
+		#	|| $scenario_cnt==10
+		#	|| $scenario_cnt==11
+		#  ) {
+		#	$scenario_cnt = $scenario_cnt + 1;
+		#	next;
+		#}
 
 		if(m/^\d \d \d \d \d \d$/) {
 			@arg_list = split(/ /, $_, 6);

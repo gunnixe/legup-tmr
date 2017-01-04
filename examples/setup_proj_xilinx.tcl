@@ -52,6 +52,8 @@ xfile add [lindex $argv 2].v
 
 #set_global_assignment -name TOP_LEVEL_ENTITY [lindex $quartus(args) 3]
 project set top [lindex $argv 3]
+#project set top "top"
+#project set "Add I/O Buffers" "false" -process "Synthesize - XST"
 
 # One-hot encoding is helpful for the trace scheduler logic
 # Quartus seems to choose one-hot by default, but not ISE.
@@ -65,9 +67,9 @@ project set "Generate Detailed MAP Report" "true" -process "Map"
 # TMR specific options
 project set "Allow Unexpanded Blocks" "true" -process "Translate"
 #project set "Safe Implementation" "Yes" -process "Synthesize - XST"
-project set "Equivalent Register Removal" "false" -process "Synthesize - XST"
-project set "LUT Combining" "No" -process "Synthesize - XST"
-project set "Resource Sharing" "false" -process "Synthesize - XST"
+#project set "Equivalent Register Removal" "false" -process "Synthesize - XST"
+#project set "LUT Combining" "No" -process "Synthesize - XST"
+#project set "Resource Sharing" "false" -process "Synthesize - XST"
 
 #set_global_assignment -name SEARCH_PATH $search_path
 
