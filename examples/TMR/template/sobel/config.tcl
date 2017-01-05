@@ -1,6 +1,8 @@
 source ../../config.tcl
 
 #set_parameter CLOCK_PERIOD 5
+set_parameter GROUP_RAMS 1
+set_parameter GROUP_RAMS_SIMPLE_OFFSET 1
 
 
 #set_parameter SDC_NO_CHAINING 1
