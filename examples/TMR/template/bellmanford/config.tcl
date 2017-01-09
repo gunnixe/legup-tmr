@@ -15,13 +15,3 @@ source ../../config.tcl
 # PVOTER_MODE 0=none
 #             1=topological list
 
-set_parameter TMR 1
-set_parameter SYNC_VOTER_MODE 2
-set_parameter PART_VOTER_MODE 0
-set_parameter LOCAL_RAMS 0
-set_parameter USE_REG_VOTER_FOR_LOCAL_RAMS 1
-set_parameter PIPELINE_ALL 0
-
-set_project Virtex6 ML605 hw_only
-set_parameter INFERRED_RAM_FORMAT "xilinx"
-set_parameter DIVIDER_MODULE generic

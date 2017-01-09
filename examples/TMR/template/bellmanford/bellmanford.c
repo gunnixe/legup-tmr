@@ -28,9 +28,7 @@ typedef struct {
 
 typedef enum {false=0,true=1} bool;
 
-#pragma map generate_hw 0
 bool
-__attribute__ ((noinline))  
 bellmanford(int source[N_dest], int dest[N_dest], int weight [N_dest], int distance[N_dist], int edgecount, int nodecount, int src)
 {
     int i, j;
@@ -122,7 +120,6 @@ int main(void)
 
 #endif
 
-    #pragma map call_hw VIRTEX5 0
     success = bellmanford(source, dest, weight, dist, edgecount, nodecount, src);
     
 #ifndef EXT_DATASET

@@ -7,7 +7,6 @@
 #define EXPECTED 59372076
 
 void
-__attribute__ ((noinline)) 
 sobel(unsigned char * indata, 
 		unsigned char * outdata)
 {

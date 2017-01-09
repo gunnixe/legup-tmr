@@ -63,6 +63,7 @@ public:
 	        bool isRegVoter=false, bool isModuleBoundary=false);
 	bool isLocalMemSignal(const RTLSignal *signal, bool checkOutSig=false);
 	bool isLocalMemOutputSig(const RTLSignal *signal);
+	bool isPartSig(const RTLSignal *sig);
 	bool needSyncVoter(const RTLSignal *signal);
 	bool needPartVoter(const RTLSignal *signal);
 	bool isBasicOperation(const RTLModule *rtl);

@@ -11,7 +11,7 @@
 #define TAPS 16
 #define EXPECTED_TOTAL 44880
 
-int FIRFilterStreaming ( int in, int coefficients[], int previous[]){
+unsigned int FIRFilterStreaming ( unsigned char in, unsigned char coefficients[], unsigned char previous[]){
     int temp = 0, j;    
 
     // UNROLLING THIS IMPROVES PERFROMANCE
@@ -70,10 +70,10 @@ int FIRFilterStreaming ( int in, int coefficients[], int previous[]){
 
 int main(){
 
-    int previous[TAPS] = {0};
-    int coefficients[TAPS] = {[0 ... 15] = 10};
-    int output[INPUTSIZE];
-    int i;
+    unsigned char previous[TAPS] = {0};
+    unsigned char coefficients[TAPS] = {[0 ... 15] = 10};
+    unsigned int output[INPUTSIZE];
+    unsigned char i;
     unsigned int total = 0;
     for (i = 1; i <= INPUTSIZE; i++){
         output[i-1] = FIRFilterStreaming (i, coefficients, previous);

@@ -67,9 +67,9 @@ project set "Keep Hierarchy" "Soft" -process "Synthesize - XST"
 # TMR specific options
 project set "Allow Unexpanded Blocks" "true" -process "Translate"
 #project set "Safe Implementation" "Yes" -process "Synthesize - XST"
-#project set "Equivalent Register Removal" "false" -process "Synthesize - XST"
-#project set "LUT Combining" "No" -process "Synthesize - XST"
-#project set "Resource Sharing" "false" -process "Synthesize - XST"
+project set "Equivalent Register Removal" "false" -process "Synthesize - XST"
+project set "LUT Combining" "No" -process "Synthesize - XST"
+project set "Resource Sharing" "false" -process "Synthesize - XST"
 
 #set_global_assignment -name SEARCH_PATH $search_path
 

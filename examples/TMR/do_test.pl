@@ -3,18 +3,19 @@
 my @example_list;
 
 #simplelist
-@example_list = (@example_list,qw(add fir_opt matrixmultiply qsort fft));
-
-#dhrystone benchmark example
+#@example_list = (@example_list,qw(add fir mmult qsort fft));
+@example_list = (@example_list,qw(add));
+@example_list = (@example_list,qw(mmult));
+#
+##dhrystone benchmark example
 @example_list = (@example_list,qw(aes aesdec gsm blowfish motion));
 @example_list = (@example_list,qw(mips sha));
-@example_list = (@example_list,qw(dfadd dfmul dfdiv dfsin));
-@example_list = (@example_list,qw(adpcm));
-@example_list = (@example_list,qw(jpeg));
-
-#hls_study example
 @example_list = (@example_list,qw(satd bellmanford));
 @example_list = (@example_list,qw(sobel));
+@example_list = (@example_list,qw(dfadd dfmul dfdiv));
+@example_list = (@example_list,qw(dfsin));
+@example_list = (@example_list,qw(adpcm));
+@example_list = (@example_list,qw(jpeg));
 
 my ($fname) = @ARGV;
 die "Need folder name\n" if(not defined $fname);
@@ -155,7 +156,7 @@ sub summarize_for_xilinx {
 	my ($cname) = @_;
 	push @name_list, $cname;
 
-	open(FXH, '<', "ML605.par") or die "cannot open 'ML605.par' $!";
+	open(FXH, '<', "ML605.par") or die "cannot open '$cname/ML605.par' $!";
 	while(<FXH>) {
 		chomp;
 		if(/\s+Number of Slice Registers:\s+([\d,]+) out of\s+[\d,]+\s+\d+%/) {
@@ -405,18 +406,11 @@ sub do_work {
 		chomp;
 		next if /^#/; #discard comments
 
-		#if(
-		#	$scenario_cnt==1
-		#	|| $scenario_cnt==4
-		#	|| $scenario_cnt==6
-		#	|| $scenario_cnt==7
-		#	|| $scenario_cnt==8
-		#	|| $scenario_cnt==10
-		#	|| $scenario_cnt==11
-		#  ) {
-		#	$scenario_cnt = $scenario_cnt + 1;
-		#	next;
-		#}
+		#if($scenario_cnt==1) { $scenario_cnt++; next; }
+		#if($scenario_cnt==4) { $scenario_cnt++; next; }
+		#if($scenario_cnt==6) { $scenario_cnt++; next; }
+		#if($scenario_cnt==7) { $scenario_cnt++; next; }
+		#if($scenario_cnt==8) { $scenario_cnt++; next; }
 
 		if(m/^\d \d \d \d \d \d$/) {
 			@arg_list = split(/ /, $_, 6);

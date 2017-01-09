@@ -6734,11 +6734,24 @@ bool VerilogWriter::needSyncVoter(const RTLSignal *signal) {
 }
 
 bool VerilogWriter::needPartVoter(const RTLSignal *signal) {
-	bool isReg = signal->isReg();
-	bool isPartitionBoundary = (signal->getVoter()==RTLSignal::PART_VOTER);
+	//bool isReg = signal->isReg();
+	//bool isPartitionBoundary = (signal->getVoter()==RTLSignal::PART_VOTER);
+	//int partVoterMode = LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE");
+
+	//if (isPartitionBoundary
+	//		&& ((partVoterMode==1 && isReg) || (partVoterMode==2 && !isReg))) {
+	//	return true;
+	//}
+	//return false;
+	return isPartSig(signal);
+}
+
+bool VerilogWriter::isPartSig(const RTLSignal *sig) {
+	bool isReg = sig->isReg();
+	bool isPartitionBoundary = (sig->getVoter()==RTLSignal::PART_VOTER);
 	int partVoterMode = LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE");
 
-	if ((partVoterMode!=0) && isPartitionBoundary && isReg) {
+	if (isPartitionBoundary && isReg && partVoterMode!=0) {
 		return true;
 	}
 	return false;
@@ -6832,6 +6845,7 @@ void VerilogWriter::printDeclaration(const RTLSignal *signal, bool testBench) {
 
 		// FIXME - For the local mem, always non-registered voters are inserted
 		bool isRegVoter = false;
+		bool isModuleBoundary = false;
 		if (!isLocalMemSignal(signal) && 
 				!isLocalMemSignal(signal, true) && 
 				(signal->getName()!="cur_state") && 
@@ -6841,16 +6855,20 @@ void VerilogWriter::printDeclaration(const RTLSignal *signal, bool testBench) {
 		if (isLocalMemSignal(signal, true) &&
 				LEGUP_CONFIG->getParameterInt("USE_REG_VOTER_FOR_LOCAL_RAMS"))
 			isRegVoter = true;
-		if (needPartVoter(signal) && 
-				LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==2)
-			isRegVoter = true;
+
+		//if (needPartVoter(signal) && 
+		//		LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==2) {
+		//	isRegVoter = true;
+		//	isModuleBoundary = true;
+		//}
 
 		if (isLocalMemSignal(signal, true)
 			     || (signal->getName()=="cur_state" && LEGUP_CONFIG->getParameterInt("VOTER_BEFORE_FSM")==0)
 			     || needSyncVoter(signal)
 		         || needPartVoter(signal)) {
-			printTmrSignal(signal, "_v");
-			printTmrVoter(signal->getName(), lo, hi, isRegVoter);
+			std::string postfix = isModuleBoundary? "_reg_v" : "_v";
+			printTmrSignal(signal, postfix);
+			printTmrVoter(signal->getName(), lo, hi, isRegVoter, isModuleBoundary);
 		}
 
     	if (LEGUP_CONFIG->getParameterInt("CASE_FSM") &&
@@ -7021,7 +7039,8 @@ void VerilogWriter::printBBModuleInstance(RTLBBModule *bbm, std::string postfix)
 		std::string sigName = (*i)->getName();
 		if (postfix!="" && !isTopModuleSig(*i)) {
 			if (alwaysVoteMode(*i) || isStateSig(*i)
-					|| isLocalMemOutputSig(*i))
+					|| isLocalMemOutputSig(*i)
+			        || isPartSig(*i))
 				sigName += "_v" + postfix.substr(2,2);
 			else
 				sigName += postfix;
@@ -7797,13 +7816,15 @@ void VerilogWriter::printTmrSignal(const RTLSignal *sig, std::string postfix) {
 	bool needSynthKeep = true;
 
 	if (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT") == "xilinx")
-		if ((type=="reg" && postfix=="_r" && needSynthKeep) || postfix=="_v")
+		if ((type=="reg" && postfix=="_r" && needSynthKeep)
+				|| postfix=="_v" || postfix=="_reg_v")
 			Out << "(* KEEP=\"TRUE\" *) ";
 
-	if (isBBModuleSig(sig) && postfix != "_v") {
+	if (isBBModuleSig(sig) && postfix != "_v" && postfix != "_reg_v") {
 	    Out << "wire ";
 	} else if (type == "wire" &&
-			(sig->getNumConditions() != 0 || sig->getNumDrivers() != 0 || postfix == "_v")) {
+			(sig->getNumConditions() != 0 || sig->getNumDrivers() != 0 
+				|| postfix == "_v" || postfix == "_reg_v")) {
 	    Out << "reg ";
 	} else {
 	    Out << type << " ";
@@ -7823,7 +7844,8 @@ void VerilogWriter::printTmrSignal(const RTLSignal *sig, std::string postfix) {
 		//if (postfix=="_r" && type=="reg")
 		//	Out << "/*synthesis preserve*/;\n";
 		//else
-		if ((type=="reg" && postfix=="_r" && needSynthKeep) || postfix=="_v")
+		if ((type=="reg" && postfix=="_r" && needSynthKeep)
+				|| postfix=="_v" || postfix=="_reg_v")
 			Out << "/*synthesis keep*/";
 	}
 	Out << ";\n";
@@ -7914,9 +7936,9 @@ void VerilogWriter::printTmrVoter(std::string sigName, std::string lo, std::stri
 	std::string r1 = bitWidthOne? sigName + "_r1" : sigName + "_r1[i]";
 	std::string r2 = bitWidthOne? sigName + "_r2" : sigName + "_r2[i]";
 
-	std::string postfix0 = isModuleBoundary? "" : "_v0";
-	std::string postfix1 = isModuleBoundary? "" : "_v1";
-	std::string postfix2 = isModuleBoundary? "" : "_v2";
+	std::string postfix0 = isModuleBoundary? "_reg_v0" : "_v0";
+	std::string postfix1 = isModuleBoundary? "_reg_v1" : "_v1";
+	std::string postfix2 = isModuleBoundary? "_reg_v2" : "_v2";
 	std::string v0 = bitWidthOne? sigName + postfix0 : sigName + postfix0 + "[i]";
 	std::string v1 = bitWidthOne? sigName + postfix1 : sigName + postfix1 + "[i]";
 	std::string v2 = bitWidthOne? sigName + postfix2 : sigName + postfix2 + "[i]";
