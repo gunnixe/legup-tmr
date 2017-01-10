@@ -96,11 +96,11 @@ sub summarize_essential_bits {
 	close(FEH);
 }
 
-sub summarize_with_only_syn_report {
+sub summary_for_xilinx_syn {
 	my ($cname) = @_;
 	push @name_list, $cname;
 
-	open(FXH, '<', "ML605.syr") or die "cannot open 'ML605.syr' $!";
+	open(FXH, '<', "ML605.syr") or die "cannot open '$cname/ML605.syr' $!";
 	while(<FXH>) {
 		chomp;
 		if(/\s+Number of Slice Registers:\s+(\d+)/) {
@@ -152,7 +152,7 @@ sub summarize_with_only_syn_report {
 	close(FSIMH);
 }
 
-sub summarize_for_xilinx {
+sub summary_for_xilinx_pnr {
 	my ($cname) = @_;
 	push @name_list, $cname;
 
@@ -215,12 +215,19 @@ sub summarize_for_xilinx {
 	close(FSIMH);
 }
 
-sub summary_for_altera {
+sub summary_for_altera_syn {
+	my ($cname) = @_;
+	push @name_list, $cname;
+
+	die "not implemented yet";
+}
+
+sub summary_for_altera_pnr {
 	my ($cname) = @_;
 	push @name_list, $cname;
 
 	my $altera_ver = 13;
-	open(FH, '<', "top.fit.summary") or die "cannot open 'top.fit.summary' $!";
+	open(FH, '<', "top.fit.summary") or die "cannot open '$cname/top.fit.summary' $!";
 	while(<FH>) {
 		chomp;
 		if(m/^Quartus Prime Version : 16/) {
@@ -378,6 +385,7 @@ sub do_work {
 	#-c : create only
 	#-f : (finalize) summary only
 	#-s : simulation only
+	#-ns : no simulation
 	#-p : full (pnr) synthesis only
 	#-q : quick synthesis
 	my $xilinx = $x;
@@ -395,22 +403,19 @@ sub do_work {
 		($flag_create, $flag_sim, $flag_synth, $flag_summary) = (0,0,1,1);
 	}
 
+	# special options
+	if($nosim) { $flag_sim = 0; }
+	if($nosummary) { $flag_summary = 0; }
 
 	system("mkdir -p output") if(!-d "output");
-	my $report_name = "output/".$fname.".rpt";
-	open(FRH, '>', $report_name) or die "cannot open '$report_name' $!";
+	#my $report_name = "output/".$fname.".rpt";
+	#open(FRH, '>', $report_name) or die "cannot open '$report_name' $!";
 	
 	my $scenario_cnt = 0;
 	open(FSH, '<', "scenario.txt") or die "cannot open 'scenario.txt' $!";
 	while(<FSH>) {
 		chomp;
 		next if /^#/; #discard comments
-
-		#if($scenario_cnt==1) { $scenario_cnt++; next; }
-		#if($scenario_cnt==4) { $scenario_cnt++; next; }
-		#if($scenario_cnt==6) { $scenario_cnt++; next; }
-		#if($scenario_cnt==7) { $scenario_cnt++; next; }
-		#if($scenario_cnt==8) { $scenario_cnt++; next; }
 
 		if(m/^\d \d \d \d \d \d$/) {
 			@arg_list = split(/ /, $_, 6);
@@ -459,11 +464,12 @@ sub do_work {
 			system("make p; make q | tee synth.log;") if($flag_synth && $q==1);
 	
 			# summarize
-			&make_report($cname, @arg_list) if ($flag_sim || $flag_summary);
+			#&make_report($cname, @arg_list) if ($flag_sim || $flag_summary);
 			if($flag_summary) {
-				&summary_for_altera($cname) if ($x==0);
-				&summarize_with_only_syn_report($cname) if ($x==1 && $q==1);
-				&summarize_for_xilinx($cname) if ($x==1 && $q==0);
+				&summary_for_altera_syn($cname) if ($x==0 && $q==1);
+				&summary_for_altera_pnr($cname) if ($x==0 && $q==0);
+				&summary_for_xilinx_syn($cname) if ($x==1 && $q==1);
+				&summary_for_xilinx_pnr($cname) if ($x==1 && $q==0);
 			}
 
 			if($flag_summary && $e) { #essential bit analysis
@@ -476,29 +482,29 @@ sub do_work {
 		}
 	}
 	close(FSH);
-	close(FRH);
+	#close(FRH);
 }
 
-sub make_report {
-	my ($cname, $tmr, $smode, $pmode, $lram, $pipe, $rvlram) = @_;
-	print FRH "\n#----- dir_name=$cname, TMR=$tmr, SYNC_VOTER_MODE=$smode, PART_VOTER_MODE=$pmode -----\n";
-	print FRH "#-----     LOCAL_RAM=$lram, USE_REG_VOTER_FOR_LOCAL_RAMS=$rvlram, pipeline=$pipe -----\n";
-
-	open(FH, '<', "vsim.log") or die "cannot open '$cname/vsim.log' $!";
-	while(<FH>) {
-		chomp;
-		if(m/^# Cycle: +\d+ Time: +\d+ +RESULT: \w+$/) {
-			print FRH "\t$_\n";
-			my $line2 = readline(FH);
-			print FRH "\t$line2";
-			my $line3 = readline(FH);
-			print FRH "\t$line3";
-			last;
-		}
-	}
-	die "cannot find string in '$cname/vsim.log'" if(eof FH);
-	close(FH);
-}
+#sub make_report {
+#	my ($cname, $tmr, $smode, $pmode, $lram, $pipe, $rvlram) = @_;
+#	print FRH "\n#----- dir_name=$cname, TMR=$tmr, SYNC_VOTER_MODE=$smode, PART_VOTER_MODE=$pmode -----\n";
+#	print FRH "#-----     LOCAL_RAM=$lram, USE_REG_VOTER_FOR_LOCAL_RAMS=$rvlram, pipeline=$pipe -----\n";
+#
+#	open(FH, '<', "vsim.log") or die "cannot open '$cname/vsim.log' $!";
+#	while(<FH>) {
+#		chomp;
+#		if(m/^# Cycle: +\d+ Time: +\d+ +RESULT: \w+$/) {
+#			print FRH "\t$_\n";
+#			my $line2 = readline(FH);
+#			print FRH "\t$line2";
+#			my $line3 = readline(FH);
+#			print FRH "\t$line3";
+#			last;
+#		}
+#	}
+#	die "cannot find string in '$cname/vsim.log'" if(eof FH);
+#	close(FH);
+#}
 
 sub change_makefile {
 	my ($xilinx) = @_;

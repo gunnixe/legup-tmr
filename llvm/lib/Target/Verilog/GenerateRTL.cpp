@@ -2868,6 +2868,9 @@ void GenerateRTL::generateLoopPipeline(BasicBlock *BB) {
 	inductionVarStages[0] = rtl->addReg(label + "_i_stage0", inductionWidth);
 	inductionVarStages[0]->addCondition(rtl->find("reset"), ZERO_induction);
 
+	// FIXME - set feedback
+	inductionVarStages[0]->setVoter(RTLSignal::SYNC_VOTER);
+
 	// epilogue bit is high when the epilogue has started
 	RTLSignal *epilogue = rtl->addReg(label + "_epilogue");
 	epilogue->addCondition(rtl->find("reset"), ZERO);
@@ -6628,7 +6631,7 @@ void GenerateRTL::updateVoterSignal(SchedulerDAG *dag) {
 
 	// synchronization voter check
 	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
-		std::cerr << "\n\n# DEBUG_TMR=2 - Backward signal\n";
+		std::cerr << "\n\n# DEBUG_TMR=1 - Backward signal\n";
 
 	for (inst_iterator i = inst_begin(Fp), e = inst_end(Fp); i != e; ++i) {
         Instruction *I = &*i;
@@ -6656,7 +6659,7 @@ void GenerateRTL::updateVoterSignal(SchedulerDAG *dag) {
 
 	// partitioning voter check
 	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
-		std::cerr << "\n\n# DEBUG_TMR=2 - Partitioned signal\n";
+		std::cerr << "\n\n# DEBUG_TMR=1 - Partitioned signal\n";
 
 	for (inst_iterator i = inst_begin(Fp), e = inst_end(Fp); i != e; ++i) {
         Instruction *I = &*i;

@@ -329,11 +329,16 @@ void SchedulerDAG::updateDAGwithInst(Instruction *instr) {
             }
         } else if (hasNoDelay(instr)) {
 			// TMR - add voter delay to backward edges
-			//if (LEGUP_CONFIG->getParameterInt("TMR") &&
-			//		LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4 &&
-			//		//isa<PHINode>(instr) && 
-			//		iNode->getBackward()) {
-			//	iNode->setAtMaxDelay();
+			if (LEGUP_CONFIG->getParameterInt("TMR") &&
+					LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4 &&
+					isa<PHINode>(instr) && 
+					iNode->getBackward()) {
+				// FIXME - assume voter delay
+				float syncVoterDelay = 0.5;
+        		if (syncVoterDelay > InstructionNode::getMaxDelay())
+					iNode->setAtMaxDelay();
+				else
+					iNode->setDelay(syncVoterDelay);
 			//} else if (LEGUP_CONFIG->getParameterInt("TMR") &&
 			//		LEGUP_CONFIG->getParameterInt("LOCAL_RAMS") &&
 			//		isa<LoadInst>(instr)) {
@@ -342,9 +347,9 @@ void SchedulerDAG::updateDAGwithInst(Instruction *instr) {
 			//		iNode->setAtMaxDelay();
 			//	else
             //		iNode->setDelay(0);
-			//} else {
+			} else {
             	iNode->setDelay(0);
-			//}
+			}
         } else {
             // errs() << "Empty: " << *instr << "\n";
             // assert(hasNoDelay(instr));
@@ -431,12 +436,12 @@ void SchedulerDAG::insertSyncVoter(const BasicBlock* pred, const BasicBlock* suc
 
 					if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==3) {
 						//FIXME - Now we do not support sync_voter_mode=3
-						errs() << "ERROR: 'SYNC_VOTER_MODE=3' is Not implemented yet!!!\n";
-						assert(0);
+						//errs() << "ERROR: 'SYNC_VOTER_MODE=3' is Not implemented yet!!!\n";
+						//assert(0);
 					    //LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==5)
-						depNode->setBackward(); //def
+						depNode->setBackward(true); //def
 					} else
-						iNode->setBackward(); //use(phi)
+						iNode->setBackward(true); //use(phi)
 				}
 				piIdx++;
 			}
@@ -619,7 +624,7 @@ void SchedulerDAG::insertPartitionVoter(Function &F) {
 	//				if ((areaTotal+area > areaLimit) && (areaLimit!=0)) {
 	//					errs() << "  ---- Insert Part. Voter ----\n";
 	//					areaTotal = 0;
-	//					iNode->setPartition();
+	//					iNode->setPartition(true);
 	//				}
 	//				areaTotal += area;
 	//				errs() << "  Area=(" << areaTotal << ") "
@@ -741,7 +746,7 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
     		    	InstructionNode *depNode = getInstructionNode(dep);
     			    if (!isSamePartition(path, dep->getParent()))
 						//if (!depNode->getBackward())
-							depNode->setPartition();
+							depNode->setPartition(true);
     			}
     		}
 		}
@@ -954,22 +959,22 @@ FiniteStateMachine *SchedulerMapping::createFSM(Function *F,
             }
 
 			//FIXME -- added for TMR
-			if (LEGUP_CONFIG->getParameterInt("TMR") &&
-					LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4) {
-    			InstructionNode *iNode = dag->getInstructionNode(I);
-				if (iNode->getBackward() && isa<PHINode>(I))
-					delayState = 1;
-				//if (LEGUP_CONFIG->getParameterInt("LOCAL_RAMS") &&
-				//		LEGUP_CONFIG->getParameterInt("USE_REG_VOTER_FOR_LOCAL_RAMS") &&
-				//		isa<LoadInst>(I)) {
-				//	Allocation *alloc = dag->getAlloc();
-				//	RAM *localRam = alloc->getLocalRamFromInst(I);
-				//	if (localRam) {
-				//		if (localRam->getScope() == RAM::LOCAL)
-				//			delayState++;
-				//	}
-				//}
-			}
+			//if (LEGUP_CONFIG->getParameterInt("TMR") &&
+			//		LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4) {
+    		//	InstructionNode *iNode = dag->getInstructionNode(I);
+			//	if (iNode->getBackward() && isa<PHINode>(I))
+			//		delayState = 1;
+			//	//if (LEGUP_CONFIG->getParameterInt("LOCAL_RAMS") &&
+			//	//		LEGUP_CONFIG->getParameterInt("USE_REG_VOTER_FOR_LOCAL_RAMS") &&
+			//	//		isa<LoadInst>(I)) {
+			//	//	Allocation *alloc = dag->getAlloc();
+			//	//	RAM *localRam = alloc->getLocalRamFromInst(I);
+			//	//	if (localRam) {
+			//	//		if (localRam->getScope() == RAM::LOCAL)
+			//	//			delayState++;
+			//	//	}
+			//	//}
+			//}
 
             if (delayState == 0) {
                 fsm->setEndState(I, orderStates[order]);

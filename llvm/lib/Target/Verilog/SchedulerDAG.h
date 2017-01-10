@@ -169,9 +169,9 @@ public:
     Instruction* getInst() { return inst; }
 
 	// voter
-	void setBackward() { backwardEdge = true; }
+	void setBackward(bool val) { backwardEdge = val; }
 	bool getBackward() { return backwardEdge; }
-	void setPartition() { partitionEdge = true; }
+	void setPartition(bool val) { partitionEdge = val; }
 	bool getPartition() { return partitionEdge; }
 
 private:

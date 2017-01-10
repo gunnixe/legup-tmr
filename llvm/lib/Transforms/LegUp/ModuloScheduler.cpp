@@ -776,9 +776,9 @@ int ModuloScheduler::getCycleRecMII(std::list<Instruction *> &path) {
         if (isa<PHINode>(I)) {
             cycleDelay++;
 			// TMR - registered voter
-			if (LEGUP_CONFIG->getParameterInt("TMR") && 
-			    LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4)
-				cycleDelay++;
+			//if (LEGUP_CONFIG->getParameterInt("TMR") && 
+			//    LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4)
+			//	cycleDelay++;
         }
         File() << "delay: " << cycleDelay << " I: " << *I << "\n";
     }

@@ -6846,12 +6846,12 @@ void VerilogWriter::printDeclaration(const RTLSignal *signal, bool testBench) {
 		// FIXME - For the local mem, always non-registered voters are inserted
 		bool isRegVoter = false;
 		bool isModuleBoundary = false;
-		if (!isLocalMemSignal(signal) && 
-				!isLocalMemSignal(signal, true) && 
-				(signal->getName()!="cur_state") && 
-				!needPartVoter(signal) && 
-				(LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4))
-			isRegVoter = true;
+		//if (!isLocalMemSignal(signal) && 
+		//		!isLocalMemSignal(signal, true) && 
+		//		(signal->getName()!="cur_state") && 
+		//		!needPartVoter(signal) && 
+		//		(LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4))
+		//	isRegVoter = true;
 		if (isLocalMemSignal(signal, true) &&
 				LEGUP_CONFIG->getParameterInt("USE_REG_VOTER_FOR_LOCAL_RAMS"))
 			isRegVoter = true;

@@ -39,24 +39,24 @@ SDCScheduler::SDCScheduler(Allocation *alloc) : lp(0), map(0), alloc(alloc) {
 }
 
 unsigned SDCScheduler::getNumInstructionCycles(Instruction *instr) {
-	InstructionNode *iNode = dag->getInstructionNode(instr);
 	unsigned ret = Scheduler::getNumInstructionCycles(instr);
 
-	if (LEGUP_CONFIG->getParameterInt("TMR") && 
-			LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4) {
-		if (isa<PHINode>(instr) && iNode->getBackward())
-			++ret;
-		//else if (isa<LoadInst>(instr)) {
-		//	if (LEGUP_CONFIG->getParameterInt("LOCAL_RAMS") &&
-		//			LEGUP_CONFIG->getParameterInt("USE_REG_VOTER_FOR_LOCAL_RAMS")) {
-		//		RAM *localRam = alloc->getLocalRamFromInst(instr);
-		//		if (localRam) {
-		//			if (localRam->getScope() == RAM::LOCAL)
-		//				++ret;
-		//		}
-		//	}
-		//}
-	}
+	//InstructionNode *iNode = dag->getInstructionNode(instr);
+	//if (LEGUP_CONFIG->getParameterInt("TMR") && 
+	//		LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4) {
+	//	if (isa<PHINode>(instr) && iNode->getBackward())
+	//		++ret;
+	//	//else if (isa<LoadInst>(instr)) {
+	//	//	if (LEGUP_CONFIG->getParameterInt("LOCAL_RAMS") &&
+	//	//			LEGUP_CONFIG->getParameterInt("USE_REG_VOTER_FOR_LOCAL_RAMS")) {
+	//	//		RAM *localRam = alloc->getLocalRamFromInst(instr);
+	//	//		if (localRam) {
+	//	//			if (localRam->getScope() == RAM::LOCAL)
+	//	//				++ret;
+	//	//		}
+	//	//	}
+	//	//}
+	//}
 	return ret;
 }
 
@@ -303,6 +303,14 @@ void SDCScheduler::addTimingConstraints(InstructionNode *Root,
             val[1] = -1.0;
 
             add_constraintex(lp, 2, val, col, GE, cycleConstraint);
+
+			// move voter from dep to Curr
+			//if (LEGUP_CONFIG->getParameterInt("TMR")
+			//		&& LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==3
+			//		&& depNode->getBackward()) {
+			//	depNode->setBackward(false);
+			//	Curr->setBackward(true);
+			//}
 
             if (SDCdebug) printf("CYCLE CONSTRAINT: %u BETWEEN %d %d (delay: %f period: %f)\n",
                     cycleConstraint, col[1], col[0], delay, clockPeriodConstraint);
