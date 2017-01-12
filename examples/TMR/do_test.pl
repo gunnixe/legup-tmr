@@ -6,8 +6,8 @@ my @example_list;
 #@example_list = (@example_list,qw(add fir mmult qsort fft));
 @example_list = (@example_list,qw(add));
 @example_list = (@example_list,qw(mmult));
-#
-##dhrystone benchmark example
+
+#dhrystone benchmark example
 @example_list = (@example_list,qw(aes aesdec gsm blowfish motion));
 @example_list = (@example_list,qw(mips sha));
 @example_list = (@example_list,qw(satd bellmanford));
@@ -136,20 +136,7 @@ sub summary_for_xilinx_syn {
 	die "cannot find string in 'ML605.syr'" if(eof FXH);
 	close(FXH);
 
-	open(FSIMH, '<', "vsim.log") or die "cannot open 'vsim.log' $!";
-	while(<FSIMH>) {
-		chomp;
-		if(/^# Cycle: +\d+ Time: +\d+ +RESULT: (\w+)$/) {
-			die "simulation fail" if($1 eq "FAIL");
-		} elsif(/^# Cycles:\s+(\d+)$/) {
-			push @sim_number_of_clock_cycles, $1;
-			my $current_design_wall_clock = $1/$current_design_delay;
-			push @sim_wall_clock_us, $current_design_wall_clock;
-			last;
-		}
-	}
-	die "cannot find string in 'vsim.log'" if(eof FSIMH);
-	close(FSIMH);
+	&parse_vsim_log($cname, $current_design_delay);
 }
 
 sub summary_for_xilinx_pnr {
@@ -199,20 +186,7 @@ sub summary_for_xilinx_pnr {
 	die "cannot find string in 'ML605.twr'" if(eof FTIMH);
 	close(FTIMH);
 
-	open(FSIMH, '<', "vsim.log") or die "cannot open 'vsim.log' $!";
-	while(<FSIMH>) {
-		chomp;
-		if(/^# Cycle: +\d+ Time: +\d+ +RESULT: (\w+)$/) {
-			die "simulation fail" if($1 eq "FAIL");
-		} elsif(/^# Cycles:\s+(\d+)$/) {
-			push @sim_number_of_clock_cycles, $1;
-			my $current_design_wall_clock = $1/$current_design_delay;
-			push @sim_wall_clock_us, $current_design_wall_clock;
-			last;
-		}
-	}
-	die "cannot find string in 'vsim.log'" if(eof FSIMH);
-	close(FSIMH);
+	&parse_vsim_log($cname, $current_design_delay);
 }
 
 sub summary_for_altera_syn {
@@ -287,7 +261,13 @@ sub summary_for_altera_pnr {
 	die "cannot find string in 'top.sta.rpt'" if(eof FH);
 	close(FH);
 
-	open(FSIMH, '<', "vsim.log") or die "cannot open 'vsim.log' $!";
+	&parse_vsim_log($cname, $current_design_delay);
+}
+
+sub parse_vsim_log {
+	$cname = $_[0];
+	$current_design_delay = $_[1];
+	open(FSIMH, '<', "vsim.log") or die "cannot open '$cname/vsim.log' $!";
 	while(<FSIMH>) {
 		chomp;
 		if(/^# Cycle: +\d+ Time: +\d+ +RESULT: (\w+)$/) {
@@ -299,7 +279,7 @@ sub summary_for_altera_pnr {
 			last;
 		}
 	}
-	die "cannot find string in 'vsim.log'" if(eof FSIMH);
+	die "cannot find string in '$cname/vsim.log'" if(eof FSIMH);
 	close(FSIMH);
 }
 
@@ -490,20 +470,7 @@ sub do_work {
 #	print FRH "\n#----- dir_name=$cname, TMR=$tmr, SYNC_VOTER_MODE=$smode, PART_VOTER_MODE=$pmode -----\n";
 #	print FRH "#-----     LOCAL_RAM=$lram, USE_REG_VOTER_FOR_LOCAL_RAMS=$rvlram, pipeline=$pipe -----\n";
 #
-#	open(FH, '<', "vsim.log") or die "cannot open '$cname/vsim.log' $!";
-#	while(<FH>) {
-#		chomp;
-#		if(m/^# Cycle: +\d+ Time: +\d+ +RESULT: \w+$/) {
-#			print FRH "\t$_\n";
-#			my $line2 = readline(FH);
-#			print FRH "\t$line2";
-#			my $line3 = readline(FH);
-#			print FRH "\t$line3";
-#			last;
-#		}
-#	}
-#	die "cannot find string in '$cname/vsim.log'" if(eof FH);
-#	close(FH);
+#	&parse_vsim_log($cname);
 #}
 
 sub change_makefile {
@@ -547,6 +514,7 @@ sub change_config {
 	}
 	$out .= "\n";
 	$out .= "set_parameter TMR $tmr\n";
+	$out .= "set_parameter CLOCK_PERIOD 10\n" if($tmr==1 && $rvlram==1);
 	$out .= "set_parameter SYNC_VOTER_MODE $smode\n";
 	$out .= "set_parameter PART_VOTER_MODE $pmode\n";
 	$out .= "set_parameter LOCAL_RAMS $lram\n";
