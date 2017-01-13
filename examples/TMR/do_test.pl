@@ -1,5 +1,8 @@
 #!/usr/bin/perl -s
 
+my $DEST = output2;
+my $START_CNT = 3;
+
 my @example_list;
 
 #simplelist
@@ -285,7 +288,7 @@ sub parse_vsim_log {
 
 sub write_csv_file {
 	my $xilinx = $_[0];
-	my $csv_name = "output/report.csv";
+	my $csv_name = "$DEST/report.csv";
 	open(FCSV, '>', $csv_name) or die "cannot open '$csv_name' $!";
 
 	print FCSV ",\n";
@@ -387,11 +390,11 @@ sub do_work {
 	if($nosim) { $flag_sim = 0; }
 	if($nosummary) { $flag_summary = 0; }
 
-	system("mkdir -p output") if(!-d "output");
-	#my $report_name = "output/".$fname.".rpt";
+	system("mkdir -p $DEST") if(!-d "$DEST");
+	#my $report_name = "$DEST/".$fname.".rpt";
 	#open(FRH, '>', $report_name) or die "cannot open '$report_name' $!";
 	
-	my $scenario_cnt = 0;
+	my $scenario_cnt = $START_CNT;
 	open(FSH, '<', "scenario.txt") or die "cannot open 'scenario.txt' $!";
 	while(<FSH>) {
 		chomp;
@@ -429,11 +432,11 @@ sub do_work {
 			my $cname = $fname."_".$scenario_cnt;
 
 			if($flag_create) {
-				system("rm -rf output/$cname");
-				system("mkdir -p output") if(!-d "output");
-				system("cp -r template/$fname output/$cname");
+				system("rm -rf $DEST/$cname");
+				system("mkdir -p $DEST") if(!-d "$DEST");
+				system("cp -r template/$fname $DEST/$cname");
 			}
-			chdir "output/$cname";
+			chdir "$DEST/$cname";
 			&change_config(@arg_list, $xilinx) if($flag_create);
 			&change_makefile($xilinx) if($flag_create);
 		
@@ -514,7 +517,7 @@ sub change_config {
 	}
 	$out .= "\n";
 	$out .= "set_parameter TMR $tmr\n";
-	$out .= "set_parameter CLOCK_PERIOD 10\n" if($tmr==1 && $rvlram==1);
+	#$out .= "set_parameter CLOCK_PERIOD 10\n" if($tmr==1 && $rvlram==1);
 	$out .= "set_parameter SYNC_VOTER_MODE $smode\n";
 	$out .= "set_parameter PART_VOTER_MODE $pmode\n";
 	$out .= "set_parameter LOCAL_RAMS $lram\n";
