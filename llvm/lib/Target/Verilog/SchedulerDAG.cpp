@@ -254,6 +254,7 @@ void SchedulerDAG::callDataDeps(InstructionNode *I2Node) {
                     InstructionNode *I1Node = getInstructionNode(I1);
                     I2Node->addMemDepInst(I1Node);
                     I1Node->addMemUseInst(I2Node);
+					localMem->setDependence(true);
                 }
                 continue;
             }
@@ -334,11 +335,11 @@ void SchedulerDAG::updateDAGwithInst(Instruction *instr) {
 					isa<PHINode>(instr) && 
 					iNode->getBackward()) {
 				// FIXME - assume voter delay
-				//float syncVoterDelay = 0.5;
-        		//if (syncVoterDelay > InstructionNode::getMaxDelay())
+				float syncVoterDelay = 0.5;
+        		if (syncVoterDelay > InstructionNode::getMaxDelay())
 					iNode->setAtMaxDelay();
-				//else
-				//	iNode->setDelay(syncVoterDelay);
+				else
+					iNode->setDelay(syncVoterDelay);
 			//} else if (LEGUP_CONFIG->getParameterInt("TMR") &&
 			//		LEGUP_CONFIG->getParameterInt("LOCAL_RAMS") &&
 			//		isa<LoadInst>(instr)) {

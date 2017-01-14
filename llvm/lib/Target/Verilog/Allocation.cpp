@@ -238,6 +238,9 @@ RAM* Allocation::allocateRAM(const Value *I) {
     out << "Constant: " << isConstant << "\n";
     r->setROM(isConstant);
 
+	//TMR dependence
+	r->setDependence(false);
+
     ramList.push_back(r);
 
     mapValueRam[I] = r;

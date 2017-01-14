@@ -517,7 +517,7 @@ sub change_config {
 	}
 	$out .= "\n";
 	$out .= "set_parameter TMR $tmr\n";
-	#$out .= "set_parameter CLOCK_PERIOD 10\n" if($tmr==1 && $rvlram==1);
+	#$out .= "set_parameter CLOCK_PERIOD 10\n" if($tmr==1 && ($rvlram==1 || $smode==4));
 	$out .= "set_parameter SYNC_VOTER_MODE $smode\n";
 	$out .= "set_parameter PART_VOTER_MODE $pmode\n";
 	$out .= "set_parameter LOCAL_RAMS $lram\n";

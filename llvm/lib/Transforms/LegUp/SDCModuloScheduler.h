@@ -593,7 +593,12 @@ class SDCModuloScheduler {
             if (getNumInstructionCycles(depNode->getInst()) > 0)
                 continue;
 
-            float delay = PartialPathDelay + depNode->getDelay();
+			float depDelay = depNode->getDelay();
+			// FIXME - special case to reduce application's latency
+			if (isa<GetElementPtrInst>(Curr->getInst()) && isa<PHINode>(depNode->getInst()))
+				depDelay = 0.0;
+
+            float delay = PartialPathDelay + depDelay;
             unsigned cycleConstraint =
                 ceil((float)delay / (float)clockPeriodConstraint);
 

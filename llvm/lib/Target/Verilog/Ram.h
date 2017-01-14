@@ -140,6 +140,10 @@ public:
     
     //NC changes...
     DebugType* debugType;
+
+	//TMR
+	bool getDependence() const { return dep; }
+	void setDependence(bool _dep) { dep = _dep; }
     
 private:
     
@@ -216,6 +220,7 @@ Allocation *alloc;
     std::string name;
     bool ROM;
     SCOPE scope;
+    bool dep;
     PhysicalRAM *phyRAM;
     // if RAM is used by multiple threads
     // multiple instances are created

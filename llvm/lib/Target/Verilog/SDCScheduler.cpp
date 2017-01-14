@@ -285,7 +285,12 @@ void SDCScheduler::addTimingConstraints(InstructionNode *Root,
         if (getNumInstructionCycles(depNode->getInst()) > 0)
             continue;
 
-        float delay = PartialPathDelay + depNode->getDelay();
+		float depDelay = depNode->getDelay();
+		// FIXME - special case to reduce application's latency
+		if (isa<GetElementPtrInst>(Curr->getInst()) && isa<PHINode>(depNode->getInst()))
+			depDelay = 0.0;
+
+        float delay = PartialPathDelay + depDelay;
         unsigned cycleConstraint = ceil(delay / clockPeriodConstraint);
 
         if (cycleConstraint > 0)
@@ -312,6 +317,7 @@ void SDCScheduler::addTimingConstraints(InstructionNode *Root,
 			//	Curr->setBackward(true);
 			//}
 
+            //if (isa<PHINode>(depNode->getInst())) printf("CYCLE CONSTRAINT: %u BETWEEN %d %d (delay: %f period: %f)\n",
             if (SDCdebug) printf("CYCLE CONSTRAINT: %u BETWEEN %d %d (delay: %f period: %f)\n",
                     cycleConstraint, col[1], col[0], delay, clockPeriodConstraint);
         } else {
@@ -332,6 +338,7 @@ void SDCScheduler::addTimingConstraints(Function *F) {
     for (BasicBlock::iterator i = b->begin(), ie = b->end(); i != ie; i++) {
 
       InstructionNode* iNode = dag->getInstructionNode(i);
+      //std::cout << getValueStr(i) << "\n";
       addTimingConstraints(iNode, iNode, iNode->getDelay());
 
     }

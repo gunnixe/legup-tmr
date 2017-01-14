@@ -6690,11 +6690,36 @@ void VerilogWriter::printModuleHeader() {
 }
 
 bool VerilogWriter::isLocalMemSignal(const RTLSignal *signal, bool checkOutSig) {
+	//FIXME
+    //for (unsigned i = 0; i < signal->getNumConditions(); ++i) {
+    //    const Instruction *I = signal->getInst(i);
+	//	if(checkOutSig) {
+	//		if (isa<LoadInst>(I)) {
+	//			RAM *R = alloc->getLocalRamFromInst(I);
+	//			if (R && R->getScope()==RAM::LOCAL) {
+	//				std::string outNameA = R->getName() + "_out_a";
+	//				std::string outNameB = R->getName() + "_out_b";
+	//				std::string sigName = signal->getName();
+	//				if (sigName == outNameA || sigName == outNameB)
+	//					return true;
+	//			}
+	//		}
+	//	} else {
+	//		if (isa<StoreInst>(I)) {
+	//			RAM *R = alloc->getLocalRamFromInst(I);
+	//			if (R && R->getScope()==RAM::LOCAL)
+	//				return true;
+	//		}
+	//	}
+    //}
 	for (Allocation::const_ram_iterator i = alloc->ram_begin();
 	        i != alloc->ram_end(); ++i) {
 		const RAM *R = *i;
 		if (R->getScope() == RAM::GLOBAL)
 			continue;
+
+		//if (!R->getDependence())
+		//	continue;
 
 		const char* portInNames[6] = { "_address_a", "_address_b",
 		                             "_write_enable_a", "_write_enable_b",
@@ -6982,9 +7007,22 @@ bool VerilogWriter::isTopModuleSig(const RTLSignal *sig) {
 
 bool VerilogWriter::isLocalMemOutputSig(const RTLSignal *sig) {
 	std::string name = sig->getName();
+	bool isDepRam = true;//false;
+    //for (unsigned i = 0; i < sig->getNumConditions(); ++i) {
+	//	const Instruction *I = sig->getInst(i);
+	//	if (!I) continue;
+	//	if (isa<LoadInst>(I) || isa<StoreInst>(I)) {
+	//		RAM *R = alloc->getLocalRamFromInst(const_cast<Instruction*>(I));
+	//		if (R && R->getDependence())
+	//			isDepRam = true;
+	//	}
+	//}
+
 	if (name.find("_out_") != std::string::npos
-			&& name.find("memory_controller") == std::string::npos)
+			&& name.find("memory_controller") == std::string::npos
+			&& isDepRam)
 		return true;
+
 	return false;
 }
 
