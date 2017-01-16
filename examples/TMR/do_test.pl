@@ -1,7 +1,10 @@
 #!/usr/bin/perl -s
 
-my $DEST = output2;
-my $START_CNT = 3;
+use POSIX;
+
+my $DEST = output_top;
+my $START_CNT = 0;
+my $SYN_TOP = top;
 
 my @example_list;
 
@@ -104,7 +107,7 @@ sub summary_for_xilinx_syn {
 	my ($cname) = @_;
 	push @name_list, $cname;
 
-	open(FXH, '<', "ML605.syr") or die "cannot open '$cname/ML605.syr' $!";
+	open(FXH, '<', "$SYN_TOP.syr") or die "cannot open '$cname/$SYN_TOP.syr' $!";
 	while(<FXH>) {
 		chomp;
 		if(/\s+Number of Slice Registers:\s+(\d+)/) {
@@ -137,15 +140,16 @@ sub summary_for_xilinx_syn {
 	if(@number_of_ramb36e1s < @number_of_slice_luts) {
 		push @number_of_ramb36e1s, "-";
 	}
-	die "cannot find string in 'ML605.syr'" if(eof FXH);
+	die "cannot find string in '$SYN_TOP.syr'" if(eof FXH);
 	close(FXH);
 
 	&parse_vsim_log($cname, $current_design_delay);
 
 	open(FWH, '>', "info.txt") or die "cannot open '$cname/info.txt' $!";
 	my $now = `date`;
+	my $intFmax = int($sim_max_freq_mhz[-1]);
 	print FWH "projectName = $cname\n";
-	print FWH "maxFreq = $sim_max_freq_mhz[-1]\n";
+	print FWH "maxFreq = $intFmax\n";
 	print FWH "cycles = $sim_number_of_clock_cycles[-1]\n";
 	print FWH "expectedResult = $sim_expected_result[-1]\n";
 	print FWH "date = $now\n";
@@ -298,6 +302,104 @@ sub parse_vsim_log {
 	close(FSIMH);
 }
 
+sub write_csv_file_vertical {
+	my $xilinx = $_[0];
+	my $csv_name = "$DEST/report.csv";
+	open(FCSV, '>', $csv_name) or die "cannot open '$csv_name' $!";
+
+	print FCSV ",Number of Slice Registers";
+	print FCSV ",Number of Slice LUTs";
+	print FCSV ",Number of occupied Slices";
+	print FCSV ",Number of bounded IOBS" if($xilinx);
+	print FCSV ",Number of RAMB36E1/FIFO36E1s" if($xilinx);
+	print FCSV ",Number of RAMB18E1/FIFO18E1s";
+	print FCSV ",Number of DSP48E1s";
+	print FCSV ",Maximum Clock Frequency (MHz)";
+	print FCSV ",Number of clock cycles";
+	print FCSV ",Wall clock (ms)";
+
+	if($e) {
+	print FCSV ",Sensitive bits (total)";                     
+	print FCSV ",Sensitive interconnection bits";             
+	print FCSV ",Sensitive interface bits";                   
+	print FCSV ",Sensitive block configuration bits";         
+	print FCSV ",IOBs Sensitive interconnection bits";        
+	print FCSV ",IOBs Sensitive interface bits";              
+	print FCSV ",IOBs Sensitive block configuration bits";    
+	print FCSV ",CLBs Sensitive interconnection bits";        
+	print FCSV ",CLBs Sensitive interface bits";              
+	print FCSV ",CLBs Sensitive block configuration bits";    
+	print FCSV ",BRAMs Sensitive interconnection bits";       
+	print FCSV ",BRAMs Sensitive interface bits";             
+	print FCSV ",BRAMs Sensitive block configuration bits";   
+	print FCSV ",DSPs Sensitive interconnection bits";        
+	print FCSV ",DSPs Sensitive interface bits";              
+	print FCSV ",DSPs Sensitive block configuration bits";    
+	print FCSV ",CLKs Sensitive interconnection bits";        
+	print FCSV ",CLKs Sensitive interface bits";              
+	print FCSV ",CLKs Sensitive block configuration bits";    
+
+	print FCSV ",Sensitive interconnection frames";           
+	print FCSV ",Sensitive interface frames";                 
+	print FCSV ",Sensitive block configuration frames";       
+	print FCSV ",Sensitive frames";                           
+
+	print FCSV ",Device interconnection frames";              
+	print FCSV ",Device interface frames";                    
+	print FCSV ",Device block configuration frames";          
+	print FCSV ",Device frames";                              
+	}
+	print FCSV "\n";
+
+	my $val;
+	while($val = shift(@name_list)) {
+		print FCSV "$val";
+		$val = shift(@number_of_slice_registers);  print FCSV ",$val";
+		$val = shift(@number_of_slice_luts);       print FCSV ",$val";
+		$val = shift(@number_of_occupied_slices);  print FCSV ",$val";
+		$val = shift(@number_of_bounded_iobs);     print FCSV ",$val" if($xilinx);
+		$val = shift(@number_of_ramb36e1s);        print FCSV ",$val" if($xilinx);
+		$val = shift(@number_of_ramb18e1s);        print FCSV ",$val";
+		$val = shift(@number_of_dsp48e1s);         print FCSV ",$val";
+		$val = shift(@sim_max_freq_mhz);           print FCSV ",$val";
+		$val = shift(@sim_number_of_clock_cycles); print FCSV ",$val";
+		$val = shift(@sim_wall_clock_us);          print FCSV ",$val";
+
+		if($e) {
+		$val = shift(@sensitive_01);               print FCSV ",$val";
+		$val = shift(@sensitive_02);               print FCSV ",$val";
+		$val = shift(@sensitive_03);               print FCSV ",$val";
+		$val = shift(@sensitive_04);               print FCSV ",$val";
+		$val = shift(@sensitive_05);               print FCSV ",$val";
+		$val = shift(@sensitive_06);               print FCSV ",$val";
+		$val = shift(@sensitive_07);               print FCSV ",$val";
+		$val = shift(@sensitive_08);               print FCSV ",$val";
+		$val = shift(@sensitive_09);               print FCSV ",$val";
+		$val = shift(@sensitive_0A);               print FCSV ",$val";
+		$val = shift(@sensitive_0B);               print FCSV ",$val";
+		$val = shift(@sensitive_0C);               print FCSV ",$val";
+		$val = shift(@sensitive_0D);               print FCSV ",$val";
+		$val = shift(@sensitive_0E);               print FCSV ",$val";
+		$val = shift(@sensitive_0F);               print FCSV ",$val";
+		$val = shift(@sensitive_10);               print FCSV ",$val";
+		$val = shift(@sensitive_11);               print FCSV ",$val";
+		$val = shift(@sensitive_12);               print FCSV ",$val";
+		$val = shift(@sensitive_13);               print FCSV ",$val";
+		$val = shift(@sensitive_14);               print FCSV ",$val";
+		$val = shift(@sensitive_15);               print FCSV ",$val";
+		$val = shift(@sensitive_16);               print FCSV ",$val";
+		$val = shift(@sensitive_17);               print FCSV ",$val";
+		$val = shift(@sensitive_18);               print FCSV ",$val";
+		$val = shift(@sensitive_19);               print FCSV ",$val";
+		$val = shift(@sensitive_1A);               print FCSV ",$val";
+		$val = shift(@sensitive_1B);               print FCSV ",$val";
+		}
+		print FCSV "\n";
+	}
+
+	close (FCSV);
+}
+
 sub write_csv_file {
 	my $xilinx = $_[0];
 	my $csv_name = "$DEST/report.csv";
@@ -371,7 +473,7 @@ if($fname eq "all") {
 	die "Folder '$dest_folder' is not exist\n" if(!-d $dest_folder);
 	&do_work($fname);
 }
-&write_csv_file($x);
+&write_csv_file_vertical($x);
 
 sub do_work {
 	my $fname = $_[0];
@@ -412,9 +514,9 @@ sub do_work {
 		chomp;
 		next if /^#/; #discard comments
 
-		if(m/^\d \d \d \d \d \d$/) {
-			@arg_list = split(/ /, $_, 6);
-			#my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram) = @arg_list; 
+		if(m/^\d \d \d \d \d \d \d$/) {
+			@arg_list = split(/ /, $_, 7);
+			#my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram $clkmargin) = @arg_list; 
 
 			# LegUp4.0 does not support complex data dependency analysis.
 			# - need to skip pipelining
@@ -512,7 +614,7 @@ sub change_makefile {
 }
 
 sub change_config {
-	my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram, $xilinx) = @_;
+	my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram, $clkmargin, $xilinx) = @_;
 	open(FH, '+<', "config.tcl") or die "cannot open 'config.tcl' $!";
 	my $out = '';
 	while(<FH>) {
@@ -529,7 +631,7 @@ sub change_config {
 	}
 	$out .= "\n";
 	$out .= "set_parameter TMR $tmr\n";
-	#$out .= "set_parameter CLOCK_PERIOD 10\n" if($tmr==1 && ($rvlram==1 || $smode==4));
+	$out .= "set_parameter CLOCK_PERIOD 10\n" if($tmr && $clkmargin);
 	$out .= "set_parameter SYNC_VOTER_MODE $smode\n";
 	$out .= "set_parameter PART_VOTER_MODE $pmode\n";
 	$out .= "set_parameter LOCAL_RAMS $lram\n";

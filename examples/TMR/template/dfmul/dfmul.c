@@ -129,9 +129,9 @@ main ()
 	  result = float64_mul (x1, x2);
 	  main_result += (result == z_output[i]);
 
-	  printf
-	    ("a_input=%016llx b_input=%016llx expected=%016llx output=%016llx\n",
-	     a_input[i], b_input[i], z_output[i], result);
+	  //printf
+	  //  ("a_input=%016llx b_input=%016llx expected=%016llx output=%016llx\n",
+	  //   a_input[i], b_input[i], z_output[i], result);
 	}
       printf ("Result: %d\n", main_result);
       if (main_result == 20) {

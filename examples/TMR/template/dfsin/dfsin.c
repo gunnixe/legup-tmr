@@ -163,9 +163,9 @@ main ()
 	  result = dfsin (test_in[i]);
 	  main_result += (result == test_out[i]);
 
-	  printf
-	    ("input=%016llx expected=%016llx output=%016llx\n",
-	     test_in[i], test_out[i], result);
+	  //printf
+	  //  ("input=%016llx expected=%016llx output=%016llx\n",
+	  //   test_in[i], test_out[i], result);
 	}
       printf ("Result: %d\n", main_result);
       if (main_result == 36) {
