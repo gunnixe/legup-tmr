@@ -115,13 +115,13 @@ encrypt (int statemt[32], int key[32], int type)
   ByteSub_ShiftRow (statemt, nb);
   AddRoundKey (statemt, type, i);
 
-  printf ("encrypted message \t");
-  for (i = 0; i < nb * 4; ++i)
-    {
-      if (statemt[i] < 16)
-	printf ("0");
-      printf ("%x", statemt[i]);
-    }
+  //printf ("encrypted message \t");
+  //for (i = 0; i < nb * 4; ++i)
+  //  {
+  //    if (statemt[i] < 16)
+  //  printf ("0");
+  //    printf ("%x", statemt[i]);
+  //  }
 
   for (i = 0; i < 16; i++)
     main_result += (statemt[i] == out_enc_statemt[i]);

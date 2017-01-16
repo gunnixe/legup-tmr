@@ -33,6 +33,7 @@ my @number_of_ramb18e1s;
 my @number_of_dsp48e1s;
 my @sim_max_freq_mhz;
 my @sim_number_of_clock_cycles;
+my @sim_expected_result;
 my @sim_wall_clock_us;
 my @sensitive_01;
 my @sensitive_02;
@@ -140,6 +141,15 @@ sub summary_for_xilinx_syn {
 	close(FXH);
 
 	&parse_vsim_log($cname, $current_design_delay);
+
+	open(FWH, '>', "info.txt") or die "cannot open '$cname/info.txt' $!";
+	my $now = `date`;
+	print FWH "projectName = $cname\n";
+	print FWH "maxFreq = $sim_max_freq_mhz[-1]\n";
+	print FWH "cycles = $sim_number_of_clock_cycles[-1]\n";
+	print FWH "expectedResult = $sim_expected_result[-1]\n";
+	print FWH "date = $now\n";
+	close(FWH);
 }
 
 sub summary_for_xilinx_pnr {
@@ -275,6 +285,8 @@ sub parse_vsim_log {
 		chomp;
 		if(/^# Cycle: +\d+ Time: +\d+ +RESULT: (\w+)$/) {
 			die "simulation fail" if($1 eq "FAIL");
+		} elsif(/Result:\s+(\d+)$/) {
+			push @sim_expected_result, $1;
 		} elsif(/^# Cycles:\s+(\d+)$/) {
 			push @sim_number_of_clock_cycles, $1;
 			my $current_design_wall_clock = $1/$current_design_delay;
