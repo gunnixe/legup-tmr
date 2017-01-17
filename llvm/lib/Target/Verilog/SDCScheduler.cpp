@@ -41,22 +41,22 @@ SDCScheduler::SDCScheduler(Allocation *alloc) : lp(0), map(0), alloc(alloc) {
 unsigned SDCScheduler::getNumInstructionCycles(Instruction *instr) {
 	unsigned ret = Scheduler::getNumInstructionCycles(instr);
 
-	//InstructionNode *iNode = dag->getInstructionNode(instr);
-	//if (LEGUP_CONFIG->getParameterInt("TMR") && 
-	//		LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4) {
-	//	if (isa<PHINode>(instr) && iNode->getBackward())
-	//		++ret;
-	//	//else if (isa<LoadInst>(instr)) {
-	//	//	if (LEGUP_CONFIG->getParameterInt("LOCAL_RAMS") &&
-	//	//			LEGUP_CONFIG->getParameterInt("USE_REG_VOTER_FOR_LOCAL_RAMS")) {
-	//	//		RAM *localRam = alloc->getLocalRamFromInst(instr);
-	//	//		if (localRam) {
-	//	//			if (localRam->getScope() == RAM::LOCAL)
-	//	//				++ret;
-	//	//		}
-	//	//	}
-	//	//}
-	//}
+	InstructionNode *iNode = dag->getInstructionNode(instr);
+	if (LEGUP_CONFIG->getParameterInt("TMR") && 
+			LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4) {
+		if (isa<PHINode>(instr) && iNode->getBackward())
+			++ret;
+		//else if (isa<LoadInst>(instr)) {
+		//	if (LEGUP_CONFIG->getParameterInt("LOCAL_RAMS") &&
+		//			LEGUP_CONFIG->getParameterInt("USE_REG_VOTER_FOR_LOCAL_RAMS")) {
+		//		RAM *localRam = alloc->getLocalRamFromInst(instr);
+		//		if (localRam) {
+		//			if (localRam->getScope() == RAM::LOCAL)
+		//				++ret;
+		//		}
+		//	}
+		//}
+	}
 	return ret;
 }
 
@@ -287,8 +287,8 @@ void SDCScheduler::addTimingConstraints(InstructionNode *Root,
 
 		float depDelay = depNode->getDelay();
 		// FIXME - special case to reduce application's latency
-		if (isa<GetElementPtrInst>(Curr->getInst()) && isa<PHINode>(depNode->getInst()))
-			depDelay = 0.0;
+		//if (isa<GetElementPtrInst>(Curr->getInst()) && isa<PHINode>(depNode->getInst()))
+		//	depDelay = 0.0;
 
         float delay = PartialPathDelay + depDelay;
         unsigned cycleConstraint = ceil(delay / clockPeriodConstraint);

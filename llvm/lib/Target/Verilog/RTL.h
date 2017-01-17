@@ -124,7 +124,7 @@ public:
     RTLSignal(std::string name, std::string value, RTLWidth bitwidth=RTLWidth());
     virtual ~RTLSignal() {}
 
-	enum { NONE=0, SYNC_VOTER, PART_VOTER };
+	enum { NONE=0, SYNC_VOTER, PART_VOTER, PIPE_VOTER };
 
     std::string getValue() const { return value; }
     std::string getName() const { return name; }

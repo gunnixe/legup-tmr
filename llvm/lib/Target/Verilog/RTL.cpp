@@ -177,13 +177,13 @@ bool RTLSignal::driveFromVoter() const {
 
 	// syncvoter check
 	if (svoterMode==2 || svoterMode==4)
-		ret = (isReg() && getVoter()==1);
+		ret = (isReg() && (getVoter()==SYNC_VOTER || getVoter()==PIPE_VOTER));
 	else if (svoterMode==3)
-		ret = (getVoter()==1);
+		ret = (getVoter()==SYNC_VOTER || getVoter()==PIPE_VOTER);
 
 	// partvoter check
 	if (pvoterMode==1)
-		ret |= (isReg() && getVoter()==2);
+		ret |= (isReg() && getVoter()==PART_VOTER);
 
 	return ret;
 }

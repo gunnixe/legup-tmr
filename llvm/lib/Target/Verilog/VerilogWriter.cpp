@@ -6743,7 +6743,8 @@ bool VerilogWriter::isLocalMemSignal(const RTLSignal *signal, bool checkOutSig) 
 
 bool VerilogWriter::needSyncVoter(const RTLSignal *signal) {
 	bool isReg = signal->isReg();
-	bool isBackward = (signal->getVoter()==RTLSignal::SYNC_VOTER);
+	bool isBackward = (signal->getVoter()==RTLSignal::SYNC_VOTER)
+	                  || (signal->getVoter()==RTLSignal::PIPE_VOTER);
 	int syncVoterMode = LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE");
 
 	if (signal->getName()=="cur_state")
@@ -6871,12 +6872,13 @@ void VerilogWriter::printDeclaration(const RTLSignal *signal, bool testBench) {
 		// FIXME - For the local mem, always non-registered voters are inserted
 		bool isRegVoter = false;
 		bool isModuleBoundary = false;
-		//if (!isLocalMemSignal(signal) && 
-		//		!isLocalMemSignal(signal, true) && 
-		//		(signal->getName()!="cur_state") && 
-		//		!needPartVoter(signal) && 
-		//		(LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4))
-		//	isRegVoter = true;
+		if (!isLocalMemSignal(signal) && 
+				!isLocalMemSignal(signal, true) && 
+				(signal->getName()!="cur_state") && 
+				!needPartVoter(signal) && 
+				signal->getVoter()!=RTLSignal::PIPE_VOTER &&
+				(LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4))
+			isRegVoter = true;
 		if (isLocalMemSignal(signal, true) &&
 				LEGUP_CONFIG->getParameterInt("USE_REG_VOTER_FOR_LOCAL_RAMS"))
 			isRegVoter = true;
@@ -7059,7 +7061,7 @@ void VerilogWriter::printBBModuleInstance(RTLBBModule *bbm, std::string postfix)
 		std::string name = (*i)->getName() + "_v";
 		std::string sigName = (*i)->getName();
 		if (postfix!="") {
-			if ((*i)->getVoter()==RTLSignal::SYNC_VOTER
+			if (((*i)->getVoter()==RTLSignal::SYNC_VOTER || (*i)->getVoter()==RTLSignal::PIPE_VOTER)
 					&& LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")!=0)
 				sigName += "_v" + postfix.substr(2,2);
 			else

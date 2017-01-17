@@ -2869,7 +2869,7 @@ void GenerateRTL::generateLoopPipeline(BasicBlock *BB) {
 	inductionVarStages[0]->addCondition(rtl->find("reset"), ZERO_induction);
 
 	// FIXME - set feedback
-	inductionVarStages[0]->setVoter(RTLSignal::SYNC_VOTER);
+	inductionVarStages[0]->setVoter(RTLSignal::PIPE_VOTER);
 
 	// epilogue bit is high when the epilogue has started
 	RTLSignal *epilogue = rtl->addReg(label + "_epilogue");
