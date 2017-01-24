@@ -2,9 +2,10 @@
 
 use POSIX;
 
-my $DEST = output_top;
+my $DEST = output_ML605_actual_clock;
 my $START_CNT = 0;
 my $SYN_TOP = top;
+my $PNR_TOP = ML605;
 
 my @example_list;
 
@@ -23,10 +24,14 @@ my @example_list;
 @example_list = (@example_list,qw(adpcm));
 @example_list = (@example_list,qw(jpeg));
 
+#@example_list = (@example_list,qw(aes bellmanford add mmult adpcm));
+
 my ($fname) = @ARGV;
 die "Need folder name\n" if(not defined $fname);
 
 my @name_list;
+my @verilog_number_of_dp_feedback_voters;
+my @verilog_number_of_all_voters;
 my @number_of_slice_registers;
 my @number_of_slice_luts;
 my @number_of_occupied_slices;
@@ -65,6 +70,203 @@ my @sensitive_18;
 my @sensitive_19;
 my @sensitive_1A;
 my @sensitive_1B;
+
+
+if($fname eq "all") {
+	&do_work($_) for(@example_list);
+} else {
+	$dest_folder = "template/".$fname;
+	die "Folder '$dest_folder' is not exist\n" if(!-d $dest_folder);
+	&do_work($fname);
+}
+&write_csv_file_vertical($x);
+
+sub do_work {
+	my $fname = $_[0];
+	# options
+	#-x : xilinx
+	#-c : create only
+	#-f : (finalize) summary only
+	#-s : simulation only
+	#-p : full (pnr) synthesis only
+	#-q : quick synthesis
+
+	#-nosim : no simulation
+	#-nosummary
+	#-realclock
+
+	my $xilinx = $x;
+	my $flag_create = 1;
+	my $flag_synth = 1;
+	my $flag_summary = 1;
+	my $flag_sim = 1;
+	if($c) {
+		($flag_create, $flag_sim, $flag_synth, $flag_summary) = (1,0,0,0);
+	} elsif($s) {
+		($flag_create, $flag_sim, $flag_synth, $flag_summary) = (1,1,0,0);
+	} elsif($f) {
+		($flag_create, $flag_sim, $flag_synth, $flag_summary) = (0,0,0,1);
+	} elsif($p) {
+		($flag_create, $flag_sim, $flag_synth, $flag_summary) = (0,0,1,1);
+	}
+
+	# special options
+	if($nosim) { $flag_sim = 0; }
+	if($nosummary) { $flag_summary = 0; }
+
+	system("mkdir -p $DEST") if(!-d "$DEST");
+	#my $report_name = "$DEST/".$fname.".rpt";
+	#open(FRH, '>', $report_name) or die "cannot open '$report_name' $!";
+	
+	my $scenario_cnt = $START_CNT;
+	open(FSH, '<', "scenario.txt") or die "cannot open 'scenario.txt' $!";
+	while(<FSH>) {
+		chomp;
+		next if /^#/; #discard comments
+
+		if(m/^\d \d \d \d \d \d \d$/) {
+			@arg_list = split(/ /, $_, 7);
+			#my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram $clkmargin) = @arg_list; 
+
+			# LegUp4.0 does not support complex data dependency analysis.
+			# - need to skip pipelining
+			if(($fname eq "qsort")
+					|| ($fname eq "fft")
+					|| ($fname eq "dfdiv")
+					|| ($fname eq "gsm")
+					|| ($fname eq "motion")
+					|| ($fname eq "blowfish")
+					|| ($fname eq "sha")
+					|| ($fname eq "adpcm")
+					|| ($fname eq "jpeg")
+					|| ($fname eq "dfsin")
+					|| ($fname eq "bellmanford")
+			  ) {
+				$arg_list[4] = 0;
+			}
+
+			# - need to skip localmemory use
+			if(($fname eq "adpcm")
+					#|| ($fname eq "bellmanford")
+			  ) {
+				$arg_list[3] = 0;
+			}
+
+			# prepare work dir
+			my $cname = $fname."_".$scenario_cnt;
+
+			if($flag_create) {
+				system("rm -rf $DEST/$cname");
+				system("mkdir -p $DEST") if(!-d "$DEST");
+				system("cp -r template/$fname $DEST/$cname");
+			}
+			chdir "$DEST/$cname";
+			&change_config(@arg_list, $xilinx) if($flag_create);
+			&change_makefile($xilinx) if($flag_create);
+		
+			# do simulation
+			system("make 2>&1 | tee make.log;") if $flag_create;
+			system("make v | tee vsim.log;") if $flag_sim;
+			system("make p") if $flag_synth;
+			&change_ucf($cname) if($realclock && $xilinx);
+			system("make f | tee synth.log;") if($flag_synth && $q==0);
+			system("make q | tee synth.log;") if($flag_synth && $q==1);
+	
+			# summarize
+			#&make_report($cname, @arg_list) if ($flag_sim || $flag_summary);
+			if($flag_summary) {
+				&summary_for_altera_syn($cname) if ($x==0 && $q==1);
+				&summary_for_altera_pnr($cname) if ($x==0 && $q==0);
+				&summary_for_xilinx_syn($cname) if ($x==1 && $q==1);
+				&summary_for_xilinx_pnr($cname) if ($x==1 && $q==0);
+			}
+
+			if($flag_summary && $e) { #essential bit analysis
+				&summarize_essential_bits($cname) if $x==1;
+			}
+
+			# finalize work dir
+			chdir "../../";
+			$scenario_cnt = $scenario_cnt + 1;
+		}
+	}
+	close(FSH);
+	#close(FRH);
+}
+
+#sub make_report {
+#	my ($cname, $tmr, $smode, $pmode, $lram, $pipe, $rvlram) = @_;
+#	print FRH "\n#----- dir_name=$cname, TMR=$tmr, SYNC_VOTER_MODE=$smode, PART_VOTER_MODE=$pmode -----\n";
+#	print FRH "#-----     LOCAL_RAM=$lram, USE_REG_VOTER_FOR_LOCAL_RAMS=$rvlram, pipeline=$pipe -----\n";
+#
+#	&parse_vsim_log($cname);
+#}
+
+sub change_makefile {
+	my ($xilinx) = @_;
+	return if($xilinx==0);
+
+	open(FH, '+<', "Makefile") or die "cannot open 'Makefile' $!";
+	my $out = '';
+	while(<FH>) {
+		chomp;
+		if(m/^XILINX/) {
+			next;
+		} elsif(m/^include/ && m/Makefile.common/) {
+			$out .= "XILINX = 1\n";
+			$out .= "$_\n";
+		} else {
+			$out .= "$_\n";
+		}
+	}
+	seek(FH, 0, 0);
+	print FH $out;
+	truncate(FH, tell(FH));
+	close(FH);
+}
+
+sub change_config {
+	my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram, $clkmargin, $xilinx) = @_;
+	open(FH, '+<', "config.tcl") or die "cannot open 'config.tcl' $!";
+	my $out = '';
+	while(<FH>) {
+		chomp;
+		next if(m/set_parameter TMR \d$/);
+		next if(m/set_parameter SYNC_VOTER_MODE \d$/);
+		next if(m/set_parameter PART_VOTER_MODE \d$/);
+		next if(m/set_parameter LOCAL_RAMS \d$/);
+		next if(m/set_parameter USE_REG_VOTER_FOR_LOCAL_RAMS \d$/);
+		next if(m/set_parameter PIPELINE_ALL \d$/);
+		next if(m/loop_pipeline \"loop\"$/);
+
+		$out .= "$_\n";
+	}
+
+	$out .= "\n";
+	$out .= "set_parameter TMR $tmr\n";
+	$out .= "set_parameter CLOCK_PERIOD 10\n" if($tmr && $clkmargin);
+	$out .= "set_parameter SYNC_VOTER_MODE $smode\n";
+	$out .= "set_parameter PART_VOTER_MODE $pmode\n";
+	$out .= "set_parameter LOCAL_RAMS $lram\n";
+	$out .= "set_parameter USE_REG_VOTER_FOR_LOCAL_RAMS $rvlram\n";
+	#add locam mem constrant for FMax
+	#if($lram && (($tmr==0) || ($tmr==1 && $smode==2))) {
+	#	$out .= "set_operation_latency local_mem_dual_port 2\n";
+	#}
+	#$out .= "loop_pipeline \"loop\"\n" if($pipe);
+	$out .= "set_parameter PIPELINE_ALL $pipe\n";
+
+	if($xilinx) {
+		$out .= "\nset_project Virtex6 ML605 hw_only\n";
+		$out .= "set_parameter INFERRED_RAM_FORMAT \"xilinx\"\n";
+		$out .= "set_parameter DIVIDER_MODULE generic\n";
+	}
+
+	seek(FH, 0, 0);
+	print FH $out;
+	truncate(FH, tell(FH));
+	close(FH);
+}
 
 sub summarize_essential_bits {
 	my ($cname) = @_;
@@ -144,23 +346,15 @@ sub summary_for_xilinx_syn {
 	close(FXH);
 
 	&parse_vsim_log($cname, $current_design_delay);
-
-	open(FWH, '>', "info.txt") or die "cannot open '$cname/info.txt' $!";
-	my $now = `date`;
-	my $intFmax = int($sim_max_freq_mhz[-1]);
-	print FWH "projectName = $cname\n";
-	print FWH "maxFreq = $intFmax\n";
-	print FWH "cycles = $sim_number_of_clock_cycles[-1]\n";
-	print FWH "expectedResult = $sim_expected_result[-1]\n";
-	print FWH "date = $now\n";
-	close(FWH);
+	&parse_generate_log($cname);
+	&parse_verilog($cname);
 }
 
 sub summary_for_xilinx_pnr {
 	my ($cname) = @_;
 	push @name_list, $cname;
 
-	open(FXH, '<', "ML605.par") or die "cannot open '$cname/ML605.par' $!";
+	open(FXH, '<', "$PNR_TOP.par") or die "cannot open '$cname/$PNR_TOP.par' $!";
 	while(<FXH>) {
 		chomp;
 		if(/\s+Number of Slice Registers:\s+([\d,]+) out of\s+[\d,]+\s+\d+%/) {
@@ -187,10 +381,10 @@ sub summary_for_xilinx_pnr {
 			last;
 		}
 	}
-	die "cannot find string in 'ML605.par'" if(eof FXH);
+	die "cannot find string in '$PNR_TOP.par'" if(eof FXH);
 	close(FXH);
 
-	open(FTIMH, '<', "ML605.twr") or die "cannot open 'ML605.twr' $!";
+	open(FTIMH, '<', "$PNR_TOP.twr") or die "cannot open '$PNR_TOP.twr' $!";
 	my $current_design_delay = 0;
 	while(<FTIMH>) {
 		chomp;
@@ -200,10 +394,22 @@ sub summary_for_xilinx_pnr {
 			last;
 		}
 	}
-	die "cannot find string in 'ML605.twr'" if(eof FTIMH);
+	die "cannot find string in '$PNR_TOP.twr'" if(eof FTIMH);
 	close(FTIMH);
 
 	&parse_vsim_log($cname, $current_design_delay);
+	&parse_generate_log($cname);
+	&parse_verilog($cname);
+
+	open(FWH, '>', "info.txt") or die "cannot open '$cname/info.txt' $!";
+	my $now = `date`;
+	my $intFmax = int($sim_max_freq_mhz[-1]);
+	print FWH "projectName = $cname\n";
+	print FWH "maxFreq = $intFmax\n";
+	print FWH "cycles = $sim_number_of_clock_cycles[-1]\n";
+	print FWH "expectedResult = $sim_expected_result[-1]\n";
+	print FWH "date = $now\n";
+	close(FWH);
 }
 
 sub summary_for_altera_syn {
@@ -279,6 +485,72 @@ sub summary_for_altera_pnr {
 	close(FH);
 
 	&parse_vsim_log($cname, $current_design_delay);
+	&parse_generate_log($cname);
+	&parse_verilog($cname);
+}
+
+sub parse_verilog {
+	my $cname = $_[0];
+	my $verilog_name;
+
+	open(FMAKEH, '<', "Makefile") or die "cannot open 'Makefile' $!";
+	while(<FMAKEH>) {
+		chomp;
+		if(/^NAME=(\w+)$/) {
+			$verilog_name = $1;
+			last;
+		}
+	}
+	die "cannot find string in '$cname/Makefile'" if(eof FMAKEH);
+	close(FMAKEH);
+
+	my $voter_count = 0;
+	my $start_find = 0;
+	open(FVH, '<', "$verilog_name.v") or die "cannot open '$cname/$verilog_name.v' $!";
+	while(<FVH>) {
+		chomp;
+		if($x) {
+			if(/^module \w+/) {
+				if(!/^module BB_\w+/) {
+					$start_find = 1; 
+				}
+			} elsif(/^endmodule/) {
+				$start_find = 0;
+			} elsif(/\(\* KEEP=\"TRUE\" \*\) reg / && $start_find==1) {
+				if(/_v0,/) {
+					$voter_count++;
+				}
+			}
+		} else {
+			die "not implemetd for altera";
+			#FIXME - only work with xilinx
+		}
+	}
+	close(FVH);
+
+	push @verilog_number_of_all_voters, $voter_count;
+}
+
+sub parse_generate_log {
+	my $cname = $_[0];
+	my $fv_count = 0;
+	my $start_count = 0;
+	open(FGENH, '<', "make.log") or die "cannot open '$cname/make.log' $!";
+	while(<FGENH>) {
+		chomp;
+		if(/^# DEBUG_TMR=1 - Backward signal/) {
+			$start_count = 1;
+		} elsif(/^# DEBUG_TMR=1 - Partitioned signal/) {
+			$start_count = 0;
+		} elsif($start_count == 1) {
+			if(/ = phi /) {
+				$fv_count++;
+			}
+		}
+	}
+	close(FGENH);
+
+	push @verilog_number_of_dp_feedback_voters, $fv_count;
 }
 
 sub parse_vsim_log {
@@ -307,6 +579,8 @@ sub write_csv_file_vertical {
 	my $csv_name = "$DEST/report.csv";
 	open(FCSV, '>', $csv_name) or die "cannot open '$csv_name' $!";
 
+	print FCSV ",Number of All Voters";
+	print FCSV ",Number of Feedback Voters";
 	print FCSV ",Number of Slice Registers";
 	print FCSV ",Number of Slice LUTs";
 	print FCSV ",Number of occupied Slices";
@@ -316,7 +590,7 @@ sub write_csv_file_vertical {
 	print FCSV ",Number of DSP48E1s";
 	print FCSV ",Maximum Clock Frequency (MHz)";
 	print FCSV ",Number of clock cycles";
-	print FCSV ",Wall clock (ms)";
+	print FCSV ",Wall clock (us)";
 
 	if($e) {
 	print FCSV ",Sensitive bits (total)";                     
@@ -354,6 +628,9 @@ sub write_csv_file_vertical {
 	my $val;
 	while($val = shift(@name_list)) {
 		print FCSV "$val";
+		$val = shift(@verilog_number_of_all_voters);  print FCSV ",$val";
+		$val = shift(@verilog_number_of_dp_feedback_voters);  print FCSV ",$val";
+
 		$val = shift(@number_of_slice_registers);  print FCSV ",$val";
 		$val = shift(@number_of_slice_luts);       print FCSV ",$val";
 		$val = shift(@number_of_occupied_slices);  print FCSV ",$val";
@@ -429,7 +706,7 @@ sub write_csv_file {
 	print FCSV ",$_" for(@sim_max_freq_mhz);
 	print FCSV ",\nNumber of clock cycles";
 	print FCSV ",$_" for(@sim_number_of_clock_cycles);
-	print FCSV ",\nWall clock (ms)";
+	print FCSV ",\nWall clock (us)";
 	print FCSV ",$_" for(@sim_wall_clock_us);
 	print FCSV ",\n";
 
@@ -466,191 +743,36 @@ sub write_csv_file {
 	close (FCSV);
 }
 
-if($fname eq "all") {
-	&do_work($_) for(@example_list);
-} else {
-	$dest_folder = "template/".$fname;
-	die "Folder '$dest_folder' is not exist\n" if(!-d $dest_folder);
-	&do_work($fname);
-}
-&write_csv_file_vertical($x);
+sub change_ucf {
+	my $cname = $_[0];
+	my $dir = "/home/legup/legup-4.0/examples/TMR/output_ML605/".$cname;
 
-sub do_work {
-	my $fname = $_[0];
-	# options
-	#-x : xilinx
-	#-c : create only
-	#-f : (finalize) summary only
-	#-s : simulation only
-	#-ns : no simulation
-	#-p : full (pnr) synthesis only
-	#-q : quick synthesis
-	my $xilinx = $x;
-	my $flag_create = 1;
-	my $flag_synth = 1;
-	my $flag_summary = 1;
-	my $flag_sim = 1;
-	if($c) {
-		($flag_create, $flag_sim, $flag_synth, $flag_summary) = (1,0,0,0);
-	} elsif($s) {
-		($flag_create, $flag_sim, $flag_synth, $flag_summary) = (1,1,0,0);
-	} elsif($f) {
-		($flag_create, $flag_sim, $flag_synth, $flag_summary) = (0,0,0,1);
-	} elsif($p) {
-		($flag_create, $flag_sim, $flag_synth, $flag_summary) = (0,0,1,1);
-	}
-
-	# special options
-	if($nosim) { $flag_sim = 0; }
-	if($nosummary) { $flag_summary = 0; }
-
-	system("mkdir -p $DEST") if(!-d "$DEST");
-	#my $report_name = "$DEST/".$fname.".rpt";
-	#open(FRH, '>', $report_name) or die "cannot open '$report_name' $!";
-	
-	my $scenario_cnt = $START_CNT;
-	open(FSH, '<', "scenario.txt") or die "cannot open 'scenario.txt' $!";
-	while(<FSH>) {
+	open(FTIMH, '<', "$dir/$PNR_TOP.twr") or die "cannot open '$dir/$PNR_TOP.twr' $!";
+	my $current_design_delay = 0;
+	while(<FTIMH>) {
 		chomp;
-		next if /^#/; #discard comments
-
-		if(m/^\d \d \d \d \d \d \d$/) {
-			@arg_list = split(/ /, $_, 7);
-			#my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram $clkmargin) = @arg_list; 
-
-			# LegUp4.0 does not support complex data dependency analysis.
-			# - need to skip pipelining
-			if(($fname eq "qsort")
-					|| ($fname eq "fft")
-					|| ($fname eq "dfdiv")
-					|| ($fname eq "gsm")
-					|| ($fname eq "motion")
-					|| ($fname eq "blowfish")
-					|| ($fname eq "sha")
-					|| ($fname eq "adpcm")
-					|| ($fname eq "jpeg")
-					|| ($fname eq "dfsin")
-					|| ($fname eq "bellmanford")
-			  ) {
-				$arg_list[4] = 0;
-			}
-
-			# - need to skip localmemory use
-			if(($fname eq "adpcm")
-					|| ($fname eq "bellmanford")
-			  ) {
-				$arg_list[3] = 0;
-			}
-
-			# prepare work dir
-			my $cname = $fname."_".$scenario_cnt;
-
-			if($flag_create) {
-				system("rm -rf $DEST/$cname");
-				system("mkdir -p $DEST") if(!-d "$DEST");
-				system("cp -r template/$fname $DEST/$cname");
-			}
-			chdir "$DEST/$cname";
-			&change_config(@arg_list, $xilinx) if($flag_create);
-			&change_makefile($xilinx) if($flag_create);
-		
-			# do simulation
-			system("make 2>&1 | tee make.log;") if $flag_create;
-			system("make v | tee vsim.log;") if $flag_sim;
-			system("make p; make f | tee synth.log;") if($flag_synth && $q==0);
-			system("make p; make q | tee synth.log;") if($flag_synth && $q==1);
-	
-			# summarize
-			#&make_report($cname, @arg_list) if ($flag_sim || $flag_summary);
-			if($flag_summary) {
-				&summary_for_altera_syn($cname) if ($x==0 && $q==1);
-				&summary_for_altera_pnr($cname) if ($x==0 && $q==0);
-				&summary_for_xilinx_syn($cname) if ($x==1 && $q==1);
-				&summary_for_xilinx_pnr($cname) if ($x==1 && $q==0);
-			}
-
-			if($flag_summary && $e) { #essential bit analysis
-				&summarize_essential_bits($cname) if $x==1;
-			}
-
-			# finalize work dir
-			chdir "../../";
-			$scenario_cnt = $scenario_cnt + 1;
+		if(/Minimum period is\s+(\d+\.\d+)ns/) {
+			$current_design_delay = $1*1000;
+			last;
 		}
 	}
-	close(FSH);
-	#close(FRH);
-}
+	die "cannot find string in '$dir/$PNR_TOP.twr'" if(eof FTIMH);
+	close(FTIMH);
 
-#sub make_report {
-#	my ($cname, $tmr, $smode, $pmode, $lram, $pipe, $rvlram) = @_;
-#	print FRH "\n#----- dir_name=$cname, TMR=$tmr, SYNC_VOTER_MODE=$smode, PART_VOTER_MODE=$pmode -----\n";
-#	print FRH "#-----     LOCAL_RAM=$lram, USE_REG_VOTER_FOR_LOCAL_RAMS=$rvlram, pipeline=$pipe -----\n";
-#
-#	&parse_vsim_log($cname);
-#}
-
-sub change_makefile {
-	my ($xilinx) = @_;
-	return if($xilinx==0);
-
-	open(FH, '+<', "Makefile") or die "cannot open 'Makefile' $!";
+	open(FUCFH, '+<', "$PNR_TOP.ucf") or die "cannot open '$PNR_TOP.ucf' $!";
 	my $out = '';
-	while(<FH>) {
+	while(<FUCFH>) {
 		chomp;
-		if(m/^XILINX/) {
-			next;
-		} elsif(m/^include/ && m/Makefile.common/) {
-			$out .= "XILINX = 1\n";
-			$out .= "$_\n";
+		if(m/^NET\d+\"USER_CLOCK\" LOC = U23 | PERIOD = \d+ ps;/) {
+			$out .= "NET \"USER_CLOCK\" LOC = U23 | PERIOD = $current_design_delay ps;\n";
 		} else {
 			$out .= "$_\n";
 		}
 	}
-	seek(FH, 0, 0);
-	print FH $out;
-	truncate(FH, tell(FH));
-	close(FH);
+
+	seek(FUCFH, 0, 0);
+	print FUCFH $out;
+	truncate(FUCFH, tell(FUCFH));
+	close(FUCFH);
 }
 
-sub change_config {
-	my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram, $clkmargin, $xilinx) = @_;
-	open(FH, '+<', "config.tcl") or die "cannot open 'config.tcl' $!";
-	my $out = '';
-	while(<FH>) {
-		chomp;
-		next if(m/set_parameter TMR \d$/);
-		next if(m/set_parameter SYNC_VOTER_MODE \d$/);
-		next if(m/set_parameter PART_VOTER_MODE \d$/);
-		next if(m/set_parameter LOCAL_RAMS \d$/);
-		next if(m/set_parameter USE_REG_VOTER_FOR_LOCAL_RAMS \d$/);
-		next if(m/set_parameter PIPELINE_ALL \d$/);
-		next if(m/loop_pipeline \"loop\"$/);
-
-		$out .= "$_\n";
-	}
-	$out .= "\n";
-	$out .= "set_parameter TMR $tmr\n";
-	$out .= "set_parameter CLOCK_PERIOD 10\n" if($tmr && $clkmargin);
-	$out .= "set_parameter SYNC_VOTER_MODE $smode\n";
-	$out .= "set_parameter PART_VOTER_MODE $pmode\n";
-	$out .= "set_parameter LOCAL_RAMS $lram\n";
-	$out .= "set_parameter USE_REG_VOTER_FOR_LOCAL_RAMS $rvlram\n";
-	#add locam mem constrant for FMax
-	#if($lram && (($tmr==0) || ($tmr==1 && $smode==2))) {
-	#	$out .= "set_operation_latency local_mem_dual_port 2\n";
-	#}
-	#$out .= "loop_pipeline \"loop\"\n" if($pipe);
-	$out .= "set_parameter PIPELINE_ALL $pipe\n";
-
-	if($xilinx) {
-		$out .= "\nset_project Virtex6 ML605 hw_only\n";
-		$out .= "set_parameter INFERRED_RAM_FORMAT \"xilinx\"\n";
-		$out .= "set_parameter DIVIDER_MODULE generic\n";
-	}
-
-	seek(FH, 0, 0);
-	print FH $out;
-	truncate(FH, tell(FH));
-	close(FH);
-}
