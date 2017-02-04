@@ -6753,6 +6753,8 @@ bool VerilogWriter::needSyncVoter(const RTLSignal *signal) {
 	if (((syncVoterMode==1) && isReg) ||
 	    ((syncVoterMode==2) && isReg && isBackward) ||
 	    ((syncVoterMode==3) && isBackward) ||
+	    ((syncVoterMode==5) && isReg && isBackward) ||
+	    ((syncVoterMode==6) && isReg && isBackward) ||
 	    ((syncVoterMode==4) && isReg && isBackward) ) {
 		return true;
 	}

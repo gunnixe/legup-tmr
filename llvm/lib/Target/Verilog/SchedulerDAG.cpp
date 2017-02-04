@@ -26,6 +26,7 @@
 #include "llvm/ADT/SCCIterator.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "Ram.h"
+#include <algorithm>
 
 using namespace llvm;
 using namespace legup;
@@ -409,6 +410,23 @@ bool SchedulerDAG::foundBackwardDependency(const Instruction *use, const Instruc
 	return false;
 }
 
+void SchedulerDAG::insertSyncVoterWithSCC() {
+	for (std::vector<std::vector<const Instruction*> >::const_iterator i = SCCs.begin(),
+                                                                       e = SCCs.end(); i != e; ++i) {
+		//FIXME
+		std::vector<const Instruction*> scc = *i;
+		for (std::vector<const Instruction*>::const_iterator si = scc.begin(),
+		                                                     se = scc.end(); si != se; ++si) {
+			const Instruction* instr = *si;
+			InstructionNode* iNode = getInstructionNode(const_cast<Instruction*>(instr));
+			if (isa<PHINode>(instr)) {
+				iNode->setBackward(true);//, *scc); //use(phi)
+				break;
+			}
+		}
+	}
+} 
+
 void SchedulerDAG::insertSyncVoter(const BasicBlock* pred, const BasicBlock* succ) {
 	unsigned siIdx = 0;
 	for (BasicBlock::const_iterator si = succ->begin();
@@ -451,6 +469,125 @@ void SchedulerDAG::insertSyncVoter(const BasicBlock* pred, const BasicBlock* suc
 	}
 }
 
+//template <class T>
+//static bool compareVectors(const vector<T> &a, const vector<T> &b)
+//{
+//  const size_t n = a.size(); // make it const and unsigned!
+//  std::vector<bool> free(n, true);
+//  for ( size_t i = 0; i < n; ++i )
+//  {
+//      bool matchFound = false;
+//      auto start = b.cbegin();
+//      while ( true )
+//      {
+//          const auto position = std::find(start, b.cend(), a[i]);
+//          if ( position == b.cend() )
+//          {
+//              break; // nothing found
+//          }
+//          const auto index = position - b.cbegin();
+//          if ( free[index] )
+//          {
+//             // free pair found
+//             free[index] = false;
+//             matchFound = true;
+//             break;
+//          }
+//          else
+//          {
+//             start = position + 1; // search in the rest
+//          }
+//      }
+//      if ( !matchFound )
+//      {
+//         return false;
+//      }
+//   }
+//   return true;
+//}
+
+void SchedulerDAG::addSCC(std::vector<const Instruction*> scc) {
+	bool isSameList = false;
+	//FIXME - sorting may break the dependency order
+	std::sort(scc.begin(), scc.end());
+
+	for (std::vector<std::vector<const Instruction*> >::const_iterator i = SCCs.begin(),
+	                                                                   e = SCCs.end(); i != e; ++i) {
+		std::vector<const Instruction*> currScc = *i;
+		if (currScc.size() != scc.size())
+			continue;
+
+		//Method 1
+		//isSameList = compareVectors<const Instruction*>(currScc, scc);
+
+		//FIXME - need to modify with faster matching algorithm
+		//Method 2
+		//unsigned matchCount = 0;
+		//for (std::vector<const Instruction*>::const_iterator ci = currScc.begin(),
+		//                                                     ce = currScc.end(); ci != ce; ++ci) {
+		//	for (std::vector<const Instruction*>::const_iterator si = scc.begin(),
+		//	                                                     se = scc.end(); si != se; ++si) {
+		//		if (*ci == *si) {
+		//			matchCount++;
+		//			break;
+		//		}
+		//	}
+		//}
+
+		//if (matchCount == scc.size()) {
+		//	isSameList = true;
+		//	break;
+		//}
+
+		//Method 3
+		if (scc == currScc) {
+			isSameList = true;
+			break;
+		}
+	}
+
+	if (!isSameList) {
+		SCCs.push_back(scc);
+	}
+}
+
+void SchedulerDAG::findSCC(std::vector<const Instruction*> scc, const Instruction *def) {
+   	for (User::const_op_iterator i = def->op_begin(), e = def->op_end(); i != e; ++i) {
+		const Instruction *use = dyn_cast<Instruction>(*i);
+		if (!use || isa<AllocaInst>(use))
+			continue;
+
+		if (scc.front() == use) {
+			addSCC(scc);
+			//errs() << "     Find!!\n";
+			//for (std::vector<const Instruction*>::const_iterator si = scc.begin(),
+			//                                                     ei = scc.end(); si != ei; ++si) {
+			//	errs() << "         - " << getValueStr(*si) << "\n";
+			//}
+			continue;
+		}
+
+		if (std::find(scc.begin(), scc.end(), use) == scc.end()) {
+			scc.push_back(use);
+			//errs() << "     <- " << getValueStr(use) << "\n";
+			findSCC(scc, use);
+		}
+		//errs() << "     pop : " << getValueStr(scc.back()) << "\n";
+		scc.pop_back();
+	}
+}
+
+void SchedulerDAG::findSCC(const BasicBlock* pred, const BasicBlock* succ) {
+	for (BasicBlock::const_iterator si = succ->begin();
+	                                si != succ->end(); si++) {
+		const Instruction *def = si;
+		//errs() << "    INSTRUCTION:" << getValueStr(def) << "\n";
+		std::vector<const Instruction*> scc;
+		scc.push_back(def);
+		findSCC(scc, def);
+	}
+}
+
 void SchedulerDAG::insertSyncVoter(Function &F) {
 	// add voter to the instruction which has backward edges
 	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
@@ -461,7 +598,29 @@ void SchedulerDAG::insertSyncVoter(Function &F) {
 
 		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
 			errs() << "  [" << i << "] " << getLabel(succ) << "<-" << getLabel(pred) << "\n";
-		insertSyncVoter(pred, succ);
+		findSCC(pred, succ);
+
+		// When (SYNC_VOTER_MODE==6) setBackward() is performed after
+		// generateRTL phase, since all FSM state should be determined to
+		// calculate minimum latency between SCC Registers.
+		if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==5)
+			insertSyncVoterWithSCC();
+		else if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")!=6)
+			insertSyncVoter(pred, succ);
+	}
+
+	// FIXME
+	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
+		errs() << "\n\n# DEBUG_TMR=1 - SCC Instructions\n";
+	unsigned cnt = 0;
+	for (std::vector<std::vector<const Instruction*> >::const_iterator i = SCCs.begin(),
+	                                                                   e = SCCs.end(); i != e; ++i) {
+		std::vector<const Instruction*> scc = *i;
+		errs() << "  SCCs[" << cnt++ << "]\n";
+		for (std::vector<const Instruction*>::const_iterator ssi = scc.begin(),
+		                                                     sse = scc.end(); ssi != sse; ++ssi) {
+			errs() << "  " << getValueStr(*ssi) << "\n";
+		}
 	}
 }
 

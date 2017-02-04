@@ -218,6 +218,10 @@ public:
     void printDFGDot(formatted_raw_ostream &out, BasicBlock *BB);
 
 	// voter
+	void addSCC(std::vector<const Instruction*> scc);
+	void findSCC(const BasicBlock* pred, const BasicBlock* succ);
+	void findSCC(std::vector<const Instruction*> scc, const Instruction *i2);
+	void insertSyncVoterWithSCC();
 	void insertSyncVoter(Function &F);
 	void insertSyncVoter(const BasicBlock* pred, const BasicBlock* succ);
 	bool foundBackwardDependency(const Instruction *use, const Instruction *def,
@@ -241,6 +245,7 @@ public:
 	std::queue<std::vector<const BasicBlock*> > DAGPaths;
 	std::vector<std::vector<const BasicBlock*> > Partitions;
 	Allocation *getAlloc() { return alloc; }
+	std::vector<std::vector<const Instruction*> > SCCs;
 
 private:
     void regDataDeps(InstructionNode *iNode);

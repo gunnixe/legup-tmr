@@ -571,6 +571,17 @@ public:
     void printPipelineDot(formatted_raw_ostream &out);
     RamListType localRamList;
 
+	RTLBBModule* getRTLBBModule(std::string name) {
+		for (std::vector<RTLBBModule *>::iterator bbm = bbModules.begin(),
+		                                          bbme = bbModules.end();
+		                                          bbm != bbme; ++bbm) {
+			RTLBBModule *bbModule = *bbm;
+			if (bbModule->getName() == name)
+				return *bbm;
+		}
+		return NULL;
+	}
+
     // Debug
     void dbgAddInstanceMapping(int parentInst, int thisInst);
     const std::map<int, int>* dbgGetInstanceMapping() const { return &dbgInstanceMapping; }

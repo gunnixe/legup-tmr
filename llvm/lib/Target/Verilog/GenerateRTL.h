@@ -152,6 +152,7 @@ public:
     }
 
 	// voter
+	void updateSyncVoterWithLatency(SchedulerDAG *dag);
 	void updateVoterSignal(SchedulerDAG *dag);
 	void printDebugSignal(std::string chr);
 	void addOpToInput(RTLBBModule *bbm, RTLOp *op);
