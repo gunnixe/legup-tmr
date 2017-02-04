@@ -66,7 +66,7 @@ int main_result;
 
 #include "aes.h"
 #include "aes_enc.c"
-#include "aes_dec.c"
+//#include "aes_dec.c"
 #include "aes_key.c"
 #include "aes_func.c"
 

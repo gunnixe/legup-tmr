@@ -80,32 +80,45 @@ aes_main (void)
 |     statemt, key : input data                                            |
 +--------------------------------------------------------------------------+
 */
-  const int out_enc_statemt[16] =
-    { 0x39, 0x25, 0x84, 0x1d, 0x2, 0xdc, 0x9, 0xfb, 0xdc, 0x11, 0x85, 0x97,
-    0x19, 0x6a, 0xb, 0x32
-  };
-  int i;
+  //const int out_enc_statemt[16] =
+  //  { 0x39, 0x25, 0x84, 0x1d, 0x2, 0xdc, 0x9, 0xfb, 0xdc, 0x11, 0x85, 0x97,
+  //  0x19, 0x6a, 0xb, 0x32
+  //};
+  //int i;
 
-  statemt[0] = 50;
-  statemt[1] = 67;
-  statemt[2] = 246;
-  statemt[3] = 168;
-  statemt[4] = 136;
-  statemt[5] = 90;
-  statemt[6] = 48;
-  statemt[7] = 141;
-  statemt[8] = 49;
-  statemt[9] = 49;
-  statemt[10] = 152;
-  statemt[11] = 162;
-  statemt[12] = 224;
-  statemt[13] = 55;
-  statemt[14] = 7;
-  statemt[15] = 52;
+  //statemt[0] = 50;
+  //statemt[1] = 67;
+  //statemt[2] = 246;
+  //statemt[3] = 168;
+  //statemt[4] = 136;
+  //statemt[5] = 90;
+  //statemt[6] = 48;
+  //statemt[7] = 141;
+  //statemt[8] = 49;
+  //statemt[9] = 49;
+  //statemt[10] = 152;
+  //statemt[11] = 162;
+  //statemt[12] = 224;
+  //statemt[13] = 55;
+  //statemt[14] = 7;
+  //statemt[15] = 52;
 
-  for(i=0; i<16; i++) {
-	statemt[i] = out_enc_statemt[i];
-  }
+  statemt[0] = 0x39;
+  statemt[1] = 0x25;
+  statemt[2] = 0x84;
+  statemt[3] = 0x1d;
+  statemt[4] = 0x2;
+  statemt[5] = 0xdc;
+  statemt[6] = 0x9;
+  statemt[7] = 0xfb;
+  statemt[8] = 0xdc;
+  statemt[9] = 0x11;
+  statemt[10] = 0x85;
+  statemt[11] = 0x97;
+  statemt[12] = 0x19;
+  statemt[13] = 0x6a;
+  statemt[14] = 0xb;
+  statemt[15] = 0x32;
 
   key[0] = 43;
   key[1] = 126;

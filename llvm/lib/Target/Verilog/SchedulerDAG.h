@@ -43,13 +43,19 @@ public:
 	iterator       output_end()         { return output.end(); }
 	const_iterator output_end()   const { return output.end(); }
 
-	void addInput(Instruction *I) {
-		if (std::find(input.begin(), input.end(), I) == input.end())
+	bool addInput(Instruction *I) {
+		if (std::find(input.begin(), input.end(), I) == input.end()) {
 			input.push_back(I);
+			return true;
+		}
+		return false;
 	}
-	void addFeedbackInput(Instruction *I) {
-		if (std::find(finput.begin(), finput.end(), I) == finput.end())
+	bool addFeedbackInput(Instruction *I) {
+		if (std::find(finput.begin(), finput.end(), I) == finput.end()) {
 			finput.push_back(I);
+			return true;
+		}
+		return false;
 	}
 	void addOutput(Instruction *I) { output.push_back(I); }
 	BasicBlock* getBasicBlock() { return bb; }

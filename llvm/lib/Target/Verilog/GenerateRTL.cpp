@@ -6683,7 +6683,8 @@ void GenerateRTL::updateSyncVoterWithLatency(SchedulerDAG *dag) {
 			if (I->getParent()==dep->getParent()) {
 				BasicBlock *b = I->getParent();
 				BasicBlockNode *bbNode = dag->getBasicBlockNode(b);
-				bbNode->addFeedbackInput(I);
+				if (!bbNode->addFeedbackInput(I))
+					break;
 
 				std::string bbModuleName = "BB_" + b->getParent()->getName().str() + verilogName(b);
 				RTLBBModule *bbm = rtl->getRTLBBModule(bbModuleName);
