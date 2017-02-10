@@ -506,9 +506,23 @@ void SchedulerDAG::insertSyncVoter(const BasicBlock* pred, const BasicBlock* suc
 //   return true;
 //}
 
+void SchedulerDAG::addSCC(std::vector<const Instruction*> scc, const Instruction* use) {
+	std::vector<const Instruction*> found_scc;
+	//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+	//	errs() << "     Find!!\n";
+	for(std::vector<const Instruction*>::const_iterator i = std::find(scc.begin(), scc.end(), use),
+	                                                    e = scc.end(); i!=e; ++i) {
+		found_scc.push_back(*i);
+		//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+		//	errs() << "         - " << getValueStr(*i) << "\n";
+	}
+	addSCC(found_scc);
+}
+
 void SchedulerDAG::addSCC(std::vector<const Instruction*> scc) {
-	bool isSameList = false;
+
 	//FIXME - sorting may break the dependency order
+	bool isSameList = false;
 	std::sort(scc.begin(), scc.end());
 
 	for (std::vector<std::vector<const Instruction*> >::const_iterator i = SCCs.begin(),
@@ -551,63 +565,161 @@ void SchedulerDAG::addSCC(std::vector<const Instruction*> scc) {
 	}
 }
 
+bool SchedulerDAG::isSCCBB(const Instruction *def, const std::vector<BasicBlock *> SCCBBs) {
+	for (std::vector<BasicBlock *>::const_iterator BBI = SCCBBs.begin(),
+	                                               BBIE = SCCBBs.end();
+	                                               BBI != BBIE; ++BBI) {
+		if (*BBI == def->getParent())
+			return true;
+	}
+	return false;
+}
+
+bool SchedulerDAG::isSCCInst(const Instruction *def) {
+	for (std::vector<std::vector<const Instruction*> >::const_iterator i = SCCs.begin(),
+	                                                                   e = SCCs.end(); i != e; ++i) {
+		std::vector<const Instruction*> scc = *i;
+		if (scc.front()==def)
+			return true;
+	}
+	return false;
+}
+
 void SchedulerDAG::findSCC(std::vector<const Instruction*> scc, const Instruction *def) {
    	for (User::const_op_iterator i = def->op_begin(), e = def->op_end(); i != e; ++i) {
 		const Instruction *use = dyn_cast<Instruction>(*i);
+
 		if (!use || isa<AllocaInst>(use))
 			continue;
 
-		if (scc.front() == use) {
-			addSCC(scc);
-			//errs() << "     Find!!\n";
-			//for (std::vector<const Instruction*>::const_iterator si = scc.begin(),
-			//                                                     ei = scc.end(); si != ei; ++si) {
-			//	errs() << "         - " << getValueStr(*si) << "\n";
-			//}
+		if (isa<CallInst>(use))
 			continue;
-		}
 
 		if (std::find(scc.begin(), scc.end(), use) == scc.end()) {
 			scc.push_back(use);
-			//errs() << "     <- " << getValueStr(use) << "\n";
+			//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+			//	errs() << "     <- " << getValueStr(use) << "\n";
 			findSCC(scc, use);
+			//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+			//	errs() << "     pop : " << getValueStr(scc.back()) << "\n";
+			scc.pop_back();
+		} else {
+			addSCC(scc, use);
 		}
-		//errs() << "     pop : " << getValueStr(scc.back()) << "\n";
-		scc.pop_back();
 	}
 }
 
-void SchedulerDAG::findSCC(const BasicBlock* pred, const BasicBlock* succ) {
+//bool SchedulerDAG::findSCC(std::vector<const Instruction*> scc, const Instruction *def) {
+//   	for (User::const_op_iterator i = def->op_begin(), e = def->op_end(); i != e; ++i) {
+//		const Instruction *use = dyn_cast<Instruction>(*i);
+//		if (!use || isa<AllocaInst>(use))
+//			continue;
+//
+//		// module output (return) is always voted upon.
+//		if (isa<CallInst>(use))
+//			continue;
+//
+//		// skip if 'use instruction' is already idendtified as feedback edges
+//		if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==5
+//				&& isSCCInst(use))
+//			continue;
+//
+//		if (scc.front() == use) {
+//			addSCC(scc);
+//			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+//				errs() << "     Find!!\n";
+//			for (std::vector<const Instruction*>::const_iterator si = scc.begin(),
+//			                                                     ei = scc.end(); si != ei; ++si) {
+//				if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+//					errs() << "         - " << getValueStr(*si) << "\n";
+//			}
+//			if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==5)
+//				return false;
+//			else
+//				continue;
+//		}
+//
+//		// push 'use instruction' only if it is not in the previous scc list
+//		if (std::find(scc.begin(), scc.end(), use) == scc.end()) {
+//			scc.push_back(use);
+//			//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+//			//	errs() << "     <- " << getValueStr(use) << "\n";
+//			if (!findSCC(scc, use))
+//				return false;
+//			//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+//			//	errs() << "     pop : " << getValueStr(scc.back()) << "\n";
+//			scc.pop_back();
+//		}
+//	}
+//	return true;
+//}
+
+void SchedulerDAG::findSCC(const BasicBlock* succ) {
 	for (BasicBlock::const_iterator si = succ->begin();
 	                                si != succ->end(); si++) {
 		const Instruction *def = si;
-		//errs() << "    INSTRUCTION:" << getValueStr(def) << "\n";
 		std::vector<const Instruction*> scc;
+		//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+		//	errs() << "    INSTRUCTION:" << getValueStr(def) << "\n";
+		if (!isa<PHINode>(def))
+			continue;
 		scc.push_back(def);
 		findSCC(scc, def);
 	}
 }
 
 void SchedulerDAG::insertSyncVoter(Function &F) {
-	// add voter to the instruction which has backward edges
-	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
-		errs() << "\n\n# DEBUG_TMR=3 - Backward Edges\n";
-	for (unsigned i = 0, e = BackEdges.size(); i != e; ++i) {
-		const BasicBlock *succ = BackEdges[i].second;
-		const BasicBlock *pred = BackEdges[i].first;
+	if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")>=5) {
+		// add voter with SCC decomposition algorithm
+		for (scc_iterator<Function *> I = scc_begin(&F); !I.isAtEnd(); ++I) {
+			const std::vector<BasicBlock *> &SCCBBs = *I;
+			if (SCCBBs.size()==1)
+				continue;
 
-		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
-			errs() << "  [" << i << "] " << getLabel(succ) << "<-" << getLabel(pred) << "\n";
-		findSCC(pred, succ);
+			// find SCC instructions
+			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
+				errs() << "  SCC(M):\n";
+			for (std::vector<BasicBlock *>::const_iterator BBI = SCCBBs.begin(),
+			                                               BBIE = SCCBBs.end();
+			    BBI != BBIE; ++BBI) {
+				if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
+					errs() << "    ->" << getLabel(*BBI) << "\n";
+				findSCC(*BBI);
+			}
+		}
+		for (unsigned i = 0, e = BackEdges.size(); i != e; ++i) {
+			const BasicBlock *succ = BackEdges[i].second;
+			const BasicBlock *pred = BackEdges[i].first;
+			if (pred == succ) {
+				if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1) {
+					errs() << "  SCC(S):\n";
+					errs() << "    ->" << getLabel(succ) << "\n";
+				}
+				findSCC(succ);
+			}
+		}
 
 		// When (SYNC_VOTER_MODE==6) setBackward() is performed after
 		// generateRTL phase, since all FSM state should be determined to
 		// calculate minimum latency between SCC Registers.
-		if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==5)
+		if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==5) {
 			insertSyncVoterWithSCC();
-		else if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")!=6)
+		}
+	} else {
+		// add voter to the instruction which has backward edges
+		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
+			errs() << "\n\n# DEBUG_TMR=3 - Backward Edges\n";
+
+		for (unsigned i = 0, e = BackEdges.size(); i != e; ++i) {
+			const BasicBlock *succ = BackEdges[i].second;
+			const BasicBlock *pred = BackEdges[i].first;
+
+			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
+				errs() << "  [" << i << "] " << getLabel(succ) << "<-" << getLabel(pred) << "\n";
+			findSCC(succ);
 			insertSyncVoter(pred, succ);
-	}
+		}
+	} //else
 
 	// FIXME
 	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)

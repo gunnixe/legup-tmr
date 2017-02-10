@@ -225,7 +225,10 @@ public:
 
 	// voter
 	void addSCC(std::vector<const Instruction*> scc);
-	void findSCC(const BasicBlock* pred, const BasicBlock* succ);
+	void addSCC(std::vector<const Instruction*> scc, const Instruction *use);
+	bool isSCCBB(const Instruction *def, const std::vector<BasicBlock *> SCCBBs);
+	bool isSCCInst(const Instruction *def);
+	void findSCC(const BasicBlock* succ);
 	void findSCC(std::vector<const Instruction*> scc, const Instruction *i2);
 	void insertSyncVoterWithSCC();
 	void insertSyncVoter(Function &F);

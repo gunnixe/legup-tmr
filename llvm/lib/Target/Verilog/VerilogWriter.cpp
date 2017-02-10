@@ -36,7 +36,7 @@ namespace legup {
 bool VerilogWriter::isTmrSig(const RTLSignal *sig) {
 	std::string type = sig->getType();
 	if (LEGUP_CONFIG->getParameterInt("TMR") &&
-	            (type == "reg" || type == "wire" || isMemSig(sig))) {
+	            (type=="reg" || type=="wire" || isMemSig(sig) || isModuleOutputSig(sig))) {
 		assert(currReplica=="0" || currReplica=="1" || currReplica=="2");
 		return true;
 	}
@@ -6079,8 +6079,16 @@ bool VerilogWriter::printReturnValSignals(bool return64, const Function *F,
 
 void VerilogWriter::printMainInstance(const bool usesPthreads) {
 
-    // instantiate main
+	// reducing voter for top
+	if (LEGUP_CONFIG->getParameterInt("TMR")) {
+		Out << "wire finish_r0, finish_r1, finish_r2;\n";
+		Out << "wire [31:0] return_val_r0, return_val_r1, return_val_r2;\n\n";
 
+		Out << "assign finish = (finish_r0==finish_r1)? finish_r0 : finish_r2;\n";
+		Out << "assign return_val = (return_val_r0==return_val_r1)? return_val_r0 : return_val_r2;\n\n";
+	}
+
+    // instantiate main
     if (alloc->getDbgInfo()->isDebugRtlEnabled()) {
         Out << "main #(." << DEBUG_PARAM_NAME_PARENT_INST << "(0)) main_inst("
             << "\n";
@@ -6118,11 +6126,20 @@ void VerilogWriter::printMainInstance(const bool usesPthreads) {
             << "\n";
     }
 
-    Out << "\t"
-        << ".finish( finish ),"
-        << "\n"
-        << "\t"
-        << ".return_val( return_val )";
+	if (LEGUP_CONFIG->getParameterInt("TMR")) {
+    	Out << "\t.finish_v0( finish_r0 ),\n"
+    	    << "\t.finish_v1( finish_r1 ),\n"
+    	    << "\t.finish_v2( finish_r2 ),\n"
+    	    << "\t.return_val_v0( return_val_r0 ),\n"
+    	    << "\t.return_val_v1( return_val_r1 ),\n"
+    	    << "\t.return_val_v2( return_val_r2 )";
+	} else {
+    	Out << "\t"
+    	    << ".finish( finish ),"
+    	    << "\n"
+    	    << "\t"
+    	    << ".return_val( return_val )";
+	}
 
     // if it uses Pthreads, the port names are appended with _arbiter_
     // this is because memory accesses for pthreads instances need to through
@@ -6615,11 +6632,19 @@ void VerilogWriter::printModuleHeader() {
     for (RTLModule::const_signal_iterator i = rtl->port_begin(),
                                           e = rtl->port_end();
                                           i != e; ++i) {
-		
-    	if (LEGUP_CONFIG->getParameterInt("TMR") && isMemSig(*i)) {
-        	Out << "\t" << (*i)->getName() << "_r0,";
-        	Out << "\t" << (*i)->getName() << "_r1,";
-        	Out << "\t" << (*i)->getName() << "_r2";
+
+    	if (LEGUP_CONFIG->getParameterInt("TMR")) {
+			if (isMemSig(*i)) {
+        		Out << "\t" << (*i)->getName() << "_r0,";
+        		Out << "\t" << (*i)->getName() << "_r1,";
+        		Out << "\t" << (*i)->getName() << "_r2";
+ 			} else if (isModuleOutputSig(*i)) {
+        		Out << "\t" << (*i)->getName() << "_v0,";
+        		Out << "\t" << (*i)->getName() << "_v1,";
+        		Out << "\t" << (*i)->getName() << "_v2";
+			} else {
+        		Out << "\t" << (*i)->getName();
+			}
 		} else {
         	Out << "\t" << (*i)->getName();
 		}
@@ -6834,11 +6859,19 @@ void VerilogWriter::printDeclaration(const RTLSignal *signal, bool testBench) {
     }
     Out << signal->getWidth().str() << " ";
 
-	if (LEGUP_CONFIG->getParameterInt("TMR") && isMemSig(signal)
-			&& (type=="output" || type=="input")) {
-    	Out << signal->getName() << "_r0, ";
-    	Out << signal->getName() << "_r1, ";
-    	Out << signal->getName() << "_r2";
+	if (LEGUP_CONFIG->getParameterInt("TMR") 
+			&& (type=="output" || type=="input" || type=="output reg")) {
+		if (isMemSig(signal)) {
+    		Out << signal->getName() << "_r0, ";
+    		Out << signal->getName() << "_r1, ";
+    		Out << signal->getName() << "_r2";
+		} else if (isModuleOutputSig(signal)) {
+    		Out << signal->getName() << "_v0, ";
+    		Out << signal->getName() << "_v1, ";
+    		Out << signal->getName() << "_v2";
+		} else {
+    		Out << signal->getName();
+		}
 	} else {
     	Out << signal->getName();
 	}
@@ -6945,6 +6978,26 @@ bool VerilogWriter::isBasicOperation(const RTLModule *rtl) {
 	if (name=="lpm_mult") return true;
 	if (name.find("altfp_") == 0) return true;
 
+	return false;
+}
+
+bool VerilogWriter::isSubModuleOutputSig(const RTLSignal *sig) {
+	//std::string finish = rtl->getName() + "_finish";
+	//std::string return_val = rtl->getName() + "_return_val";
+	//if (sig->getName().find("finish") != std::string::npos
+	//		|| sig->getName()==return_val) {
+	//	Out << finish << "\n";
+	//	return true;
+	//}
+	return false;
+}
+
+bool VerilogWriter::isModuleOutputSig(const RTLSignal *sig) {
+	if (rtl->getName()=="main_tb")
+		return false;
+	else if (sig->getName()=="finish"
+			|| sig->getName()=="return_val")
+		return true;
 	return false;
 }
 
@@ -7286,14 +7339,26 @@ void VerilogWriter::printRTL(const RTLModule *rtl) {
 	// print output port (signal)
 	useReplicaNumberForAllVariables = false;
 	Out << "\n\n//port drive\n";
+
     for (RTLModule::const_signal_iterator i = rtl->port_begin(),
                                           e = rtl->port_end();
          i != e; ++i) {
-    	if (LEGUP_CONFIG->getParameterInt("TMR") && isMemSig(*i)) {
+		if (LEGUP_CONFIG->getParameterInt("TMR") && isModuleOutputSig(*i)) {
+			std::string name = (*i)->getName();
+			std::string width = (*i)->getWidth().str();
+			Out << "reg " << width << " " << name << "_r0;\n";
+			Out << "reg " << width << " " << name << "_r1;\n";
+			Out << "reg " << width << " " << name << "_r2;\n";
+		}
+
+    	if (LEGUP_CONFIG->getParameterInt("TMR") &&
+				(isMemSig(*i) || isModuleOutputSig(*i))) {
 			useReplicaNumberForAllVariables = true;
 			for (int tmrIter=0; tmrIter<3; tmrIter++) {
 				currReplica = utostr(tmrIter);
 				printSignal(*i);
+				if (isModuleOutputSig(*i))
+					printVoter(*i);
 			}
 			useReplicaNumberForAllVariables = false;
 		} else {
@@ -7372,16 +7437,19 @@ void VerilogWriter::printModuleInstance(std::stringstream &Out,
         const RTLSignal *d = s->getDriver(0);
         assert(d && "Connection doesn't exist!\n");
 
-		if (LEGUP_CONFIG->getParameterInt("TMR") && isMemSig(s)) {
-        	Out << "\t." << s->getName() << "_r0 (";
+		std::string postfix = isModuleOutputSig(s)? "_v" :  "_r";
+
+		if (LEGUP_CONFIG->getParameterInt("TMR") &&
+				(isMemSig(s) || isModuleOutputSig(s))) {
+        	Out << "\t." << s->getName() << postfix << "0 (";
         	printValue(d, sigWidth, true);
         	Out << "_r0" << bitsForSignalAndModuleName(d, mod->getName());
         	Out << "),\n";
-        	Out << "\t." << s->getName() << "_r1 (";
+        	Out << "\t." << s->getName() << postfix << "1 (";
         	printValue(d, sigWidth, true);
         	Out << "_r1" << bitsForSignalAndModuleName(d, mod->getName());
         	Out << "),\n";
-        	Out << "\t." << s->getName() << "_r2 (";
+        	Out << "\t." << s->getName() << postfix << "2 (";
         	printValue(d, sigWidth, true);
         	Out << "_r2" << bitsForSignalAndModuleName(d, mod->getName());
         	Out << ")";
@@ -7900,12 +7968,12 @@ void VerilogWriter::printTmrSignal(const RTLSignal *sig, std::string postfix) {
 
 	//FIXME - module boundary is not triplicated
 	// boradcasting module's finish & return signal
-	if (postfix=="_r" && type=="wire" && requireBroadcasting(sig)) {
-		for(int i=0; i<3; i++) {
-			Out << "assign " << sig->getName() << "_r" << i
-			    << " = " << sig->getName() << ";\n";
-		}
-	}
+	//if (postfix=="_r" && type=="wire" && requireBroadcasting(sig)) {
+	//	for(int i=0; i<3; i++) {
+	//		Out << "assign " << sig->getName() << "_r" << i
+	//		    << " = " << sig->getName() << ";\n";
+	//	}
+	//}
 }
 
 bool VerilogWriter::requireBroadcasting(const RTLSignal *signal) {
@@ -7923,7 +7991,7 @@ bool VerilogWriter::requireBroadcasting(const RTLSignal *signal) {
 	return false;
 }
 
-void VerilogWriter::printVoter(const RTLSignal *signal) {
+void VerilogWriter::printVoter(const RTLSignal *signal, bool isTmrVoter) {
     if (signal->getNumDrivers() == 0)
         return;
 
@@ -7937,7 +8005,9 @@ void VerilogWriter::printVoter(const RTLSignal *signal) {
 	std::string r1 = bitWidthOne? sigName + "_r1" : sigName + "_r1[i]";
 	std::string r2 = bitWidthOne? sigName + "_r2" : sigName + "_r2[i]";
 	std::string defValue = (sigName=="cur_state")? "LEGUP_0" : "0";
-	std::string v = bitWidthOne? sigName : sigName + "[i]";
+
+	std::string prefix = (useReplicaNumberForAllVariables)? "_v"+currReplica : "";
+	std::string v = bitWidthOne? sigName + prefix : sigName + prefix + "[i]";
 
 	Out << "always @(*) begin\n";
 	if (!bitWidthOne)
@@ -8181,7 +8251,9 @@ std::string VerilogWriter::getTMRPostfix(const RTLSignal *sig) {
 			&& isSameBBFeedbackSig(sig)) {
 		postfix = "_v";
 	} else if (useReplicaNumberForAllVariables && isTmrSig(sig)) {
-		if (sig->driveFromVoter() || isLocalMemSignal(sig, true))
+		if (sig->driveFromVoter()
+				|| isSubModuleOutputSig(sig)
+				|| isLocalMemSignal(sig, true))
 			postfix = "_v" + currReplica;
 		else
 			postfix = "_r" + currReplica;

@@ -57,7 +57,7 @@ public:
 
 	// TMR
 	bool requireBroadcasting(const RTLSignal *signal);
-	void printVoter(const RTLSignal *signal);
+	void printVoter(const RTLSignal *signal, bool isTmrVoter=false);
 	void printTmrSignal(const RTLSignal *signal, std::string postfix);
 	void printTmrVoter(const std::string sigName, const std::string lo, const std::string hi,
 	        bool isRegVoter=false, bool isModuleBoundary=false);
@@ -236,6 +236,8 @@ private:
 	bool isStateSig(const RTLSignal *sig);
 	bool alwaysVoteMode(const RTLSignal *sig);
 	bool isMemSig(const RTLSignal *sig);
+	bool isModuleOutputSig(const RTLSignal *sig);
+	bool isSubModuleOutputSig(const RTLSignal *sig);
 	bool isMemInputSig(const RTLSignal *sig);
 	bool isMemOutputSig(const RTLSignal *sig);
 	bool isBBModuleSig(const RTLSignal *sig);

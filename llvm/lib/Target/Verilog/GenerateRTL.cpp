@@ -6632,16 +6632,26 @@ void GenerateRTL::updateBBModuleInputs() {
 
 void GenerateRTL::updateSyncVoterWithLatency(SchedulerDAG *dag) {
 	// update sync voter
-	//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
-	//	errs() << "\n\n# DEBUG_TMR=1 - SCC Update\n";
-	//unsigned cnt = 0;
+	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
+		errs() << "\n\n# DEBUG_TMR=3 - SCC Update\n";
+	unsigned cnt = 0;
 	for (std::vector<std::vector<const Instruction*> >::const_iterator i = dag->SCCs.begin(),
                                                                        e = dag->SCCs.end(); i != e; ++i) {
 		//FIXME
-		//errs() << "  SCCs[" << cnt++ << "]\n";
+		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
+			errs() << "  SCCs[" << cnt++ << "]\n";
 		std::vector<const Instruction*> scc = *i;
 		float partialDelay = 0.0;
-		const Instruction* minInst = NULL;
+		// Default minInst is changed from NULL to scc.back() since an SCC
+		// which contains Phi function can be treated as combinational loop.
+		// Actually in LegUp, when Phi function is determined to schedule in
+		// 'n' state, it is actually scheduled in 'n-1' state, which results
+		// in that phi signals always have the registered outputs.
+		// 
+		// Since this looks like have combinational loop, (instructions within
+		// SCCs are all same states), this situation causes conflict with
+		// following algorithm which finds minimum latency between SCC wires.
+		const Instruction* minInst = scc.back();
 		float minDelay = InstructionNode::getMaxDelay();
 		for (std::vector<const Instruction*>::const_iterator si = scc.begin(),
 		                                                     se = scc.end(); si != se; ++si) {
@@ -6654,10 +6664,14 @@ void GenerateRTL::updateSyncVoterWithLatency(SchedulerDAG *dag) {
 			State *currState = fsm->getStartState(instr);
 			State *nextState = fsm->getStartState(instr_next);
 
-			//errs() << "  " << getValueStr(instr) << " (D=" << ftostr(nodeDelay) << "ns)\n";
+			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
+				errs() << "  " << getValueStr(instr) << " (D=" << ftostr(nodeDelay) << "ns)\n";
 
 			if (currState != nextState) {
-				//errs() << "------------------------------------------- (Delay=" << ftostr(partialDelay) << ")\n";
+				if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3) {
+					errs() << "------------------------------------------- (Delay="
+					       << ftostr(partialDelay) << ")\n";
+				}
 				if (minDelay >= partialDelay) {
 					minDelay = partialDelay;
 					minInst = instr;
@@ -6666,7 +6680,7 @@ void GenerateRTL::updateSyncVoterWithLatency(SchedulerDAG *dag) {
 			}
 		}
 
-		assert(minInst);
+		//assert(minInst);
 		//errs() << "I: " << getValueStr(minInst) << ", D: " << ftostr(minDelay) <<  "\n";
 		Instruction *I = const_cast<Instruction*>(minInst);
 		InstructionNode *minNode = dag->getInstructionNode(I);

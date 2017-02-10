@@ -124,6 +124,8 @@ sub do_work {
 		chomp;
 		next if /^#/; #discard comments
 
+		#if($scenario_cnt==5) { $scenario_cnt++; next; }
+
 		if(m/^\d \d \d \d \d \d \d$/) {
 			@arg_list = split(/ /, $_, 7);
 			#my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram $clkmargin) = @arg_list; 
@@ -543,7 +545,7 @@ sub parse_generate_log {
 		} elsif(/^# DEBUG_TMR=1 - Partitioned signal/) {
 			$start_count = 0;
 		} elsif($start_count == 1) {
-			if(/ = phi /) {
+			if(/ = /) {
 				$fv_count++;
 			}
 		}
