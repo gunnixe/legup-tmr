@@ -413,16 +413,24 @@ bool SchedulerDAG::foundBackwardDependency(const Instruction *use, const Instruc
 void SchedulerDAG::insertSyncVoterWithSCC() {
 	for (std::vector<std::vector<const Instruction*> >::const_iterator i = SCCs.begin(),
                                                                        e = SCCs.end(); i != e; ++i) {
-		//FIXME
 		std::vector<const Instruction*> scc = *i;
 		for (std::vector<const Instruction*>::const_iterator si = scc.begin(),
 		                                                     se = scc.end(); si != se; ++si) {
 			const Instruction* instr = *si;
 			InstructionNode* iNode = getInstructionNode(const_cast<Instruction*>(instr));
-			if (isa<PHINode>(instr)) {
+
+			//FIXME
+			// The first node in SCC is the backward edge found with DFS, If
+			// we use SYNC_VOTER_MODE=2(or 3), it only finds subset of feedback edges
+			// since it only check the instructions within feedback BBs,
+			// and it does not find the instructions outside of feedback BBs.
+			// In the following code, it finds every feedback edges for all SCC
+			// instructions. And if we use condition, isa<PHINode>, it works as
+			// SYNC_VOTER_MODE=2. Otherwise it works as SYNC_VOTER_MODE=3
+			//if (isa<PHINode>(instr)) {
 				iNode->setBackward(true);//, *scc); //use(phi)
 				break;
-			}
+			//}
 		}
 	}
 } 

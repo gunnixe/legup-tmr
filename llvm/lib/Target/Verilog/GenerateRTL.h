@@ -152,6 +152,9 @@ public:
     }
 
 	// voter
+	void caseConditions(const RTLSignal *condition, std::vector<const Instruction *> &fsmSens);
+	void makeFSMSensitiveList(SchedulerDAG *dag, std::vector<const Instruction*> &fsmSens);
+	bool isFsmRelatedSignal(std::vector<const Instruction*> list, const Instruction* inst);
 	void updateSyncVoterWithLatency(SchedulerDAG *dag);
 	void updateVoterSignal(SchedulerDAG *dag);
 	void printDebugSignal(std::string chr);

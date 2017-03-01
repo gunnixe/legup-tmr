@@ -6611,12 +6611,12 @@ void GenerateRTL::updateBBModuleInputs() {
 		                                  e = (*bbm)->signals_end();
 		                                  i != e; ++i) {
 			RTLSignal *sig = *i;
-			unsigned numCondition = sig->getNumConditions();
-			if (numCondition == 0) { //single driver
+			unsigned numConditions = sig->getNumConditions();
+			if (numConditions == 0) { //single driver
     			RTLSignal *driver = sig->getDriver(0);
 				addSensitiveListToInput(*bbm, driver);
 			} else {
-				for (unsigned i=0; i<numCondition; ++i) {
+				for (unsigned i=0; i<numConditions; ++i) {
     				RTLSignal *driver = sig->getDriver(i);
 					addSensitiveListToInput(*bbm, driver);
 					//if (driver->getName()!="")
@@ -6630,7 +6630,66 @@ void GenerateRTL::updateBBModuleInputs() {
 	}
 }
 
+bool GenerateRTL::isFsmRelatedSignal(std::vector<const Instruction*> V, const Instruction* inst) {
+	if (std::find(V.begin(), V.end(), inst)!=V.end())
+		return true;
+
+	return false;
+}
+
+void GenerateRTL::caseConditions(const RTLSignal *condition,
+                                 std::vector<const Instruction*> &V) {
+    if (!condition->isOp())
+        return;
+
+    const RTLOp *op = (const RTLOp *)condition;
+
+    if (op->getOperand(0)->isOp())
+        caseConditions(op->getOperand(0), V);
+
+    if (op->getOperand(1)->isOp())
+        caseConditions(op->getOperand(1), V);
+
+    if (!op->getOperand(0)->isOp() && !op->getOperand(1)->isOp()) {
+
+        if ((op->getOperand(0)->getName() != "cur_state") &&
+            (op->getOperand(0)->getName() != "memory_controller_waitrequest") &&
+            (op->getOperand(0)->getName() != "reset") &&
+            (op->getOperand(0)->getName() != "start")) {
+			for (unsigned i=0; i < op->getNumOperands(); i++) {
+				const RTLSignal *s = op->getOperand(i);
+				if (s->getValue().empty()) {
+					const Instruction *inst = s->getInst(0);
+					if (std::find(V.begin(), V.end(), inst)==V.end())
+						V.push_back(inst);
+				}
+			}
+        }
+    }
+}
+
+void GenerateRTL::makeFSMSensitiveList(SchedulerDAG *dag, std::vector<const Instruction*> &fsmSens) {
+	const RTLSignal *curSig = rtl->getCurStateSignal();
+	assert(curSig);
+
+	unsigned numConditions = curSig->getNumConditions();
+	assert(numConditions > 0);
+	for (unsigned i=0; i<numConditions; ++i) {
+		const RTLSignal *condition = curSig->getCondition(i);
+		caseConditions(condition, fsmSens);
+	}
+
+	//for (std::vector<const Instruction*>::iterator i = fsmSens.begin();
+	//                                               i != fsmSens.end(); ++i) {
+	//	errs() << getValueStr(*i) << "\n";
+	//}
+}
+
 void GenerateRTL::updateSyncVoterWithLatency(SchedulerDAG *dag) {
+
+	std::vector<const Instruction*> FSMSensitiveList;
+	makeFSMSensitiveList(dag, FSMSensitiveList);
+
 	// update sync voter
 	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
 		errs() << "\n\n# DEBUG_TMR=3 - SCC Update\n";
@@ -6659,6 +6718,12 @@ void GenerateRTL::updateSyncVoterWithLatency(SchedulerDAG *dag) {
 			const Instruction* instr_next = si==scc.end()? scc.front() : *(si+1);
 			InstructionNode* iNode = dag->getInstructionNode(const_cast<Instruction*>(instr));
 			float nodeDelay = iNode->getDelay();
+
+			// Make max delay for the signal comes from FSM state since the FSM
+			// register already has a voter and it is likely to be a critical.
+			if (isFsmRelatedSignal(FSMSensitiveList, instr))
+				nodeDelay = InstructionNode::getMaxDelay();
+
 			partialDelay += nodeDelay;
 
 			State *currState = fsm->getStartState(instr);
@@ -6672,7 +6737,7 @@ void GenerateRTL::updateSyncVoterWithLatency(SchedulerDAG *dag) {
 					errs() << "------------------------------------------- (Delay="
 					       << ftostr(partialDelay) << ")\n";
 				}
-				if (minDelay >= partialDelay) {
+				if (minDelay > partialDelay) {
 					minDelay = partialDelay;
 					minInst = instr;
 				}
