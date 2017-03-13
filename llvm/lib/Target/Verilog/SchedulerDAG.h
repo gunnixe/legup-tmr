@@ -248,6 +248,9 @@ public:
                DenseMap<const BasicBlock *, int> &colorMap,
                std::vector<const BasicBlock *> &sortedBBs);
 	bool isSamePartition(std::vector<const BasicBlock *> path, const BasicBlock *useBB);
+	int maxFlow(Function &F);
+	Instruction* getTerminatorInstruction(Function &F);
+	Instruction* getStartInstruction(Function &F);
 
 	// TMR
 	SmallVector<std::pair<const BasicBlock*, const BasicBlock*>, 32> BackEdges;

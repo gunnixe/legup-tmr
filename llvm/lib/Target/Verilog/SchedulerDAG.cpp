@@ -783,6 +783,70 @@ bool SchedulerDAG::isBackwardEdge(std::pair<const BasicBlock*, const BasicBlock*
 	return false;
 }
 
+//int SchedulerDAG::bfsForAugmentingPath(int start, int target) {
+//	for(int u=0; u<n; u++) {
+//		color[u] = WHITE;
+//	}
+//	head = 0;
+//	tail = 0;
+//	enqueue(start);
+//	pred[start] = -1;
+//	while (head != tail) {
+//		u = dequeue();
+//		//Search all adjacent white nodes v. If the capacity from u to v in
+//		//the residual network is positive, enqueue v.
+//		for (int v=0; v<n; v++) {
+//			if (color[v] == WHITE && capacity[u][v] - flow[u][v]>0) {
+//				enqueue(v);
+//				pred[v] = u;
+//			}
+//		}
+//	}
+//	//If the color of the target node is black now, it means that we reached
+//	//it.
+//	return color[target]==BLACK;
+//}
+
+Instruction* SchedulerDAG::getStartInstruction(Function &F) {
+	BasicBlock *Entry = &F.getEntryBlock();
+	return Entry->begin();
+}
+
+Instruction* SchedulerDAG::getTerminatorInstruction(Function &F) {
+    for (Function::iterator b = F.begin(), be = F.end(); b != be; b++) {
+		TerminatorInst *TI = b->getTerminator();
+		if (isa<ReturnInst>(TI))
+			return TI;
+	}
+	return NULL;
+}
+
+int SchedulerDAG::maxFlow(Function &F) {
+	Instruction* sInst = getStartInstruction(F);
+	Instruction* tInst = getTerminatorInstruction(F);
+	assert(sInst);
+	assert(tInst);
+
+	errs() << " sInst: " << getLabel(sInst->getParent()) << "->" << getValueStr(sInst) << "\n";
+	errs() << " tInst: " << getLabel(tInst->getParent()) << "->" << getValueStr(tInst) << "\n";
+
+	//while (bfs(source, sink)) {
+	//	//Determin the amount by which we can increment the flow
+	//	int increment = INF;
+	//	for(int u=n-1; pred[u]>=0; u=pred[u]) {
+	//		increment = min(increment, capacity[pred[u]][u] - flow[pred[u]][u]);
+	//	}
+	//	//Now increment the flow
+	//	for(int u=n-1; pred[u]>=0; u=pred[u]) {
+	//		flow[pred[u]][u] += increment;
+	//		flow[u][pred[u]] -= increment;
+	//	}
+	//	max_flow += increment;
+	//}
+	////No aumenting path anymore. We are done.
+	return 0;//max_flow;
+}
+
 void SchedulerDAG::findAllPaths(std::vector<const BasicBlock *> path, const BasicBlock *current) {
 	path.push_back(current);
 
@@ -978,8 +1042,10 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
 		//findSCCBBs(F);
 		if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")!=0) {
 			findTopologicalBBList(F);
-		//} else if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==2) {
-		//	findAllPaths(F);
+		}
+		if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==2) {
+			//findAllPaths(F);
+			maxFlow(F);
 		}
 		insertPartitionVoter(F);
 	}
