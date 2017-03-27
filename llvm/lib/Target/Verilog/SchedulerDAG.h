@@ -23,6 +23,8 @@ namespace legup {
 class FiniteStateMachine;
 class LegupConfig;
 
+#define MAX_NODE 8192
+
 class BasicBlockNode {
 public:
 	BasicBlockNode (BasicBlock *B) : bb(B) {}
@@ -247,10 +249,51 @@ public:
 	bool recursiveDFSToposort(const BasicBlock *BB,
                DenseMap<const BasicBlock *, int> &colorMap,
                std::vector<const BasicBlock *> &sortedBBs);
-	bool isSamePartition(std::vector<const BasicBlock *> path, const BasicBlock *useBB);
-	int maxFlow(Function &F);
-	Instruction* getTerminatorInstruction(Function &F);
-	Instruction* getStartInstruction(Function &F);
+	bool isPredPartition(std::vector<const BasicBlock *> path, const BasicBlock *useBB);
+
+	// NetworkFlow Partitioning
+	void partitionBBs(Function &F);
+	bool bfs(int n, int start, int target, int capacity[][MAX_NODE], int flow[][MAX_NODE], int pred[]);
+	void dfs(int n, int capacity[][MAX_NODE], int flow[][MAX_NODE], int s, bool visited[]);
+	BasicBlock* isBBNode(DenseMap<BasicBlock*, int> bbMap, int idx);
+	Instruction* isInstNode(DenseMap<Instruction*, int> instMap, int idx);
+	int makeDFGBBGraph(Function &F, int capacity[][MAX_NODE],
+			DenseMap<Instruction*, int> &instMap, DenseMap<BasicBlock*, int> &bbMap,
+			int entryBB,
+			std::vector<Instruction*> storeInsts,
+			std::vector<BasicBlock*> bbs,
+			std::vector<BasicBlock*> startNodes,
+			std::vector<BasicBlock*> targetNodes);
+	BasicBlock* maxFlow(Function &F, int n, int start, int target,
+			int capacity[][MAX_NODE], int flow[][MAX_NODE],
+			DenseMap<Instruction*, int> &instMap, DenseMap<BasicBlock*, int> &bbMap,
+			std::vector<const BasicBlock*> &p0, std::vector<const BasicBlock*> &p1,
+			bool &frontMerge,
+			DenseMap<const BasicBlock*, int> bbArea,
+			std::vector<BasicBlock*> bbs,
+			std::vector<BasicBlock*> startNodes,
+			std::vector<BasicBlock*> targetNodes);
+	int initBBArea(Function &F, DenseMap<const BasicBlock*, int> &areaMap);
+	int getBBArea(std::vector<const BasicBlock*> bbs, DenseMap<const BasicBlock*, int> bbArea);
+	int getMinGraphSize(Function &F);
+	bool isBalanced(int totalArea, std::vector<const BasicBlock*> p0,
+			std::vector<const BasicBlock*> p1, DenseMap<const BasicBlock*, int> bbArea);
+	BasicBlock *getBoundaryBB(int boundaryEdge, int flow[][MAX_NODE],
+				DenseMap<Instruction*, int> &instMap, DenseMap<BasicBlock*, int> &bbMap,
+				bool frontMerge, int s, int n);
+	void setPartitions(BasicBlock *boundaryBB, bool frontMerge,
+			std::vector<BasicBlock*> &bbs,
+			std::vector<BasicBlock*> &startNodes,
+			std::vector<BasicBlock*> &targetNodes);
+	void conectDFGBB(int capacity[][MAX_NODE], Instruction *I,
+				DenseMap<Instruction*, int> instMap, DenseMap<BasicBlock*, int> bbMap,
+				std::vector<Instruction*> storeInsts);
+	int initMap(Function &F, DenseMap<Instruction*, int> &instMap,
+			std::vector<Instruction*> &storeInsts,
+			std::vector<BasicBlock*> &bbs);
+	bool skipInst(Instruction *I);
+	int getLimitAreaByPercentage(Function &F);
+	void findPartitionSignals();
 
 	// TMR
 	SmallVector<std::pair<const BasicBlock*, const BasicBlock*>, 32> BackEdges;
