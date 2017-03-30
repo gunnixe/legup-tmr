@@ -23,8 +23,6 @@ namespace legup {
 class FiniteStateMachine;
 class LegupConfig;
 
-#define MAX_NODE 8192
-
 class BasicBlockNode {
 public:
 	BasicBlockNode (BasicBlock *B) : bb(B) {}
@@ -209,6 +207,17 @@ private:
 /// @brief Legup Scheduler Memory Dependency Pass
 class SchedulerDAG {
 public:
+	typedef std::vector<const BasicBlock*> VBB;
+	typedef std::vector<const Instruction*> VINST;
+	typedef DenseMap<const BasicBlock*, int> MBB;
+	typedef DenseMap<const Instruction*, int> MINST;
+
+	#define INF 1000000000
+	#define MAX_NODE 2048
+
+	enum PART_STATE { PART_UNKNOWN=0, PART_S, PART_T,
+			PART_S_FINISH, PART_T_FINISH };
+
     SchedulerDAG () {}
     ~SchedulerDAG();
     bool runOnFunction(Function &F, Allocation *_alloc);
@@ -226,12 +235,11 @@ public:
     void printDFGDot(formatted_raw_ostream &out, BasicBlock *BB);
 
 	// voter
-	void addSCC(std::vector<const Instruction*> scc);
-	void addSCC(std::vector<const Instruction*> scc, const Instruction *use);
-	bool isSCCBB(const Instruction *def, const std::vector<BasicBlock *> SCCBBs);
+	void addSCC(VINST scc);
+	void addSCC(VINST scc, const Instruction *use);
 	bool isSCCInst(const Instruction *def);
 	void findSCC(const BasicBlock* succ);
-	void findSCC(std::vector<const Instruction*> scc, const Instruction *i2);
+	void findSCC(VINST scc, const Instruction *i2);
 	void insertSyncVoterWithSCC();
 	void insertSyncVoter(Function &F);
 	void insertSyncVoter(const BasicBlock* pred, const BasicBlock* succ);
@@ -246,8 +254,7 @@ public:
 	bool isBackwardEdge(std::pair<const BasicBlock*, const BasicBlock*> edge);
 	void insertPartitionVoter(Function &F);
 	void runToposort(const Function &F);
-	bool recursiveDFSToposort(const BasicBlock *BB,
-               DenseMap<const BasicBlock *, int> &colorMap,
+	bool recursiveDFSToposort(const BasicBlock *BB, MBB &colorMap,
                std::vector<const BasicBlock *> &sortedBBs);
 	bool isPredPartition(std::vector<const BasicBlock *> path, const BasicBlock *useBB);
 
@@ -255,52 +262,43 @@ public:
 	void partitionBBs(Function &F);
 	bool bfs(int n, int start, int target, int capacity[][MAX_NODE], int flow[][MAX_NODE], int pred[]);
 	void dfs(int n, int capacity[][MAX_NODE], int flow[][MAX_NODE], int s, bool visited[]);
-	BasicBlock* isBBNode(DenseMap<BasicBlock*, int> bbMap, int idx);
-	Instruction* isInstNode(DenseMap<Instruction*, int> instMap, int idx);
-	int makeDFGBBGraph(Function &F, int capacity[][MAX_NODE],
-			DenseMap<Instruction*, int> &instMap, DenseMap<BasicBlock*, int> &bbMap,
-			int entryBB,
-			std::vector<Instruction*> storeInsts,
-			std::vector<BasicBlock*> bbs,
-			std::vector<BasicBlock*> startNodes,
-			std::vector<BasicBlock*> targetNodes);
-	BasicBlock* maxFlow(Function &F, int n, int start, int target,
-			int capacity[][MAX_NODE], int flow[][MAX_NODE],
-			DenseMap<Instruction*, int> &instMap, DenseMap<BasicBlock*, int> &bbMap,
-			std::vector<const BasicBlock*> &p0, std::vector<const BasicBlock*> &p1,
-			bool &frontMerge,
-			DenseMap<const BasicBlock*, int> bbArea,
-			std::vector<BasicBlock*> bbs,
-			std::vector<BasicBlock*> startNodes,
-			std::vector<BasicBlock*> targetNodes);
-	int initBBArea(Function &F, DenseMap<const BasicBlock*, int> &areaMap);
-	int getBBArea(std::vector<const BasicBlock*> bbs, DenseMap<const BasicBlock*, int> bbArea);
+	const BasicBlock* isBBNode(int idx);
+	const Instruction* isInstNode(int idx);
+	int makeDFGBBGraph(int capacity[][MAX_NODE], int entryBB);
+	const BasicBlock* maxFlow(int n, int start, int target,
+			int capacity[][MAX_NODE], int flow[][MAX_NODE], VBB &p0, VBB &p1,
+			bool &frontMerge);
+	int initBBArea(Function &F);
+	int getBBArea(VBB blist);
+	int getBBArea(PART_STATE s);
 	int getMinGraphSize(Function &F);
-	bool isBalanced(int totalArea, std::vector<const BasicBlock*> p0,
-			std::vector<const BasicBlock*> p1, DenseMap<const BasicBlock*, int> bbArea);
-	BasicBlock *getBoundaryBB(int boundaryEdge, int flow[][MAX_NODE],
-				DenseMap<Instruction*, int> &instMap, DenseMap<BasicBlock*, int> &bbMap,
-				bool frontMerge, int s, int n);
-	void setPartitions(BasicBlock *boundaryBB, bool frontMerge,
-			std::vector<BasicBlock*> &bbs,
-			std::vector<BasicBlock*> &startNodes,
-			std::vector<BasicBlock*> &targetNodes);
-	void conectDFGBB(int capacity[][MAX_NODE], Instruction *I,
-				DenseMap<Instruction*, int> instMap, DenseMap<BasicBlock*, int> bbMap,
-				std::vector<Instruction*> storeInsts);
-	int initMap(Function &F, DenseMap<Instruction*, int> &instMap,
-			std::vector<Instruction*> &storeInsts,
-			std::vector<BasicBlock*> &bbs);
-	bool skipInst(Instruction *I);
+	bool isBalanced(int totalArea, VBB p0, VBB p1);
+	const BasicBlock *getBoundaryBB(int boundaryEdge, int flow[][MAX_NODE],
+				bool &frontMerge, int s, int n);
+	void setPartitions(const BasicBlock *boundaryBB, bool frontMerge);
+	void connectDFGBB(int capacity[][MAX_NODE], const Instruction *I, int s, int t);
+	int initMap(Function &F);
+	bool skipInst(const Instruction *I);
 	int getLimitAreaByPercentage(Function &F);
 	void findPartitionSignals();
+	bool checkAreaConstraint(bool frontMerge, const BasicBlock *boundaryBB,
+				VBB p0, VBB p1);
+	void pushPlist(VBB &plist, VBB pNodes);
+	void pushNewPartition(PART_STATE s);
+	void dumpNF(int capacity[][MAX_NODE], int n);
+	void dumpVBB(VBB blist, std::string str);
+	void dumpbbPartState(std::string str);
+	void dumpFlow(int flow[][MAX_NODE], int s, int t, int max_flow);
+
+	int getcArea() { return cArea; }
+	void setcArea(int a) { cArea = a; }
 
 	// TMR
 	SmallVector<std::pair<const BasicBlock*, const BasicBlock*>, 32> BackEdges;
-	std::queue<std::vector<const BasicBlock*> > DAGPaths;
-	std::vector<std::vector<const BasicBlock*> > Partitions;
+	std::queue<VBB> DAGPaths;
+	std::vector<VBB> Partitions;
 	Allocation *getAlloc() { return alloc; }
-	std::vector<std::vector<const Instruction*> > SCCs;
+	std::vector<VINST> SCCs;
 
 private:
     void regDataDeps(InstructionNode *iNode);
@@ -315,6 +313,18 @@ private:
     DenseMap<Instruction *, InstructionNode*> nodeLookup;
     DenseMap<BasicBlock *, BasicBlockNode*> bbNodeLookup;
     Allocation *alloc;
+
+	// TMR
+	MBB bbArea;
+	MBB bbMap;
+	MINST instMap;
+	VINST storeInsts;
+
+	MBB bbPartState;
+	VBB bbs;
+	//VBB startNodes;
+	//VBB targetNodes;
+	int cArea;
 };
 
 /// SchedulerMapping - Holds InstructionNode to state # mapping.

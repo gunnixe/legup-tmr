@@ -2,7 +2,7 @@
 
 use POSIX;
 
-my $DEST = output_ML605_actual_clock;
+my $DEST = output_part;
 my $START_CNT = 0;
 my $SYN_TOP = top;
 my $PNR_TOP = ML605;

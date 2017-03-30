@@ -33,9 +33,8 @@ using namespace legup;
 
 namespace legup {
 
-bool SchedulerDAG::recursiveDFSToposort(const BasicBlock *BB,
-			DenseMap<const BasicBlock *, int> &colorMap,
-			std::vector<const BasicBlock *> &sortedBBs) {
+bool SchedulerDAG::recursiveDFSToposort(const BasicBlock *BB, MBB &colorMap,
+			VBB &sortedBBs) {
 	colorMap[BB] = 1;
 	// For demonstration, using the lowest-level APIs here. A BB's
 	// successors are determined by looking at its terminator instruction.
@@ -69,9 +68,8 @@ void SchedulerDAG::runToposort(const Function &F) {
 	// Color marks per vertex (BB).
 	// Collects vertices (BBs) in "finish" order. The first finished vertex is
 	// first, and so on.
-	typedef std::vector<const BasicBlock *> BBVector;
-	DenseMap<const BasicBlock *, int> colorMap;
-	BBVector sortedBBs;
+	MBB colorMap;
+	VBB sortedBBs;
 
 	// Helper function to recursively run topological sorot from a given BB.
 	// Returns true if the sort succeeded and false otherwise; topological
@@ -90,7 +88,7 @@ void SchedulerDAG::runToposort(const Function &F) {
 	if (success) {
 		// Now we have all the BBs inside sortedBBs in reverse topological
 		// order.
-		for (BBVector::const_reverse_iterator RI = sortedBBs.rbegin(),
+		for (VBB::const_reverse_iterator RI = sortedBBs.rbegin(),
 		                                      RE = sortedBBs.rend();
 		                                      RI != RE; ++RI) {
 			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
@@ -318,7 +316,7 @@ void SchedulerDAG::updateDAGwithInst(Instruction *instr) {
     std::string opName = LEGUP_CONFIG->getOpNameFromInst(instr, alloc);
 	if (iNode->getPartition()
 			&& LEGUP_CONFIG->getParameterInt("TMR")
-			&& LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==2) {
+			&& LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")!=0) {
 		iNode->setAtMaxDelay();
 	} else if (opName.empty() || isMem(instr)) {
         if (isa<GetElementPtrInst>(instr)) {
@@ -411,10 +409,10 @@ bool SchedulerDAG::foundBackwardDependency(const Instruction *use, const Instruc
 }
 
 void SchedulerDAG::insertSyncVoterWithSCC() {
-	for (std::vector<std::vector<const Instruction*> >::const_iterator i = SCCs.begin(),
+	for (std::vector<VINST>::const_iterator i = SCCs.begin(),
                                                                        e = SCCs.end(); i != e; ++i) {
-		std::vector<const Instruction*> scc = *i;
-		for (std::vector<const Instruction*>::const_iterator si = scc.begin(),
+		VINST scc = *i;
+		for (VINST::const_iterator si = scc.begin(),
 		                                                     se = scc.end(); si != se; ++si) {
 			const Instruction* instr = *si;
 			InstructionNode* iNode = getInstructionNode(const_cast<Instruction*>(instr));
@@ -514,11 +512,11 @@ void SchedulerDAG::insertSyncVoter(const BasicBlock* pred, const BasicBlock* suc
 //   return true;
 //}
 
-void SchedulerDAG::addSCC(std::vector<const Instruction*> scc, const Instruction* use) {
-	std::vector<const Instruction*> found_scc;
+void SchedulerDAG::addSCC(VINST scc, const Instruction* use) {
+	VINST found_scc;
 	//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
 	//	errs() << "     Find!!\n";
-	for(std::vector<const Instruction*>::const_iterator i = std::find(scc.begin(), scc.end(), use),
+	for(VINST::const_iterator i = std::find(scc.begin(), scc.end(), use),
 	                                                    e = scc.end(); i!=e; ++i) {
 		found_scc.push_back(*i);
 		//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
@@ -527,15 +525,15 @@ void SchedulerDAG::addSCC(std::vector<const Instruction*> scc, const Instruction
 	addSCC(found_scc);
 }
 
-void SchedulerDAG::addSCC(std::vector<const Instruction*> scc) {
+void SchedulerDAG::addSCC(VINST scc) {
 
 	//FIXME - sorting may break the dependency order
 	bool isSameList = false;
 	std::sort(scc.begin(), scc.end());
 
-	for (std::vector<std::vector<const Instruction*> >::const_iterator i = SCCs.begin(),
+	for (std::vector<VINST>::const_iterator i = SCCs.begin(),
 	                                                                   e = SCCs.end(); i != e; ++i) {
-		std::vector<const Instruction*> currScc = *i;
+		VINST currScc = *i;
 		if (currScc.size() != scc.size())
 			continue;
 
@@ -545,9 +543,9 @@ void SchedulerDAG::addSCC(std::vector<const Instruction*> scc) {
 		//FIXME - need to modify with faster matching algorithm
 		//Method 2
 		//unsigned matchCount = 0;
-		//for (std::vector<const Instruction*>::const_iterator ci = currScc.begin(),
+		//for (VINST::const_iterator ci = currScc.begin(),
 		//                                                     ce = currScc.end(); ci != ce; ++ci) {
-		//	for (std::vector<const Instruction*>::const_iterator si = scc.begin(),
+		//	for (VINST::const_iterator si = scc.begin(),
 		//	                                                     se = scc.end(); si != se; ++si) {
 		//		if (*ci == *si) {
 		//			matchCount++;
@@ -573,27 +571,17 @@ void SchedulerDAG::addSCC(std::vector<const Instruction*> scc) {
 	}
 }
 
-bool SchedulerDAG::isSCCBB(const Instruction *def, const std::vector<BasicBlock *> SCCBBs) {
-	for (std::vector<BasicBlock *>::const_iterator BBI = SCCBBs.begin(),
-	                                               BBIE = SCCBBs.end();
-	                                               BBI != BBIE; ++BBI) {
-		if (*BBI == def->getParent())
-			return true;
-	}
-	return false;
-}
-
 bool SchedulerDAG::isSCCInst(const Instruction *def) {
-	for (std::vector<std::vector<const Instruction*> >::const_iterator i = SCCs.begin(),
-	                                                                   e = SCCs.end(); i != e; ++i) {
-		std::vector<const Instruction*> scc = *i;
+	for (std::vector<VINST>::const_iterator i = SCCs.begin(),
+	                                        e = SCCs.end(); i != e; ++i) {
+		VINST scc = *i;
 		if (scc.front()==def)
 			return true;
 	}
 	return false;
 }
 
-void SchedulerDAG::findSCC(std::vector<const Instruction*> scc, const Instruction *def) {
+void SchedulerDAG::findSCC(VINST scc, const Instruction *def) {
    	for (User::const_op_iterator i = def->op_begin(), e = def->op_end(); i != e; ++i) {
 		const Instruction *use = dyn_cast<Instruction>(*i);
 
@@ -617,7 +605,7 @@ void SchedulerDAG::findSCC(std::vector<const Instruction*> scc, const Instructio
 	}
 }
 
-//bool SchedulerDAG::findSCC(std::vector<const Instruction*> scc, const Instruction *def) {
+//bool SchedulerDAG::findSCC(VINST scc, const Instruction *def) {
 //   	for (User::const_op_iterator i = def->op_begin(), e = def->op_end(); i != e; ++i) {
 //		const Instruction *use = dyn_cast<Instruction>(*i);
 //		if (!use || isa<AllocaInst>(use))
@@ -636,7 +624,7 @@ void SchedulerDAG::findSCC(std::vector<const Instruction*> scc, const Instructio
 //			addSCC(scc);
 //			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
 //				errs() << "     Find!!\n";
-//			for (std::vector<const Instruction*>::const_iterator si = scc.begin(),
+//			for (VINST::const_iterator si = scc.begin(),
 //			                                                     ei = scc.end(); si != ei; ++si) {
 //				if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
 //					errs() << "         - " << getValueStr(*si) << "\n";
@@ -666,7 +654,7 @@ void SchedulerDAG::findSCC(const BasicBlock* succ) {
 	for (BasicBlock::const_iterator si = succ->begin();
 	                                si != succ->end(); si++) {
 		const Instruction *def = si;
-		std::vector<const Instruction*> scc;
+		VINST scc;
 		//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
 		//	errs() << "    INSTRUCTION:" << getValueStr(def) << "\n";
 		if (!isa<PHINode>(def))
@@ -680,16 +668,16 @@ void SchedulerDAG::insertSyncVoter(Function &F) {
 	if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")>=5) {
 		// add voter with SCC decomposition algorithm
 		for (scc_iterator<Function *> I = scc_begin(&F); !I.isAtEnd(); ++I) {
-			const std::vector<BasicBlock *> &SCCBBs = *I;
+			const std::vector<BasicBlock*> &SCCBBs = *I;
 			if (SCCBBs.size()==1)
 				continue;
 
 			// find SCC instructions
 			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
 				errs() << "  SCC(M):\n";
-			for (std::vector<BasicBlock *>::const_iterator BBI = SCCBBs.begin(),
-			                                               BBIE = SCCBBs.end();
-			    BBI != BBIE; ++BBI) {
+			for (std::vector<BasicBlock*>::const_iterator BBI = SCCBBs.begin(),
+					                                      BBIE = SCCBBs.end();
+			    	                                      BBI != BBIE; ++BBI) {
 				if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
 					errs() << "    ->" << getLabel(*BBI) << "\n";
 				findSCC(*BBI);
@@ -733,11 +721,11 @@ void SchedulerDAG::insertSyncVoter(Function &F) {
 	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
 		errs() << "\n\n# DEBUG_TMR=1 - SCC Instructions\n";
 	unsigned cnt = 0;
-	for (std::vector<std::vector<const Instruction*> >::const_iterator i = SCCs.begin(),
-	                                                                   e = SCCs.end(); i != e; ++i) {
-		std::vector<const Instruction*> scc = *i;
+	for (std::vector<VINST>::const_iterator i = SCCs.begin(),
+	                                        e = SCCs.end(); i != e; ++i) {
+		VINST scc = *i;
 		errs() << "  SCCs[" << cnt++ << "]\n";
-		for (std::vector<const Instruction*>::const_iterator ssi = scc.begin(),
+		for (VINST::const_iterator ssi = scc.begin(),
 		                                                     sse = scc.end(); ssi != sse; ++ssi) {
 			errs() << "  " << getValueStr(*ssi) << "\n";
 		}
@@ -750,13 +738,12 @@ void SchedulerDAG::findSCCBBs(Function &F) {
 	errs() << "SCCs for " << F.getName() << " in post-order:\n";
 	//for (scc_iterator<Function *> I = scc_begin(&F), IE = scc_end(&F); I != IE; ++I) {
 	for (scc_iterator<Function *> I = scc_begin(&F); !I.isAtEnd(); ++I) {
-		const std::vector<BasicBlock *> &SCCBBs = *I;
+		const std::vector<BasicBlock*> &SCCBBs = *I;
 		if (SCCBBs.size()==1)
 			continue;
 		errs() << "  SCC:\n";
-		for (std::vector<BasicBlock *>::const_iterator BBI = SCCBBs.begin(),
-		                                               BBIE = SCCBBs.end();
-		    BBI != BBIE; ++BBI) {
+		for (std::vector<BasicBlock*>::const_iterator BBI = SCCBBs.begin(),
+				BBIE = SCCBBs.end(); BBI != BBIE; ++BBI) {
 			errs() << "    ->" << getLabel(*BBI) << "\n";
 		}
 	}
@@ -812,34 +799,34 @@ bool SchedulerDAG::bfs(int n, int start, int target,
 			}
 		}
 	}
+	//fprintf(stderr, "---------------------------------------\n");
 	//fprintf(stderr, "         ");
-	//for(int i=0; i<n; i++)
-	//	fprintf(stderr, "%3d", i);
+	//for(int i=start; i<=target; i++)
+	//	fprintf(stderr, "%4d", i);
 	//fprintf(stderr, "\n");
 	//fprintf(stderr, "visited: ");
-	//for(int i=0; i<n; i++)
-	//	fprintf(stderr, "%3d", visited[i]);
+	//for(int i=start; i<=target; i++)
+	//	fprintf(stderr, "%4d", visited[i]);
 	//fprintf(stderr, "\n");
 	//fprintf(stderr, "pred   : ");
-	//for(int i=0; i<n; i++)
-	//	fprintf(stderr, "%3d", pred[i]);
+	//for(int i=start; i<=target; i++)
+	//	fprintf(stderr, "%4d", pred[i]);
 	//fprintf(stderr, "\n");
 	return (visited[target]==true);
 }
 
-void SchedulerDAG::conectDFGBB(int capacity[][MAX_NODE], Instruction *I,
-				DenseMap<Instruction*, int> instMap, DenseMap<BasicBlock*, int> bbMap,
-				std::vector<Instruction*> storeInsts) {
+void SchedulerDAG::connectDFGBB(int capacity[][MAX_NODE], const Instruction *Inst,
+			int s, int t) {
+	Instruction *I = const_cast<Instruction *>(Inst);
 	if (skipInst(I))
 		return;
 
-	BasicBlock *BB = I->getParent();
-	int s = bbMap[BB];
-	int t = instMap[I];
+	const BasicBlock *BB = I->getParent();
+	int b = bbMap[BB];
+	int i = instMap[I];
 
-	const int INF = 1000000000;
-	capacity[s][t] = INF;
-	capacity[t][t+1] = isa<LoadInst>(I)? INF : 1;
+	capacity[b][i] = INF;
+	capacity[i][i+1] = 1;//isa<LoadInst>(I)? INF : 1;
 	
 	for (User::op_iterator op = I->op_begin(), e = I->op_end(); op != e; ++op) {
 	    // we only care about operands that are created by other instructions
@@ -849,28 +836,31 @@ void SchedulerDAG::conectDFGBB(int capacity[][MAX_NODE], Instruction *I,
 	    if (!dep)// || isa<AllocaInst>(dep))
 	        continue;
 
-		if (BB != dep->getParent()) {
+		if (BB != dep->getParent() &&
+				(bbMap[dep->getParent()]!=s || bbMap[BB]!=t)) {
 			int c = instMap[dep];
-			capacity[c+1][s] = INF;
+			capacity[c+1][b] = INF;
 			//errs() << getValueStr(dep) << "->" << getLabel(I->getParent()) << "\n";
+			//errs() << bbMap[dep->getParent()] << "->" << b << "\n";
 		}
 	}
 
 	if (isa<LoadInst>(I)) {
-		for (std::vector<Instruction*>::iterator d = storeInsts.begin();
-		                                         d != storeInsts.end(); ++d) {
-			Instruction *dep = *d;
-        	if (hasDependencyAA(dep, I)) {
+		for (VINST::iterator d = storeInsts.begin();
+		                     d != storeInsts.end(); ++d) {
+			Instruction *dep = const_cast<Instruction *>(*d);
+        	if (hasDependencyAA(dep, I) &&
+				(bbMap[dep->getParent()]!=s || bbMap[BB]!=t)) {
 				int c = instMap[dep];
-				capacity[c+1][s] = INF;
+				capacity[c+1][b] = INF;
 				//errs() << getValueStr(I) << "<-" << getValueStr(dep) << "\n";
-				//errs() << c << "->" << d << "\n";
+				//errs() << bbMap[dep->getParent()] << "(LD)->" << b << "\n";
 			}
 		}
 	}
 }
 
-bool SchedulerDAG::skipInst(Instruction *I) {
+bool SchedulerDAG::skipInst(const Instruction *I) {
 	//if (isa<AllocaInst>(I))
 	//	return true;
 	if (isaDummyCall(I))
@@ -883,16 +873,11 @@ bool SchedulerDAG::skipInst(Instruction *I) {
 	return false;
 }
 
-int SchedulerDAG::makeDFGBBGraph(Function &F, int capacity[][MAX_NODE],
-			DenseMap<Instruction*, int> &instMap, DenseMap<BasicBlock*, int> &bbMap,
-			int entryBB,
-			std::vector<Instruction*> storeInsts,
-			std::vector<BasicBlock*> bbs,
-			std::vector<BasicBlock*> startNodes,
-			std::vector<BasicBlock*> targetNodes) {
+int SchedulerDAG::makeDFGBBGraph(int capacity[][MAX_NODE], int entryBB) {
 	//make graph
 	//int s, t;
-	int n = entryBB;
+	int n = entryBB;//+1;
+	bbMap.clear();
 	//int lastBB = 0;
 	//for (Function::iterator b = F.begin(); b != F.end(); ++b) {
     //    if (isEmptyFirstBB(b))
@@ -919,70 +904,99 @@ int SchedulerDAG::makeDFGBBGraph(Function &F, int capacity[][MAX_NODE],
 	//		n+=2;
 	//	}
 	//}
-	for (std::vector<BasicBlock*>::iterator b=bbs.begin(); b!=bbs.end(); ++b) {
+
+	for (VBB::iterator b = bbs.begin(); b != bbs.end(); ++b) {
 		bbMap[*b] = n++;
 	}
-	for (std::vector<BasicBlock*>::iterator b=startNodes.begin(); b!=startNodes.end(); ++b) {
-		bbMap[*b] = entryBB;
-	}
-	for (std::vector<BasicBlock*>::iterator b=targetNodes.begin(); b!=targetNodes.end(); ++b) {
-		bbMap[*b] = n-1;
-	}
+	//for (VBB::iterator b = bbs.begin(); b != bbs.end(); ++b) {
+	//	if (bbPartState[*b] == PART_UNKNOWN)
+	//		bbMap[*b] = n++;
+	//}
+	//bool lastExist = false;
+	//for (VBB::iterator b = bbs.begin(); b != bbs.end(); ++b) {
+	//	if (bbPartState[*b] == PART_S) {
+	//		bbMap[*b] = entryBB; 
+	//	} else if (bbPartState[*b] == PART_T) {
+	//		lastExist = true;
+	//		bbMap[*b] = n;
+	//	}
+	//}
+	//if (lastExist)
+	//	n++;
 
 	for(int i=0; i<n; i++)
 		for(int j=0; j<n; j++)
 			capacity[i][j] = 0;
 
-	for (Function::iterator b = F.begin(); b != F.end(); ++b) {
-        if (isEmptyFirstBB(b))
-			continue;
-		//if (boundaryBB != NULL && getLabel(b) == getLabel(boundaryBB))
+	// make INF path within merged nodes
+	for (VBB::iterator b = bbs.begin(); b != bbs.end(); ++b) {
+		int bbIdx = bbMap[*b];
+		int state = bbPartState[*b];
+		if (state==PART_S || state==PART_S_FINISH)
+			capacity[entryBB][bbIdx] = INF;
+		else if (state==PART_T || state==PART_T_FINISH)
+			capacity[bbIdx][n-1] = INF;
+	}
+
+	for (VBB::iterator b = bbs.begin(); b != bbs.end(); ++b) {
+		//int state = bbPartState[*b];
+		//if (state==PART_S_FINISH || state==PART_T_FINISH)
 		//	continue;
-		for (BasicBlock::iterator i = (*b).begin(); i != (*b).end(); ++i) {
-			conectDFGBB(capacity, (Instruction*)i, instMap, bbMap, storeInsts);
+		for (BasicBlock::const_iterator i = (*b)->begin(); i != (*b)->end(); ++i)
+			connectDFGBB(capacity, i, entryBB, n-1);
+	}
+
+	//dumpNF(capacity, n);
+	assert(n<MAX_NODE);
+
+	return n;
+}
+
+void SchedulerDAG::dumpFlow(int flow[][MAX_NODE], int s, int t, int max_flow) {
+	int resi[MAX_NODE][MAX_NODE];
+	for (int i=0; i<=t; i++) {
+		for (int j=0; j<=t; j++) {
+			resi[i][j] = flow[i][j];
 		}
 	}
-	//t = 1;
-	//if(boundaryBB) {
-	//	for (BasicBlock::iterator i = boundaryBB->begin(); i != boundaryBB->end(); ++i) {
-	//		conectDFGBB(lastBB, lastInst, capacity, (Instruction*)i, instMap, bbMap);
-	//	}
-	//}
-	//for (std::vector<BasicBlock*>::iterator b=bbs.begin(); b!=bbs.end(); ++b) {
-	//	t = 1;
-	//	for (BasicBlock::iterator i = (*b)->begin(); i != (*b)->end(); ++i) {
-	//		conectDFGBB(s, t, capacity, (Instruction*)i, instMap, bbMap);
-	//	}
-	//	s += t;
-	//}
-	//for (std::vector<BasicBlock*>::iterator b=startNodes.begin();
-	//                                        b!=startNodes.end(); ++b) {
-	//	for (BasicBlock::iterator i = (*b)->begin(); i != (*b)->end(); ++i) {
-	//		conectDFGBB(0, t, capacity, (Instruction*)i, instMap, bbMap);
-	//	}
-	//}
-	//for (std::vector<BasicBlock*>::iterator b=targetNodes.begin();
-	//                                        b!=targetNodes.end(); ++b) {
-	//	for (BasicBlock::iterator i = (*b)->begin(); i != (*b)->end(); ++i) {
-	//		conectDFGBB(lastBB, t, capacity, (Instruction*)i, instMap, bbMap);
-	//	}
-	//}
 
-	//errs() << "\n# basicblock\n";
-	//for (Function::iterator b = F.begin(); b != F.end(); ++b) {
-    //    if (isEmptyFirstBB(b))
-	//		continue;
+	for (int i=0; i<max_flow; i++) {
+		fprintf(stderr, "max_flow[%d]\n", i);
+		std::queue<int> q;
+		int k = s;
+		q.push(k);
+		while (k != t) {
+			for (int j=0; j<=t; j++) {
+				if (resi[k][j]>0) {
+					resi[k][j]--;
+					k = j;
+					q.push(k);
+				}
+			}
+		}
 
-	//	fprintf(stderr, "[%2d]  ", bbMap[b]);
-	//	errs() << getLabel(b) << "\n";
-	//}
+		while (!q.empty()) {
+			int k = q.front();
+			const BasicBlock *b = isBBNode(k);
+			if (b) {
+				errs() << " - [" << bbMap[b] << "] " << getLabel(b) << "\n";
+			}
+			q.pop();
+		}
+	}
+}
+
+void SchedulerDAG::dumpNF(int capacity[][MAX_NODE], int n) {
+	errs() << "\n# basicblock\n";
+	for (VBB::iterator b = bbs.begin(); b != bbs.end(); ++b) {
+		fprintf(stderr, "[%2d]  ", bbMap[*b]);
+		errs() << getLabel(*b);
+		fprintf(stderr, " (%d)\n", bbArea[*b]);
+	}
 
 	//errs() << "\n# instruction\n";
-	//for (Function::iterator b = F.begin(); b != F.end(); ++b) {
-    //    if (isEmptyFirstBB(b))
-	//		continue;
-
-	//	for (BasicBlock::iterator i = (*b).begin(); i != (*b).end(); ++i) {
+	//for (VBB::iterator b = bbs.begin(); b != bbs.end(); ++b) {
+	//	for (BasicBlock::const_iterator i = (*b)->begin(); i != (*b)->end(); ++i) {
 	//		if (skipInst(i))
 	//			continue;
 	//		fprintf(stderr, "[%2d]", instMap[i]);
@@ -990,7 +1004,6 @@ int SchedulerDAG::makeDFGBBGraph(Function &F, int capacity[][MAX_NODE],
 	//	}
 	//}
 
-	//const int INF = 1000000000;
 	//errs() << "\n# capacity[n][n]\n";
 	//fprintf(stderr, "     ");
 	//for(int i=0; i<n; i++)
@@ -1005,59 +1018,64 @@ int SchedulerDAG::makeDFGBBGraph(Function &F, int capacity[][MAX_NODE],
 	//	}
 	//	errs() << "\n";
 	//}
-	assert(n<MAX_NODE);
-
-	return n;
 }
 
-int SchedulerDAG::initBBArea(Function &F, DenseMap<const BasicBlock*, int> &areaMap) {
+int SchedulerDAG::initBBArea(Function &F) {
 	unsigned totalArea = 0;
+	int maxArea = LEGUP_CONFIG->getParameterInt("PARTITION_AREA_CONSTRAINT");
+
+	errs() << "\n# BB area\n";
 	for (Function::iterator b = F.begin(); b != F.end(); ++b) {
         if (isEmptyFirstBB(b))
 			continue;
 
-		int bbArea = 0;
+		int pArea = 0;
 		for (BasicBlock::iterator i = (*b).begin(); i != (*b).end(); ++i) {
-			bbArea += getInstructionArea(i);
+			pArea += getInstructionArea(i);
 		}
-		areaMap[b] = bbArea;
-		totalArea += bbArea;
+		bbArea[b] = pArea;
+		if (maxArea < pArea)
+			maxArea = pArea;
+		
+		errs() << "    " << getLabel(b) << "(" << bbArea[b] << ")\n";
+		
+		totalArea += pArea;
 	}
+	setcArea(maxArea);
 
 	return totalArea;
 }
 
-int SchedulerDAG::getBBArea(std::vector<const BasicBlock*> bbs, DenseMap<const BasicBlock*, int> bbArea) {
+int SchedulerDAG::getBBArea(VBB blist) {
 	int pArea = 0;
-	for(std::vector<const BasicBlock*>::iterator b=bbs.begin(); b!=bbs.end(); ++b)
+	for(VBB::iterator b=blist.begin(); b!=blist.end(); ++b)
 		pArea += bbArea[*b];
 
 	return pArea;
 }
 
-bool SchedulerDAG::isBalanced(int totalArea,
-			std::vector<const BasicBlock*> p0,
-			std::vector<const BasicBlock*> p1,
-			DenseMap<const BasicBlock*, int> bbArea) {
-	//static int i = 0;
-	//return i++==2;
-	int param = LEGUP_CONFIG->getParameterInt("PART_AREA_MARGIN_PERCENTAGE"); //default 25% margin
-	int margin = (totalArea/2)*param/100;
-	fprintf(stderr, "threadhold(%d) = totalArea(%d)/2 + margin(%d)\n",
-			totalArea/2+margin, totalArea, margin);
+bool SchedulerDAG::isBalanced(int totalArea, VBB p0, VBB p1) {
+	//int param = LEGUP_CONFIG->getParameterInt("PART_AREA_MARGIN_PERCENTAGE"); //default 25% margin
+	int cArea = getcArea();LEGUP_CONFIG->getParameterInt("PARTITION_AREA_CONSTRAINT");
+	//int margin = (totalArea/2)*cArea/100;
+	//fprintf(stderr, "threadhold(%d) = totalArea(%d)/2 + margin(%d)\n",
+	//		totalArea/2+margin, totalArea, margin);
 
-	int p0Area = getBBArea(p0, bbArea);
-	int p1Area = getBBArea(p1, bbArea);
-	errs() << "p0Area= " << p0Area << "\n";
-	errs() << "p1Area= " << p1Area << "\n";
+	int p0Area = getBBArea(p0);
+	int p1Area = getBBArea(p1);
+	//errs() << "p0Area= " << p0Area << "\n";
+	//errs() << "p1Area= " << p1Area << "\n";
 
-	if (totalArea/2 + margin < p0Area)
-		return false;
+	//if (totalArea/2 + margin < p0Area)
+	//	return false;
+	//if (totalArea/2 + margin < p1Area)
+	//	return false;
+	//return true;
 
-	if (totalArea/2 + margin < p1Area)
-		return false;
+	if (p0Area<cArea && p1Area<cArea)
+		return true;
 
-	return true;
+	return false;
 }
 
 int SchedulerDAG::getMinGraphSize(Function &F) {
@@ -1073,40 +1091,66 @@ int SchedulerDAG::getMinGraphSize(Function &F) {
 	return instCount*2 + 2;
 }
 
-BasicBlock *SchedulerDAG::getBoundaryBB(int boundaryEdge, int flow[][MAX_NODE],
-				DenseMap<Instruction*, int> &instMap, DenseMap<BasicBlock*, int> &bbMap,
-				bool frontMerge, int s, int n) {
-	BasicBlock *boundaryBB;
-
+const BasicBlock *SchedulerDAG::getBoundaryBB(int boundaryEdge,
+				int flow[][MAX_NODE], bool &frontMerge, int s, int n) {
 	if (boundaryEdge==-1 || n==0)
 		return NULL;
 
-	if (frontMerge) {
-		for(int j=s; j<n; j++) {
-			if(flow[boundaryEdge+1][j]>0) {
-				//errs() << "boundaryBB(nodeMap) = " << j << "\n";
-				boundaryBB = isBBNode(bbMap, j);
-				assert(boundaryBB);
+	const Instruction *inst = isInstNode(boundaryEdge);
+
+	const BasicBlock *succ = NULL;
+	for(int j=s; j<n; j++) {
+		if(flow[boundaryEdge+1][j]>0) {
+			succ = isBBNode(j);
+			if (bbPartState[succ]==PART_UNKNOWN) {
 				break;
 			}
 		}
-	} else {
-		Instruction *inst = isInstNode(instMap, boundaryEdge);
-		assert(inst);
-		boundaryBB = inst->getParent();
 	}
-	return boundaryBB;
+
+	const BasicBlock *pred = inst->getParent();
+
+	//errs() << "predBB: " << getLabel(pred) << "\n";
+	//errs() << "boundaryEdge: " << getValueStr(inst) << "\n";
+	//errs() << "succBB: " << getLabel(succ) << "\n";
+
+	if (frontMerge && bbPartState[succ]==PART_UNKNOWN) {
+		return succ;
+	} else if (bbPartState[pred]==PART_UNKNOWN) {
+		frontMerge = false;
+		return pred;
+	}
+
+	return NULL;
 }
 
-int SchedulerDAG::initMap(Function &F, DenseMap<Instruction*, int> &instMap,
-			std::vector<Instruction*> &storeInsts,
-			std::vector<BasicBlock*> &bbs) {
+void SchedulerDAG::dumpbbPartState(std::string str) {
+	int sArea = 0;
+	int tArea = 0;
+	errs() << "\n#" << str << "\n";
+	for (VBB::iterator b = bbs.begin(); b != bbs.end(); ++b) {
+		errs() << "[" << bbMap[*b] << "] = " << bbPartState[*b]
+		       << " " << getLabel(*b) << "\n";
+		if (bbPartState[*b]==PART_S)
+			sArea += bbArea[*b];
+		else if (bbPartState[*b]==PART_T)
+			tArea += bbArea[*b];
+	}
+	errs() << "sArea=" << sArea << ", tArea=" << tArea << "\n";
+}
+
+int SchedulerDAG::initMap(Function &F) {
 	int n=0;
 	for (Function::iterator b = F.begin(); b != F.end(); ++b) {
         if (isEmptyFirstBB(b))
 			continue;
 
 		bbs.push_back(b);
+		//if (n==0) {
+		//	bbPartState[b] = PART_S;
+		//} else {
+			bbPartState[b] = PART_UNKNOWN;
+		//}
 
 		for (BasicBlock::iterator i = (*b).begin(); i != (*b).end(); ++i) {
 			if (skipInst(i))
@@ -1121,57 +1165,117 @@ int SchedulerDAG::initMap(Function &F, DenseMap<Instruction*, int> &instMap,
 	return n;
 }
 
+int SchedulerDAG::getBBArea(PART_STATE s) {
+	int area = 0;
+	for (VBB::iterator b=bbs.begin(); b!=bbs.end(); ++b) {
+		if (bbPartState[*b] == s)
+			area += bbArea[*b];
+	}
+	return area;
+}
+
+bool SchedulerDAG::checkAreaConstraint(bool frontMerge,
+			const BasicBlock *boundaryBB, VBB p0, VBB p1) {
+	assert(boundaryBB);
+	int cArea = getcArea();
+
+	// merge start and target nodes
+	if (getBBArea(p0) < cArea) {
+		for (VBB::iterator b=p0.begin(); b!=p0.end(); ++b)
+			bbPartState[*b] = PART_S;
+	} else if (getBBArea(p1) < cArea) {
+		for (VBB::iterator b=p1.begin(); b!=p1.end(); ++b)
+			bbPartState[*b] = PART_T;
+	}
+
+	if (frontMerge) {
+		if (getBBArea(PART_S)+bbArea[boundaryBB] > cArea) {
+			pushNewPartition(PART_S);
+			return true;
+		} else {
+			bbPartState[boundaryBB] = PART_S;
+		}
+	} else {
+		if (getBBArea(PART_T)+bbArea[boundaryBB] > cArea) {
+			pushNewPartition(PART_T);
+			return true;
+		} else {
+			bbPartState[boundaryBB] = PART_T;
+		}
+	}
+	
+	return false;
+}
+
+void SchedulerDAG::dumpVBB(VBB blist, std::string str) {
+	int area = 0;
+	errs() << str << ": ";
+	for (VBB::iterator b=blist.begin(); b!=blist.end(); ++b) {
+		errs() << getLabel(*b) << " - ";
+		area += bbArea[*b];
+	}
+	errs() << "(" << area << ")\n";
+}
+
 void SchedulerDAG::partitionBBs(Function &F) {
 	//Ford-Fulkerson Algorithm source from
 	//http://aduni.org/courses/algorithms/courseware/handouts/Reciation_09.html
 
 	int capacity[MAX_NODE][MAX_NODE];
 	int flow[MAX_NODE][MAX_NODE];
-	DenseMap<Instruction*, int> instMap;
-	DenseMap<BasicBlock*, int> bbMap;
-	DenseMap<const BasicBlock*, int> bbArea;
 	int n = 0;
 
+	bbPartState.clear();
+	//bbs.clear();
+	//startNodes.clear();
+	//targetNodes.clear();
+	storeInsts.clear();
+	bbArea.clear();
+	bbMap.clear();
+	instMap.clear();
+
 	// 2-way partition
-	int totalArea = initBBArea(F, bbArea);
+	int totalArea = initBBArea(F);
 	//int minGraphSize = getMinGraphSize(F);
 	//int boundaryEdge = -1;
-	std::vector<const BasicBlock*> p0;
-	std::vector<const BasicBlock*> p1;
+	VBB p0;
+	VBB p1;
 	//int start = 0;
 	//int target = 0;
 	int entryBB = 0;
-	std::vector<BasicBlock*> bbs;
-	std::vector<BasicBlock*> startNodes;
-	std::vector<BasicBlock*> targetNodes;
-	std::vector<Instruction*> storeInsts;
 
-	entryBB = initMap(F, instMap, storeInsts, bbs);
-	if (bbs.size()==1) {
+	entryBB = initMap(F);
+	int nodeSize = bbPartState.size();
+	if (nodeSize==1) {
 		return;
 	}
 
 	int itrCount = 0;
-	int nodeSize = bbs.size();
-	BasicBlock *boundaryBB = NULL;
+	const BasicBlock *boundaryBB = NULL;
 	bool frontMerge;
 	do {
-		n = makeDFGBBGraph(F, capacity, instMap, bbMap, entryBB,
-					storeInsts, bbs, startNodes, targetNodes);
+		n = makeDFGBBGraph(capacity, entryBB);
 
 		//errs() << "LastInst = " << target << "\n";
 		//if (n<=minGraphSize) {
 		//	errs() << "Error: Fail to find balanced partitioning\n";
 		//	break;
 		//}
-		boundaryBB = maxFlow(F, n, entryBB, n-1, capacity, flow, instMap, bbMap,
-				p0, p1, frontMerge, bbArea, bbs, startNodes, targetNodes);
+		boundaryBB = maxFlow(n, entryBB, n-1, capacity, flow, 
+				p0, p1, frontMerge);
+		if (boundaryBB) {
+			errs() << "*boundaryBB= " << getLabel(boundaryBB) << "\n";
+			errs() << "*frontMerge= " << frontMerge << "\n";
+		}
 
-		if (isBalanced(totalArea, p0, p1, bbArea)) {
+		if (isBalanced(totalArea, p0, p1)) {
+			Partitions.push_back(p0);
+			Partitions.push_back(p1);
 			break;
 		}
-		if (bbs.empty() || boundaryBB==NULL) {
-			errs() << "Error: exit without balanced partitioning\n";
+		if (boundaryBB == NULL) {
+			pushNewPartition(PART_S);
+			pushNewPartition(PART_T);
 			break;
 		}
 		//if (bbMap[boundaryBB]==entryBB) {
@@ -1183,38 +1287,48 @@ void SchedulerDAG::partitionBBs(Function &F) {
 		//	break;
 		//}
 
-		setPartitions(boundaryBB, frontMerge, bbs, startNodes, targetNodes);
+		checkAreaConstraint(frontMerge, boundaryBB, p0, p1);
+		//setPartitions(boundaryBB, frontMerge);
 	} while( itrCount++ < nodeSize );
-
-	Partitions.push_back(p0);
-	Partitions.push_back(p1);
 }
 
-void SchedulerDAG::setPartitions(BasicBlock *boundaryBB, bool frontMerge,
-			std::vector<BasicBlock*> &bbs,
-			std::vector<BasicBlock*> &startNodes,
-			std::vector<BasicBlock*> &targetNodes) {
-	errs() << "boundaryBB= " << getLabel(boundaryBB) << "\n";
-	bbs.erase(std::find(bbs.begin(), bbs.end(), boundaryBB));
-	if (frontMerge) {
-		startNodes.push_back(boundaryBB);
-	} else {
-		targetNodes.push_back(boundaryBB);
+void SchedulerDAG::pushNewPartition(PART_STATE s) {
+	VBB pNodes;
+	for (VBB::iterator b = bbs.begin(); b != bbs.end(); ++b) {
+		if (bbPartState[*b] == s) {
+			pNodes.push_back(*b);
+			bbPartState[*b] = (s==PART_S)? PART_S_FINISH : PART_T_FINISH;
+		}
+	}
+	dumpVBB(pNodes, "#PushPartitions");
+	Partitions.push_back(pNodes);
+}
+
+void SchedulerDAG::pushPlist(VBB &plist, VBB pNodes) {
+	for (VBB::iterator b=pNodes.begin(); b!=pNodes.end(); ++b) {
+		plist.push_back(*b);
 	}
 }
 
-BasicBlock* SchedulerDAG::maxFlow(Function &F, int n, int start, int target,
+//void SchedulerDAG::setPartitions(const BasicBlock *boundaryBB, bool frontMerge) {
+//	if (boundaryBB==NULL)
+//		return;
+//
+//	bbs.erase(std::find(bbs.begin(), bbs.end(), boundaryBB));
+//	if (frontMerge) {
+//		startNodes.push_back(boundaryBB);
+//	} else {
+//		targetNodes.push_back(boundaryBB);
+//	}
+//}
+
+const BasicBlock* SchedulerDAG::maxFlow(int n, int start, int target,
 			int capacity[][MAX_NODE], int flow[][MAX_NODE],
-			DenseMap<Instruction*, int> &instMap, DenseMap<BasicBlock*, int> &bbMap,
-			std::vector<const BasicBlock*> &p0, std::vector<const BasicBlock*> &p1,
-			bool &frontMerge,
-			DenseMap<const BasicBlock*, int> bbArea,
-			std::vector<BasicBlock*> bbs,
-			std::vector<BasicBlock*> startNodes,
-			std::vector<BasicBlock*> targetNodes) {
-	const int INF = 1000000000;
+			VBB &p0, VBB &p1,
+			bool &frontMerge) {
 	int pred[MAX_NODE];
 	//int boundaryEdge = -1;
+	const BasicBlock* boundaryBB = NULL;
 
 	int max_flow = 0;
 	for(int i=0; i<n; i++)
@@ -1238,7 +1352,9 @@ BasicBlock* SchedulerDAG::maxFlow(Function &F, int n, int start, int target,
 	}
 	//No aumenting path anymore. We are done.
 
-	//fprintf(stderr, "\n# flow(%d->%d) (maxflow=%d)\n", start, target, max_flow);
+	dumpbbPartState("bb states");
+	fprintf(stderr, "\n# flow(%d->%d) (maxflow=%d)\n", start, target, max_flow);
+	//dumpFlow(flow, start, target, max_flow);
 	//fprintf(stderr, "     ");
 	//for(int i=0; i<n; i++)
 	//	fprintf(stderr, "%d ", i%10);
@@ -1258,62 +1374,79 @@ BasicBlock* SchedulerDAG::maxFlow(Function &F, int n, int start, int target,
 		visited[i] = false;
 	dfs(target, capacity, flow, start, visited);
 
+	//fprintf(stderr, "---------------------------------------\n");
+	//fprintf(stderr, "         ");
+	//for(int i=start; i<=target; i++)
+	//	fprintf(stderr, "%4d", i);
+	//fprintf(stderr, "\n");
+	//fprintf(stderr, "visited: ");
+	//for(int i=start; i<=target; i++)
+	//	fprintf(stderr, "%4d", visited[i]);
+	//fprintf(stderr, "\n");
+
 	p0.clear();
 	p1.clear();
-	for (Function::iterator b = F.begin(); b != F.end(); ++b) {
-        if (isEmptyFirstBB(b))
-			continue;
-		int idx = bbMap[b];
+	for (VBB::iterator b = bbs.begin(); b != bbs.end(); ++b) {
+		int idx = bbMap[*b];
 		if (visited[idx])
-			p0.push_back(b);
+			p0.push_back(*b);
 		else
-			p1.push_back(b);
+			p1.push_back(*b);
 	}
-	//for(std::vector<BasicBlock*>::iterator b=startNodes.begin();
+	//for(VBB::iterator b=startNodes.begin();
 	//                                             b!=startNodes.end(); ++b) {
 	//	errs() << "s: " << getLabel(*b) << "\n";
 	//	if(std::find(p0.begin(), p0.end(), *b)==p0.end())
 	//		p0.push_back(*b);
 	//}
-	//for(std::vector<BasicBlock*>::iterator b=targetNodes.begin();
+	//for(VBB::iterator b=targetNodes.begin();
 	//                                             b!=targetNodes.end(); ++b) {
 	//	errs() << "t: " << getLabel(*b) << "\n";
 	//	if(std::find(p1.begin(), p1.end(), *b)==p1.end())
 	//		p1.push_back(*b);
 	//}
 
-	errs() << "----part 1----\n";
-	for(std::vector<const BasicBlock*>::iterator b = p0.begin(); b != p0.end(); ++b)
-		errs() << " - " << getLabel(*b);
-	errs() << "\n";
+	errs() << "----part 1---- " << getBBArea(p0) << "/" << getcArea() << "\n";
+	for(VBB::iterator b = p0.begin(); b != p0.end(); ++b)
+		errs() << "  - " << getLabel(*b) << "\n";
 
-	errs() << "----part 2----\n";
-	for(std::vector<const BasicBlock*>::iterator b = p1.begin(); b != p1.end(); ++b)
-		errs() << " - " << getLabel(*b);
-	errs() << "\n";
+	errs() << "----part 2---- " << getBBArea(p1) << "/" << getcArea() << "\n";
+	for(VBB::iterator b = p1.begin(); b != p1.end(); ++b)
+		errs() << "  - " << getLabel(*b) << "\n";
 
-	int p0Area = getBBArea(p0, bbArea);
-	int p1Area = getBBArea(p1, bbArea);
-	frontMerge = p0Area < p1Area;
-	for(int i=0; i<start; i++) {
-		//Instruction *I = isInstNode(instMap, i);
+	frontMerge = getBBArea(p0) < getBBArea(p1);
+	for(int i=0; i<start; i+=2) {
+		//const Instruction *I = isInstNode(i);
 		//if (I!=NULL && isa<StoreInst>(I))
 		//	continue;
-		//for(int j=start; j<n; j++)
-		{
-			if ((visited[i] && !visited[i+1]) && capacity[i][i+1]==1 /*&& (i!=start || j!=target)*/) {
-				BasicBlock *b = getBoundaryBB(i, flow, instMap, bbMap, frontMerge, start, n);
-				//errs() << "boundaryEdge = " << i << " / boundaryBB = " << getValueStr(b) << "\n";
-				if ((frontMerge && bbMap[b]!=n-1) ||
-						(!frontMerge && bbMap[b]!=start)) {
-					return b;
+		if ((visited[i] && !visited[i+1]) && capacity[i][i+1]==1 /*&& (i!=start || j!=target)*/) {
+			boundaryBB = getBoundaryBB(i, flow, frontMerge, start, n);
+			if (boundaryBB) {
+				//const Instruction *I = isInstNode(i);
+				//errs() << "cand_boundaryBB= " << getLabel(boundaryBB) << getValueStr(I) << "\n";
+				//if ((frontMerge && bbMap[boundaryBB]!=n-1) ||
+				//		(!frontMerge && bbMap[boundaryBB]!=start))
+					break;
+			}
+		}
+	}
+
+	//Select min-area boundaryBB from the out of min-cut list
+	if (boundaryBB == NULL) {
+		unsigned minArea = -1;
+		for(VBB::iterator b = p0.begin(); b != p0.end(); ++b) {
+			if (bbPartState[*b] == PART_UNKNOWN) {
+				if ((unsigned)bbArea[*b]<minArea) {
+					minArea = bbArea[*b];
+					frontMerge = true;
+					boundaryBB = *b;
 				}
 			}
 		}
 	}
 
 	//for(int i=1; i<n; i++) {
-	//	Instruction* inst = isInstNode(instMap, i);
+	//	const Instruction* inst = isInstNode(i);
 	//	if(!inst)
 	//		continue;
 
@@ -1328,26 +1461,27 @@ BasicBlock* SchedulerDAG::maxFlow(Function &F, int n, int start, int target,
 	//	}
 	//}
 
-	return NULL;
+	return boundaryBB;
 }
 
-Instruction* SchedulerDAG::isInstNode(DenseMap<Instruction*, int> instMap, int idx) {
-	for (DenseMap<Instruction*, int>::iterator i = instMap.begin(); i != instMap.end(); ++i) {
+const Instruction* SchedulerDAG::isInstNode(int idx) {
+	for (MINST::iterator i = instMap.begin();
+			i != instMap.end(); ++i) {
 		if (i->second==idx)
 			return i->first;
 	}
 	return NULL;
 }
 
-BasicBlock* SchedulerDAG::isBBNode(DenseMap<BasicBlock*, int> bbMap, int i) {
-	for (DenseMap<BasicBlock*, int>::iterator b = bbMap.begin(); b != bbMap.end(); ++b) {
+const BasicBlock* SchedulerDAG::isBBNode(int i) {
+	for (MBB::iterator b = bbMap.begin(); b != bbMap.end(); ++b) {
 		if (b->second==i)
 			return b->first;
 	}
 	return NULL;
 }
 
-void SchedulerDAG::findAllPaths(std::vector<const BasicBlock *> path, const BasicBlock *current) {
+void SchedulerDAG::findAllPaths(VBB path, const BasicBlock *current) {
 	path.push_back(current);
 
 	const TerminatorInst *tInst = current->getTerminator();
@@ -1365,7 +1499,7 @@ void SchedulerDAG::findAllPaths(std::vector<const BasicBlock *> path, const Basi
 }
 
 void SchedulerDAG::findAllPaths(Function &F) {
-	std::vector<const BasicBlock *> path;
+	VBB path;
 	findAllPaths(path, &F.getEntryBlock());
 }
 
@@ -1387,7 +1521,7 @@ void SchedulerDAG::findTopologicalBBList(Function &F) {
 	//runToposort(F);
 
 	// Topologically sorted list - skip backward edges
-	std::vector<const BasicBlock *> path;
+	VBB path;
 	errs() << "Basic blocks of " << F.getName() << " in post-order:\n";
 	for (po_iterator<BasicBlock *> I = po_begin(&F.getEntryBlock()),
 	                               IE = po_end(&F.getEntryBlock());
@@ -1420,7 +1554,7 @@ void SchedulerDAG::insertPartitionVoter(Function &F) {
 	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
 		errs() << "\n\n# DEBUG_TMR=3 - InsertPartitioningVoter\n";
 
-	std::vector<const BasicBlock *> path = DAGPaths.front();
+	VBB path = DAGPaths.front();
 	//unsigned areaLimit = LEGUP_CONFIG->getParameterInt("PARTITION_AREA_LIMIT");
 	unsigned areaLimit = getLimitAreaByPercentage(F);
 	unsigned areaRecommand = 0;
@@ -1428,10 +1562,10 @@ void SchedulerDAG::insertPartitionVoter(Function &F) {
 	unsigned areaTotal = 0;
 
 	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==1) {
-		std::vector<const BasicBlock *> partitionPath;
-		for (std::vector<const BasicBlock *>::const_reverse_iterator b = path.rbegin(),
-		                                                     be = path.rend();
-		                                                     b != be; ++b) {
+		VBB partitionPath;
+		for (VBB::const_reverse_iterator b = path.rbegin(),
+		                                 be = path.rend();
+		                                 b != be; ++b) {
 			const BasicBlock *BB = *b;
 			for (BasicBlock::const_iterator instr = BB->begin(), ie = BB->end();
 			                                instr != ie; ++instr) {
@@ -1466,13 +1600,13 @@ void SchedulerDAG::insertPartitionVoter(Function &F) {
 	//} else {
 	//	errs() << "All paths of " << F.getName() << ":\n";
 	//	while (!DAGPaths.empty()) {
-	//		std::vector<const BasicBlock *> path = DAGPaths.front();
+	//		VBB path = DAGPaths.front();
 
 	//		errs() << "\n---- path list start ----\n";
 	//		unsigned areaTotal = 0;
 	//		unsigned areaLimit = LEGUP_CONFIG->getParameterInt("PARTITION_AREA_LIMIT");
 
-	//		for (std::vector<const BasicBlock *>::const_iterator b = path.begin(),
+	//		for (VBB::const_iterator b = path.begin(),
 	//		                                                     be = path.end();
 	//		                                                     b != be; ++b) {
 	//			const BasicBlock *BB = *b;
@@ -1505,8 +1639,8 @@ void SchedulerDAG::insertPartitionVoter(Function &F) {
 	}
 }
 
-bool SchedulerDAG::isPredPartition(std::vector<const BasicBlock *> path, const BasicBlock *useBB) {
-	for (std::vector<const BasicBlock *>::const_iterator b = path.begin(),
+bool SchedulerDAG::isPredPartition(VBB path, const BasicBlock *useBB) {
+	for (VBB::const_iterator b = path.begin(),
 	                                                     be = path.end();
 	                                                     b != be; ++b) {
 		if (*b == useBB)
@@ -1519,18 +1653,18 @@ void SchedulerDAG::findPartitionSignals() {
 	if (Partitions.empty())
 		return;
 
-	std::vector<const BasicBlock *> predPartBBs;
-	std::vector<const BasicBlock *> path = Partitions.front();
-	for (std::vector<const BasicBlock *>::const_iterator b = path.begin(),
+	VBB predPartBBs;
+	VBB path = Partitions.front();
+	for (VBB::const_iterator b = path.begin(),
 	                                                     be = path.end();
 	                                                     b != be; ++b) {
 		predPartBBs.push_back(*b);
 	}
-	for (std::vector<std::vector<const BasicBlock *> >::const_iterator p = Partitions.begin()+1,
+	for (std::vector<VBB>::const_iterator p = Partitions.begin()+1,
 	                                                     pe = Partitions.end();
 	                                                     p != pe; ++p) {
-		std::vector<const BasicBlock *> path = *p;
-		for (std::vector<const BasicBlock *>::const_iterator b = path.begin(),
+		VBB path = *p;
+		for (VBB::const_iterator b = path.begin(),
 		                                                     be = path.end();
 		                                                     b != be; ++b) {
 			BasicBlock *BB = const_cast<BasicBlock *>(*b);
@@ -1562,9 +1696,8 @@ void SchedulerDAG::findPartitionSignals() {
     			}
     		}
 		}
-		for (std::vector<const BasicBlock *>::const_iterator b = path.begin(),
-		                                                     be = path.end();
-		                                                     b != be; ++b) {
+		for (VBB::const_iterator b = path.begin(),
+		                         be = path.end(); b != be; ++b) {
 			predPartBBs.push_back(*b);
 		}
 	}
@@ -1576,6 +1709,9 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
     AliasAnalysis *AA = alloc->getAA();
     assert(AA);
     AliasA = AA;
+
+	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+		errs() << "\n\n# DEBUG_TMR=2 ------ " << F.getName() << " ------\n";
 
     // generate Instruction to InstructionNode mapping
     for (Function::iterator b = F.begin(), be = F.end(); b != be; b++) {
@@ -1605,17 +1741,17 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
 		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2) {
 			errs() << "\n\n# DEBUG_TMR=2 - Partition List\n";
 			int cnt = 0;
-			for (std::vector<std::vector<const BasicBlock *> >::const_iterator p = Partitions.begin(),
-			                                                     pe = Partitions.end();
-			                                                     p != pe; ++p) {
-				std::vector<const BasicBlock *> path = *p;
+			for (std::vector<VBB>::const_iterator p = Partitions.begin(),
+			                                      pe = Partitions.end();
+			                                      p != pe; ++p) {
+				VBB path = *p;
 				errs() << " [" << cnt++ << "] ";
-				for (std::vector<const BasicBlock *>::const_iterator b = path.begin(),
-				                                                     be = path.end();
-				                                                     b != be; ++b) {
+				for (VBB::const_iterator b = path.begin(),
+				                         be = path.end();
+				                         b != be; ++b) {
 					errs() << getLabel(*b) << " - ";
 				}
-				errs() << "\n";
+				errs() << " (" << getBBArea(path) << ")\n";
 			}
 		}
 	}
