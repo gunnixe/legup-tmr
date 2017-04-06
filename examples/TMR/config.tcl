@@ -2,12 +2,11 @@ source ../../../legup.tcl
 
 #set_parameter PRINTF_CYCLES 1
 set_parameter DEBUG_TMR 2
-set_parameter PARTITION_AREA_LIMIT 1000
 set_parameter MB_MINIMIZE_HW 1
 set_parameter VOTER_BEFORE_FSM 1
 set_parameter PART_AREA_MARGIN_PERCENTAGE 25
-#set_parameter PARTITION_AREA_CONSTRAINT 3000
-set_parameter PARTITION_AREA_CONSTRAINT 1
+#set_parameter PARTITION_AREA_LIMIT 3000
+set_parameter NUMBER_OF_PARTITIONS 4
 
 set_parameter GROUP_RAMS 1
 #set_operation_latency multiply 1

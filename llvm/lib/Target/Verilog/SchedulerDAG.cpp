@@ -1023,7 +1023,7 @@ void SchedulerDAG::dumpNF(int capacity[][MAX_NODE], int n) {
 int SchedulerDAG::initBBArea(Function &F) {
 	bbArea.clear();
 	unsigned totalArea = 0;
-	int maxArea = LEGUP_CONFIG->getParameterInt("PARTITION_AREA_CONSTRAINT");
+	int maxArea = 0;
 
 	errs() << "\n# BB area\n";
 	for (Function::iterator b = F.begin(); b != F.end(); ++b) {
@@ -1056,12 +1056,7 @@ int SchedulerDAG::getBBArea(VBB blist) {
 }
 
 bool SchedulerDAG::isBalanced(int totalArea, VBB p0, VBB p1) {
-	//int param = LEGUP_CONFIG->getParameterInt("PART_AREA_MARGIN_PERCENTAGE"); //default 25% margin
-	int cArea = getcArea();//LEGUP_CONFIG->getParameterInt("PARTITION_AREA_CONSTRAINT");
-	//int margin = (totalArea/2)*cArea/100;
-	//fprintf(stderr, "threadhold(%d) = totalArea(%d)/2 + margin(%d)\n",
-	//		totalArea/2+margin, totalArea, margin);
-
+	int cArea = getcArea();
 	int p0Area = getBBArea(p0);
 	int p1Area = getBBArea(p1);
 	//errs() << "p0Area= " << p0Area << "\n";
@@ -1548,103 +1543,106 @@ int SchedulerDAG::getLimitAreaByPercentage(Function &F) {
 		}
 	}
 
-	unsigned areaMargin = LEGUP_CONFIG->getParameterInt("PART_AREA_MARGIN_PERCENTAGE");
-	return (totalArea) * (50 + areaMargin/2)/100;
+	unsigned nPart = LEGUP_CONFIG->getParameterInt("NUMBER_OF_PARTITIONS");
+	unsigned areaMarginPercentage = LEGUP_CONFIG->getParameterInt("PART_AREA_MARGIN_PERCENTAGE");
+	unsigned areaConstraint = totalArea/nPart;
+	unsigned areaMargin = areaConstraint*areaMarginPercentage/100;
+	return areaConstraint + areaMargin;
 }
 
-void SchedulerDAG::insertPartitionVoter(Function &F) {
-	if(DAGPaths.empty())
-		return;
-
-	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
-		errs() << "\n\n# DEBUG_TMR=3 - InsertPartitioningVoter\n";
-
-	VBB path = DAGPaths.front();
-	//unsigned areaLimit = LEGUP_CONFIG->getParameterInt("PARTITION_AREA_LIMIT");
-	unsigned pArea = getLimitAreaByPercentage(F);
-	unsigned cArea = getcArea();
-	unsigned areaLimit = pArea<cArea? pArea : cArea;
-	unsigned areaRecommand = 0;
-	unsigned areaLimitViolation = false;
-	unsigned areaTotal = 0;
-
-	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==1) {
-		VBB partitionPath;
-		for (VBB::const_reverse_iterator b = path.rbegin(),
-		                                 be = path.rend();
-		                                 b != be; ++b) {
-			const BasicBlock *BB = *b;
-			for (BasicBlock::const_iterator instr = BB->begin(), ie = BB->end();
-			                                instr != ie; ++instr) {
-				const Instruction *I = instr;
-				//InstructionNode *iNode = getInstructionNode(const_cast<Instruction *>(I));
-				unsigned area = getInstructionArea(const_cast<Instruction *>(I));
-				if ((areaTotal+area > areaLimit) && (areaLimit!=0)) {
-					if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
-						errs() << "  ---- Insert Part. Voter ----\n";
-					if (!partitionPath.empty()) {
-						Partitions.push_back(partitionPath);
-						partitionPath.clear();
-						areaTotal = 0;
-					} else {
-						areaLimitViolation = true;
-						areaLimit = areaTotal + area + 1;
-					}
-				}
-				areaTotal += area;
-				if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3) {
-					errs() << "  Area=(" << areaTotal << ") "
-					          << getLabel(*b) << ":" << getValueStr(instr) << "\n";
-				}
-			}
-			partitionPath.push_back(*b);
-			if (areaRecommand < areaTotal)
-				areaRecommand = areaTotal;
-		}
-		if (!partitionPath.empty()) {
-			Partitions.push_back(partitionPath);
-		}
-	//} else {
-	//	errs() << "All paths of " << F.getName() << ":\n";
-	//	while (!DAGPaths.empty()) {
-	//		VBB path = DAGPaths.front();
-
-	//		errs() << "\n---- path list start ----\n";
-	//		unsigned areaTotal = 0;
-	//		unsigned areaLimit = LEGUP_CONFIG->getParameterInt("PARTITION_AREA_LIMIT");
-
-	//		for (VBB::const_iterator b = path.begin(),
-	//		                                                     be = path.end();
-	//		                                                     b != be; ++b) {
-	//			const BasicBlock *BB = *b;
-	//			for (BasicBlock::const_iterator instr = BB->begin(), ie = BB->end();
-	//			                                instr != ie; ++instr) {
-	//				const Instruction *I = instr;
-	//				InstructionNode *iNode = getInstructionNode(const_cast<Instruction *>(I));
-	//				unsigned area = getInstructionArea(const_cast<Instruction *>(I));
-	//				if ((areaTotal+area > areaLimit) && (areaLimit!=0)) {
-	//					errs() << "  ---- Insert Part. Voter ----\n";
-	//					areaTotal = 0;
-	//					iNode->setPartition(true);
-	//				}
-	//				areaTotal += area;
-	//				errs() << "  Area=(" << areaTotal << ") "
-	//				          << getLabel(*b) << ":" << getValueStr(instr) << "\n";
-	//			}
-	//		}
-	//		errs() << "---- path list end ----\n";
-
-	//		DAGPaths.pop();
-	//	}
-	}
-
-	if(areaLimitViolation) {
-		unsigned areaLimit = LEGUP_CONFIG->getParameterInt("PARTITION_AREA_LIMIT");
-		errs() << "Error: PARTITION_AREA_LIMIT=" << areaLimit << " is too small\n";
-		errs() << "       Recommanded area = (larger than) " << (areaRecommand) << "\n";
-		//assert(0);
-	}
-}
+//void SchedulerDAG::insertPartitionVoter(Function &F) {
+//	if(DAGPaths.empty())
+//		return;
+//
+//	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
+//		errs() << "\n\n# DEBUG_TMR=3 - InsertPartitioningVoter\n";
+//
+//	VBB path = DAGPaths.front();
+//	//unsigned areaLimit = LEGUP_CONFIG->getParameterInt("PARTITION_AREA_LIMIT");
+//	unsigned pArea = getLimitAreaByPercentage(F);
+//	unsigned cArea = getcArea();
+//	unsigned areaLimit = pArea<cArea? pArea : cArea;
+//	unsigned areaRecommand = 0;
+//	unsigned areaLimitViolation = false;
+//	unsigned areaTotal = 0;
+//
+//	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==1) {
+//		VBB partitionPath;
+//		for (VBB::const_reverse_iterator b = path.rbegin(),
+//		                                 be = path.rend();
+//		                                 b != be; ++b) {
+//			const BasicBlock *BB = *b;
+//			for (BasicBlock::const_iterator instr = BB->begin(), ie = BB->end();
+//			                                instr != ie; ++instr) {
+//				const Instruction *I = instr;
+//				//InstructionNode *iNode = getInstructionNode(const_cast<Instruction *>(I));
+//				unsigned area = getInstructionArea(const_cast<Instruction *>(I));
+//				if ((areaTotal+area > areaLimit) && (areaLimit!=0)) {
+//					if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
+//						errs() << "  ---- Insert Part. Voter ----\n";
+//					if (!partitionPath.empty()) {
+//						Partitions.push_back(partitionPath);
+//						partitionPath.clear();
+//						areaTotal = 0;
+//					} else {
+//						areaLimitViolation = true;
+//						areaLimit = areaTotal + area + 1;
+//					}
+//				}
+//				areaTotal += area;
+//				if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3) {
+//					errs() << "  Area=(" << areaTotal << ") "
+//					          << getLabel(*b) << ":" << getValueStr(instr) << "\n";
+//				}
+//			}
+//			partitionPath.push_back(*b);
+//			if (areaRecommand < areaTotal)
+//				areaRecommand = areaTotal;
+//		}
+//		if (!partitionPath.empty()) {
+//			Partitions.push_back(partitionPath);
+//		}
+//	//} else {
+//	//	errs() << "All paths of " << F.getName() << ":\n";
+//	//	while (!DAGPaths.empty()) {
+//	//		VBB path = DAGPaths.front();
+//
+//	//		errs() << "\n---- path list start ----\n";
+//	//		unsigned areaTotal = 0;
+//	//		unsigned areaLimit = LEGUP_CONFIG->getParameterInt("PARTITION_AREA_LIMIT");
+//
+//	//		for (VBB::const_iterator b = path.begin(),
+//	//		                                                     be = path.end();
+//	//		                                                     b != be; ++b) {
+//	//			const BasicBlock *BB = *b;
+//	//			for (BasicBlock::const_iterator instr = BB->begin(), ie = BB->end();
+//	//			                                instr != ie; ++instr) {
+//	//				const Instruction *I = instr;
+//	//				InstructionNode *iNode = getInstructionNode(const_cast<Instruction *>(I));
+//	//				unsigned area = getInstructionArea(const_cast<Instruction *>(I));
+//	//				if ((areaTotal+area > areaLimit) && (areaLimit!=0)) {
+//	//					errs() << "  ---- Insert Part. Voter ----\n";
+//	//					areaTotal = 0;
+//	//					iNode->setPartition(true);
+//	//				}
+//	//				areaTotal += area;
+//	//				errs() << "  Area=(" << areaTotal << ") "
+//	//				          << getLabel(*b) << ":" << getValueStr(instr) << "\n";
+//	//			}
+//	//		}
+//	//		errs() << "---- path list end ----\n";
+//
+//	//		DAGPaths.pop();
+//	//	}
+//	}
+//
+//	if(areaLimitViolation) {
+//		unsigned areaLimit = LEGUP_CONFIG->getParameterInt("PARTITION_AREA_LIMIT");
+//		errs() << "Error: PARTITION_AREA_LIMIT=" << areaLimit << " is too small\n";
+//		errs() << "       Recommanded area = (larger than) " << (areaRecommand) << "\n";
+//		//assert(0);
+//	}
+//}
 
 bool SchedulerDAG::isPredPartition(VBB path, const BasicBlock *useBB) {
 	for (VBB::const_iterator b = path.begin(),
