@@ -24,7 +24,7 @@ my @example_list;
 @example_list = (@example_list,qw(adpcm));
 @example_list = (@example_list,qw(jpeg));
 
-#@example_list = (@example_list,qw(aes bellmanford add mmult adpcm));
+@example_list = qw(adpcm aes aesdec gsm sha blowfish dfadd dfdiv dfmul dfsin jpeg mips motion satd sobel bellmanford mmult);
 
 my ($fname) = @ARGV;
 die "Need folder name\n" if(not defined $fname);
