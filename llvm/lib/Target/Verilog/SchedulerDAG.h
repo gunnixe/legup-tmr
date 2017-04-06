@@ -213,7 +213,7 @@ public:
 	typedef DenseMap<const Instruction*, int> MINST;
 
 	#define INF 1000000000
-	#define MAX_NODE 2048
+	#define MAX_NODE 8192
 
 	enum PART_STATE { PART_UNKNOWN=0, PART_S, PART_T,
 			PART_S_FINISH, PART_T_FINISH };
@@ -257,9 +257,10 @@ public:
 	bool recursiveDFSToposort(const BasicBlock *BB, MBB &colorMap,
                std::vector<const BasicBlock *> &sortedBBs);
 	bool isPredPartition(std::vector<const BasicBlock *> path, const BasicBlock *useBB);
+	void bfsPartitionBBs(Function &F);
 
 	// NetworkFlow Partitioning
-	void partitionBBs(Function &F);
+	void networkFlowPartitionBBs(Function &F);
 	bool bfs(int n, int start, int target, int capacity[][MAX_NODE], int flow[][MAX_NODE], int pred[]);
 	void dfs(int n, int capacity[][MAX_NODE], int flow[][MAX_NODE], int s, bool visited[]);
 	const BasicBlock* isBBNode(int idx);

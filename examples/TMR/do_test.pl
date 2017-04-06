@@ -524,8 +524,17 @@ sub parse_verilog {
 				}
 			}
 		} else {
-			die "not implemetd for altera";
-			#FIXME - only work with xilinx
+			if(/^module \w+/) {
+				if(!/^module BB_\w+/) {
+					$start_find = 1; 
+				}
+			} elsif(/^endmodule/) {
+				$start_find = 0;
+			} elsif(/^reg/ && /\/*synthesis keep\*\// && $start_find==1) {
+				if(/_v0,/) {
+					$voter_count++;
+				}
+			}
 		}
 	}
 	close(FVH);

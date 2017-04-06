@@ -2633,16 +2633,28 @@ void VerilogWriter::printMemoryAssignForTmr(std::string postfix) {
 	std::string r0 = "memory_controller_out" + postfix + "_r0";
 	std::string r1 = "memory_controller_out" + postfix + "_r1";
 	std::string r2 = "memory_controller_out" + postfix + "_r2";
-    Out << "wire [`MEMORY_CONTROLLER_DATA_SIZE-1:0] "
-		<< "memory_controller_out" << postfix << "_v0 = "
-		<< "(" << r0 << "==" << r1 << ")? " << r0 << " : " << r2 << ";\n";
-    Out << "wire [`MEMORY_CONTROLLER_DATA_SIZE-1:0] "
-		<< "memory_controller_out" << postfix << "_v1 = "
-		<< "(" << r1 << "==" << r2 << ")? " << r1 << " : " << r0 << ";\n";
-    Out << "wire [`MEMORY_CONTROLLER_DATA_SIZE-1:0] "
-		<< "memory_controller_out" << postfix << "_v2 = "
-		<< "(" << r2 << "==" << r1 << ")? " << r2 << " : " << r1 << ";\n";
-    Out << "\n";
+
+	if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==0
+			&& LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==0) {
+    	Out << "wire [`MEMORY_CONTROLLER_DATA_SIZE-1:0] "
+			<< "memory_controller_out" << postfix << "_v0 = " << r0 << ";\n";
+    	Out << "wire [`MEMORY_CONTROLLER_DATA_SIZE-1:0] "
+			<< "memory_controller_out" << postfix << "_v1 = " << r1 << ";\n";
+    	Out << "wire [`MEMORY_CONTROLLER_DATA_SIZE-1:0] "
+			<< "memory_controller_out" << postfix << "_v2 = " << r2 << ";\n";
+    	Out << "\n";
+	} else {
+    	Out << "wire [`MEMORY_CONTROLLER_DATA_SIZE-1:0] "
+			<< "memory_controller_out" << postfix << "_v0 = "
+			<< "(" << r0 << "==" << r1 << ")? " << r0 << " : " << r2 << ";\n";
+    	Out << "wire [`MEMORY_CONTROLLER_DATA_SIZE-1:0] "
+			<< "memory_controller_out" << postfix << "_v1 = "
+			<< "(" << r1 << "==" << r2 << ")? " << r1 << " : " << r0 << ";\n";
+    	Out << "wire [`MEMORY_CONTROLLER_DATA_SIZE-1:0] "
+			<< "memory_controller_out" << postfix << "_v2 = "
+			<< "(" << r2 << "==" << r1 << ")? " << r2 << " : " << r1 << ";\n";
+    	Out << "\n";
+	}
 }
 
 void VerilogWriter::printMemoryVariablesSignals(std::string busName,
@@ -8001,9 +8013,17 @@ void VerilogWriter::printVoter(const RTLSignal *signal, bool isTmrVoter) {
 
 	bool bitWidthOne = (hi=="");
 
-	std::string r0 = bitWidthOne? sigName + "_r0" : sigName + "_r0[i]";
-	std::string r1 = bitWidthOne? sigName + "_r1" : sigName + "_r1[i]";
-	std::string r2 = bitWidthOne? sigName + "_r2" : sigName + "_r2[i]";
+	int i0 = (currReplica=="0")? 0 : (currReplica=="1")? 1 : 2;
+	int i1 = (i0+1)%3;
+	int i2 = (i0+2)%3;
+
+	std::string t0 = "_r" + utostr(i0);
+	std::string t1 = "_r" + utostr(i1);
+	std::string t2 = "_r" + utostr(i2);
+
+	std::string r0 = bitWidthOne? sigName + t0 : sigName + t0 + "[i]";
+	std::string r1 = bitWidthOne? sigName + t1 : sigName + t1 + "[i]";
+	std::string r2 = bitWidthOne? sigName + t2 : sigName + t2 + "[i]";
 	std::string defValue = (sigName=="cur_state")? "LEGUP_0" : "0";
 
 	std::string prefix = (useReplicaNumberForAllVariables)? "_v"+currReplica : "";
@@ -8012,9 +8032,14 @@ void VerilogWriter::printVoter(const RTLSignal *signal, bool isTmrVoter) {
 	Out << "always @(*) begin\n";
 	if (!bitWidthOne)
 		Out << "\tfor(i=" << lo << "; i<=" << hi << "; i=i+1) begin\n";
-	Out << "\t" << v << "\n"
-	    << "\t\t= (" << r0 << "==" << r1 << ")? " << r0 << "\n"
-		<< "\t\t: " << r2 << ";\n";
+	if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==0 &&
+			LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==0) {
+		Out << "\t" << v << " = " << r0 << ";\n";
+	} else {
+		Out << "\t" << v << "\n"
+		    << "\t\t= (" << r0 << "==" << r1 << ")? " << r0 << "\n"
+			<< "\t\t: " << r2 << ";\n";
+	}
 	//    << "\t\t: (" << r0 << "==" << r2 << ")? " << r0 << "\n"
 	//    << "\t\t: (" << r1 << "==" << r2 << ")? " << r1 << "\n"
 	//	<< "\t\t: " << defValue << ";\n";
@@ -8064,12 +8089,19 @@ void VerilogWriter::printTmrVoter(std::string sigName, std::string lo, std::stri
 		Out << "always @(*) begin\n";
 	if (!bitWidthOne)
 		Out << "\tfor(i=" << lo << "; i<=" << hi << "; i=i+1) begin\n";
-	Out << "\t\t" << v0 << " = (" << r0 << "==" << r1 << ")? " << r0 << "\n"
-	    << "\t\t\t: " << r2 << ";\n";
-	Out << "\t\t" << v1 << " = (" << r0 << "==" << r1 << ")? " << r0 << "\n"
-	    << "\t\t\t: " << r2 << ";\n";
-	Out << "\t\t" << v2 << " = (" << r0 << "==" << r1 << ")? " << r0 << "\n"
-	    << "\t\t\t: " << r2 << ";\n";
+	if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==0 &&
+			LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==0) {
+		Out << "\t\t" << v0 << " = " << r0 << ";\n";
+		Out << "\t\t" << v1 << " = " << r1 << ";\n";
+		Out << "\t\t" << v2 << " = " << r2 << ";\n";
+	} else {
+		Out << "\t\t" << v0 << " = (" << r0 << "==" << r1 << ")? " << r0 << "\n"
+		    << "\t\t\t: " << r2 << ";\n";
+		Out << "\t\t" << v1 << " = (" << r0 << "==" << r1 << ")? " << r0 << "\n"
+		    << "\t\t\t: " << r2 << ";\n";
+		Out << "\t\t" << v2 << " = (" << r0 << "==" << r1 << ")? " << r0 << "\n"
+		    << "\t\t\t: " << r2 << ";\n";
+	}
 	if (!bitWidthOne)
 		Out << "\tend\n";
 	Out << "end\n";
@@ -8431,21 +8463,21 @@ void VerilogWriter::printDisplay(const RTLOp *op) {
     }
     Out << ")";
 
-    if (op->getNumOperands() > 1 && !LEGUP_CONFIG->isXilinxBoard()) {
-        Out << ";\n";
-        Out << "\t\t// to fix quartus warning\n";
-        // avoid getting a warning from quartus that we
-        // never read the value being printed
-        for (unsigned i = 1; i < op->getNumOperands(); i++) {
-            // Out << "if (^reset !== 1'bX && ^(";
-            Out << "\t\tif (reset == 1'b0 && ^(";
-            printValue(op->getOperand(i));
-            Out << ") === 1'bX) "
-                << "finish <= 0";
-            if (i != op->getNumOperands() - 1)
-                Out << ";\n";
-        }
-    }
+    //if (op->getNumOperands() > 1 && !LEGUP_CONFIG->isXilinxBoard()) {
+    //    Out << ";\n";
+    //    Out << "\t\t// to fix quartus warning\n";
+    //    // avoid getting a warning from quartus that we
+    //    // never read the value being printed
+    //    for (unsigned i = 1; i < op->getNumOperands(); i++) {
+    //        // Out << "if (^reset !== 1'bX && ^(";
+    //        Out << "\t\tif (reset == 1'b0 && ^(";
+    //        printValue(op->getOperand(i));
+    //        Out << ") === 1'bX) "
+    //            << "finish <= 0";
+    //        if (i != op->getNumOperands() - 1)
+    //            Out << ";\n";
+    //    }
+    //}
 }
 
 void VerilogWriter::printVerilogOperator(const RTLOp *op, unsigned w) {

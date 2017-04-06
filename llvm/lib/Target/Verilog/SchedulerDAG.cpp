@@ -1021,6 +1021,7 @@ void SchedulerDAG::dumpNF(int capacity[][MAX_NODE], int n) {
 }
 
 int SchedulerDAG::initBBArea(Function &F) {
+	bbArea.clear();
 	unsigned totalArea = 0;
 	int maxArea = LEGUP_CONFIG->getParameterInt("PARTITION_AREA_CONSTRAINT");
 
@@ -1056,7 +1057,7 @@ int SchedulerDAG::getBBArea(VBB blist) {
 
 bool SchedulerDAG::isBalanced(int totalArea, VBB p0, VBB p1) {
 	//int param = LEGUP_CONFIG->getParameterInt("PART_AREA_MARGIN_PERCENTAGE"); //default 25% margin
-	int cArea = getcArea();LEGUP_CONFIG->getParameterInt("PARTITION_AREA_CONSTRAINT");
+	int cArea = getcArea();//LEGUP_CONFIG->getParameterInt("PARTITION_AREA_CONSTRAINT");
 	//int margin = (totalArea/2)*cArea/100;
 	//fprintf(stderr, "threadhold(%d) = totalArea(%d)/2 + margin(%d)\n",
 	//		totalArea/2+margin, totalArea, margin);
@@ -1178,33 +1179,34 @@ bool SchedulerDAG::checkAreaConstraint(bool frontMerge,
 			const BasicBlock *boundaryBB, VBB p0, VBB p1) {
 	assert(boundaryBB);
 	int cArea = getcArea();
+	bool ret = false;
 
 	// merge start and target nodes
-	if (getBBArea(p0) < cArea) {
+	if (getBBArea(p0)-getBBArea(PART_S_FINISH) < cArea) {
 		for (VBB::iterator b=p0.begin(); b!=p0.end(); ++b)
-			bbPartState[*b] = PART_S;
-	} else if (getBBArea(p1) < cArea) {
+			if (bbPartState[*b] == PART_UNKNOWN)
+				bbPartState[*b] = PART_S;
+	} else if (getBBArea(p1)-getBBArea(PART_T_FINISH) < cArea) {
 		for (VBB::iterator b=p1.begin(); b!=p1.end(); ++b)
-			bbPartState[*b] = PART_T;
+			if (bbPartState[*b] == PART_UNKNOWN)
+				bbPartState[*b] = PART_T;
 	}
 
 	if (frontMerge) {
 		if (getBBArea(PART_S)+bbArea[boundaryBB] > cArea) {
 			pushNewPartition(PART_S);
-			return true;
-		} else {
-			bbPartState[boundaryBB] = PART_S;
+			ret = true;
 		}
+		bbPartState[boundaryBB] = PART_S;
 	} else {
 		if (getBBArea(PART_T)+bbArea[boundaryBB] > cArea) {
 			pushNewPartition(PART_T);
-			return true;
-		} else {
-			bbPartState[boundaryBB] = PART_T;
+			ret = true;
 		}
+		bbPartState[boundaryBB] = PART_T;
 	}
 	
-	return false;
+	return ret;
 }
 
 void SchedulerDAG::dumpVBB(VBB blist, std::string str) {
@@ -1217,7 +1219,7 @@ void SchedulerDAG::dumpVBB(VBB blist, std::string str) {
 	errs() << "(" << area << ")\n";
 }
 
-void SchedulerDAG::partitionBBs(Function &F) {
+void SchedulerDAG::networkFlowPartitionBBs(Function &F) {
 	//Ford-Fulkerson Algorithm source from
 	//http://aduni.org/courses/algorithms/courseware/handouts/Reciation_09.html
 
@@ -1230,12 +1232,15 @@ void SchedulerDAG::partitionBBs(Function &F) {
 	//startNodes.clear();
 	//targetNodes.clear();
 	storeInsts.clear();
-	bbArea.clear();
 	bbMap.clear();
 	instMap.clear();
 
-	// 2-way partition
 	int totalArea = initBBArea(F);
+	// 2-way partition
+	unsigned pArea = getLimitAreaByPercentage(F);
+	unsigned cArea = getcArea();
+	if (pArea>cArea)
+		setcArea(pArea);
 	//int minGraphSize = getMinGraphSize(F);
 	//int boundaryEdge = -1;
 	VBB p0;
@@ -1556,7 +1561,9 @@ void SchedulerDAG::insertPartitionVoter(Function &F) {
 
 	VBB path = DAGPaths.front();
 	//unsigned areaLimit = LEGUP_CONFIG->getParameterInt("PARTITION_AREA_LIMIT");
-	unsigned areaLimit = getLimitAreaByPercentage(F);
+	unsigned pArea = getLimitAreaByPercentage(F);
+	unsigned cArea = getcArea();
+	unsigned areaLimit = pArea<cArea? pArea : cArea;
 	unsigned areaRecommand = 0;
 	unsigned areaLimitViolation = false;
 	unsigned areaTotal = 0;
@@ -1703,6 +1710,36 @@ void SchedulerDAG::findPartitionSignals() {
 	}
 }
 
+void SchedulerDAG::bfsPartitionBBs(Function &F) {
+	unsigned pArea = getLimitAreaByPercentage(F);
+	unsigned cArea = getcArea();
+	unsigned areaLimit = pArea<cArea? cArea : pArea;
+	unsigned areaTotal = 0;
+
+	VBB path = DAGPaths.front();
+	VBB partitionPath;
+	for (VBB::const_reverse_iterator b = path.rbegin(),
+	                                 be = path.rend();
+	                                 b != be; ++b) {
+        if (bbArea.find(*b) == bbArea.end())
+            continue;
+		if (areaTotal+bbArea[*b] > areaLimit) {
+			if (!partitionPath.empty()) {
+				Partitions.push_back(partitionPath);
+				partitionPath.clear();
+				areaTotal = 0;
+			} else {
+				assert(0);
+			}
+		}
+		areaTotal += bbArea[*b];
+		partitionPath.push_back(*b);
+	}
+	if (!partitionPath.empty()) {
+		Partitions.push_back(partitionPath);
+	}
+}
+
 bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
     assert(_alloc);
     alloc = _alloc;
@@ -1731,12 +1768,14 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
 
 		//findSCCBBs(F);
 		if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==1) {
+			initBBArea(F);
 			findTopologicalBBList(F);
+			bfsPartitionBBs(F);
 		} else if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==2) {
 			//findAllPaths(F);
-			partitionBBs(F);
+			networkFlowPartitionBBs(F);
 		}
-		insertPartitionVoter(F);
+		//insertPartitionVoter(F);
 
 		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2) {
 			errs() << "\n\n# DEBUG_TMR=2 - Partition List\n";
