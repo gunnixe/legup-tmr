@@ -409,11 +409,9 @@ bool SchedulerDAG::foundBackwardDependency(const Instruction *use, const Instruc
 }
 
 void SchedulerDAG::insertSyncVoterWithSCC() {
-	for (std::vector<VINST>::const_iterator i = SCCs.begin(),
-                                                                       e = SCCs.end(); i != e; ++i) {
+	for (std::vector<VINST>::const_iterator i = SCCs.begin(), e = SCCs.end(); i != e; ++i) {
 		VINST scc = *i;
-		for (VINST::const_iterator si = scc.begin(),
-		                                                     se = scc.end(); si != se; ++si) {
+		for (VINST::const_iterator si = scc.begin(), se = scc.end(); si != se; ++si) {
 			const Instruction* instr = *si;
 			InstructionNode* iNode = getInstructionNode(const_cast<Instruction*>(instr));
 
@@ -531,8 +529,7 @@ void SchedulerDAG::addSCC(VINST scc) {
 	bool isSameList = false;
 	std::sort(scc.begin(), scc.end());
 
-	for (std::vector<VINST>::const_iterator i = SCCs.begin(),
-	                                                                   e = SCCs.end(); i != e; ++i) {
+	for (std::vector<VINST>::const_iterator i = SCCs.begin(), e = SCCs.end(); i != e; ++i) {
 		VINST currScc = *i;
 		if (currScc.size() != scc.size())
 			continue;
@@ -581,7 +578,7 @@ bool SchedulerDAG::isSCCInst(const Instruction *def) {
 	return false;
 }
 
-void SchedulerDAG::findSCC(VINST scc, const Instruction *def) {
+void SchedulerDAG::findSCC(VINST scc, const Instruction *def, bool findWithinBB) {
    	for (User::const_op_iterator i = def->op_begin(), e = def->op_end(); i != e; ++i) {
 		const Instruction *use = dyn_cast<Instruction>(*i);
 
@@ -591,13 +588,23 @@ void SchedulerDAG::findSCC(VINST scc, const Instruction *def) {
 		if (isa<CallInst>(use))
 			continue;
 
+		if (findWithinBB && scc.front()->getParent() != use->getParent())
+			continue;
+
+		//if (isa<LoadInst>(use))
+		//	continue;
+
+		if (instMap[use]==1)
+			continue;
+
+		instMap[use] = 1;
 		if (std::find(scc.begin(), scc.end(), use) == scc.end()) {
 			scc.push_back(use);
 			//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
-			//	errs() << "     <- " << getValueStr(use) << "\n";
-			findSCC(scc, use);
+			//	errs() << "     <- (" << scc.size() << ")" << getValueStr(use) << "\n";
+			findSCC(scc, use, findWithinBB);
 			//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
-			//	errs() << "     pop : " << getValueStr(scc.back()) << "\n";
+			//	errs() << "     pop (" << scc.size() << ") : " << getValueStr(scc.back()) << "\n";
 			scc.pop_back();
 		} else {
 			addSCC(scc, use);
@@ -650,58 +657,149 @@ void SchedulerDAG::findSCC(VINST scc, const Instruction *def) {
 //	return true;
 //}
 
-void SchedulerDAG::findSCC(const BasicBlock* succ) {
+void SchedulerDAG::findSCC(const BasicBlock* succ, bool findWithinBB) {
+	clearInstMap();
 	for (BasicBlock::const_iterator si = succ->begin();
 	                                si != succ->end(); si++) {
 		const Instruction *def = si;
+		instMap[def] = 1;
 		VINST scc;
 		//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
 		//	errs() << "    INSTRUCTION:" << getValueStr(def) << "\n";
 		if (!isa<PHINode>(def))
 			continue;
 		scc.push_back(def);
-		findSCC(scc, def);
+		findSCC(scc, def, findWithinBB);
+	}
+}
+
+void SchedulerDAG::syncVoterScc(Function &F) {
+	// add voter with SCC decomposition algorithm
+	for (scc_iterator<Function *> I = scc_begin(&F); !I.isAtEnd(); ++I) {
+		const std::vector<BasicBlock*> &SCCBBs = *I;
+		if (SCCBBs.size()==1)
+			continue;
+
+		// find SCC instructions
+		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
+			errs() << "  SCC(M):\n";
+		for (std::vector<BasicBlock*>::const_iterator BBI = SCCBBs.begin(),
+				                                      BBIE = SCCBBs.end();
+		    	                                      BBI != BBIE; ++BBI) {
+			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
+				errs() << "    ->" << getLabel(*BBI) << "\n";
+			findSCC(*BBI);
+		}
+	}
+	for (unsigned i = 0, e = BackEdges.size(); i != e; ++i) {
+		const BasicBlock *succ = BackEdges[i].second;
+		const BasicBlock *pred = BackEdges[i].first;
+		if (pred == succ) {
+			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1) {
+				errs() << "  SCC(S):\n";
+				errs() << "    ->" << getLabel(succ) << "\n";
+			}
+			bool findWithinBB = true;
+			findSCC(succ, findWithinBB);
+		}
+	}
+
+	// When (SYNC_VOTER_MODE==6 || 7 || 8) setBackward() is performed after
+	// generateRTL phase, since all FSM state should be determined to
+	// calculate minimum latency between SCC Registers.
+	if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==5) {
+		insertSyncVoterWithSCC();
+	//} else if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==7) {
+	//	insertSyncVoterOnMaxFanIn();
+	//} else if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==8) {
+	//	insertSyncVoterOnMaxFanOut(F);
+	}
+
+	// FIXME
+	//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
+	//	errs() << "\n\n# DEBUG_TMR=1 - SCC Instructions\n";
+	//unsigned cnt = 0;
+	//for (std::vector<VINST>::const_iterator i = SCCs.begin(),
+	//                                        e = SCCs.end(); i != e; ++i) {
+	//	VINST scc = *i;
+	//	errs() << "  SCCs[" << cnt++ << "]\n";
+	//	for (VINST::const_iterator ssi = scc.begin(), sse = scc.end(); ssi != sse; ++ssi) {
+	//		errs() << "  " << getValueStr(*ssi) << "\n";
+	//	}
+	//}
+}
+
+void SchedulerDAG::insertSyncVoterOnMaxFanIn() {
+	for (std::vector<VINST>::const_iterator i = SCCs.begin(); i != SCCs.end(); ++i) {
+		VINST scc = *i;
+		const Instruction *maxFanInInst = NULL;
+		int maxFanInCnt = 0;
+		for (VINST::const_iterator si = scc.begin(); si != scc.end(); ++si) {
+			int fanInCnt = 0;
+			for(const Use &U : (*si)->operands()) {
+				Value *v = U.get();
+				if (!isa<Constant>(v))
+					fanInCnt++;
+			}
+			//errs() << getValueStr(*si) << "(fanInCnt=" << fanInCnt << ")\n";
+			if (maxFanInCnt < fanInCnt) {
+				maxFanInCnt = fanInCnt;
+				maxFanInInst = *si;
+			}
+		}
+		//errs() << "MaxFanInInst = " << getValueStr(maxFanInInst) << "\n";
+		InstructionNode* iNode = getInstructionNode(const_cast<Instruction*>(maxFanInInst));
+		iNode->setBackward(true);//, *scc); //use(phi)
+	}	
+}
+
+void SchedulerDAG::insertSyncVoterOnMaxFanOut(Function &F) {
+	for (std::vector<VINST>::const_iterator i = SCCs.begin(); i != SCCs.end(); ++i) {
+		VINST scc = *i;
+		const Instruction *maxFanOutInst = NULL;
+		unsigned maxFanOutCnt = 0;
+		for (VINST::const_iterator si = scc.begin(); si != scc.end(); ++si) {
+			unsigned fanOutCnt = (*si)->getNumUses();
+			//errs() << "def: " << getValueStr(*si) << "\n";
+			//for (const User *U : (*si)->users()) {
+			//	fanOutCnt++;
+			//	//if (const Instruction *Inst = dyn_cast<const Instruction>(U)) {
+			//	//	errs() << " -" << *Inst << "\n";
+			//	//}
+			//}
+			if (maxFanOutCnt < fanOutCnt) {
+				maxFanOutCnt = fanOutCnt;
+				maxFanOutInst = *si;
+			}
+		}
+		//errs() << "MaxFanOutInst = " << getValueStr(maxFanOutInst) << "\n";
+		InstructionNode* iNode = getInstructionNode(const_cast<Instruction*>(maxFanOutInst));
+		iNode->setBackward(true);//, *scc); //use(phi)
+	}
+}
+
+void SchedulerDAG::clearInstMap() {
+	for (MINST::iterator i = instMap.begin(); i != instMap.end(); ++i) {
+		i->second = 0;
+	}
+}
+
+void SchedulerDAG::initInstMap(Function &F) {
+	instMap.clear();
+	for (Function::iterator b = F.begin(); b != F.end(); ++b) {
+		for (BasicBlock::const_iterator i = (*b).begin(); i != (*b).end(); ++i) {
+			instMap[i] = 0;
+		}
 	}
 }
 
 void SchedulerDAG::insertSyncVoter(Function &F) {
-	if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")>=5) {
-		// add voter with SCC decomposition algorithm
-		for (scc_iterator<Function *> I = scc_begin(&F); !I.isAtEnd(); ++I) {
-			const std::vector<BasicBlock*> &SCCBBs = *I;
-			if (SCCBBs.size()==1)
-				continue;
+	initInstMap(F);
 
-			// find SCC instructions
-			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
-				errs() << "  SCC(M):\n";
-			for (std::vector<BasicBlock*>::const_iterator BBI = SCCBBs.begin(),
-					                                      BBIE = SCCBBs.end();
-			    	                                      BBI != BBIE; ++BBI) {
-				if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
-					errs() << "    ->" << getLabel(*BBI) << "\n";
-				findSCC(*BBI);
-			}
-		}
-		for (unsigned i = 0, e = BackEdges.size(); i != e; ++i) {
-			const BasicBlock *succ = BackEdges[i].second;
-			const BasicBlock *pred = BackEdges[i].first;
-			if (pred == succ) {
-				if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1) {
-					errs() << "  SCC(S):\n";
-					errs() << "    ->" << getLabel(succ) << "\n";
-				}
-				findSCC(succ);
-			}
-		}
-
-		// When (SYNC_VOTER_MODE==6) setBackward() is performed after
-		// generateRTL phase, since all FSM state should be determined to
-		// calculate minimum latency between SCC Registers.
-		if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==5) {
-			insertSyncVoterWithSCC();
-		}
-	} else {
+	int syncMode = LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE");
+	if (syncMode==8 || syncMode==7 || syncMode==6 || syncMode==5) {
+		syncVoterScc(F);
+	} else { //syncMode==4,3,2,1
 		// add voter to the instruction which has backward edges
 		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
 			errs() << "\n\n# DEBUG_TMR=3 - Backward Edges\n";
@@ -714,20 +812,6 @@ void SchedulerDAG::insertSyncVoter(Function &F) {
 				errs() << "  [" << i << "] " << getLabel(succ) << "<-" << getLabel(pred) << "\n";
 			findSCC(succ);
 			insertSyncVoter(pred, succ);
-		}
-	} //else
-
-	// FIXME
-	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
-		errs() << "\n\n# DEBUG_TMR=1 - SCC Instructions\n";
-	unsigned cnt = 0;
-	for (std::vector<VINST>::const_iterator i = SCCs.begin(),
-	                                        e = SCCs.end(); i != e; ++i) {
-		VINST scc = *i;
-		errs() << "  SCCs[" << cnt++ << "]\n";
-		for (VINST::const_iterator ssi = scc.begin(),
-		                                                     sse = scc.end(); ssi != sse; ++ssi) {
-			errs() << "  " << getValueStr(*ssi) << "\n";
 		}
 	}
 }
@@ -1043,6 +1127,7 @@ int SchedulerDAG::initBBArea(Function &F) {
 		totalArea += pArea;
 	}
 	setcArea(maxArea);
+	errs() << "Area total= " << totalArea << "\n";
 
 	return totalArea;
 }
@@ -1187,19 +1272,29 @@ bool SchedulerDAG::checkAreaConstraint(bool frontMerge,
 				bbPartState[*b] = PART_T;
 	}
 
-	if (frontMerge) {
-		if (getBBArea(PART_S)+bbArea[boundaryBB] > cArea) {
-			pushNewPartition(PART_S);
-			ret = true;
+	//if (boundaryBB == NULL) {
+	//	if (getBBArea(PART_S) < getBBArea(PART_T) && getBBArea(PART_T)>0) {
+	//		pushNewPartition(PART_T);
+	//		ret = true;
+	//	} else if (getBBArea(PART_S)>0) {
+	//		pushNewPartition(PART_S);
+	//		ret = true;
+	//	}
+	//} else {
+		if (frontMerge) {
+			if (getBBArea(PART_S)+bbArea[boundaryBB] > cArea) {
+				pushNewPartition(PART_S);
+				ret = true;
+			}
+			bbPartState[boundaryBB] = PART_S;
+		} else {
+			if (getBBArea(PART_T)+bbArea[boundaryBB] > cArea) {
+				pushNewPartition(PART_T);
+				ret = true;
+			}
+			bbPartState[boundaryBB] = PART_T;
 		}
-		bbPartState[boundaryBB] = PART_S;
-	} else {
-		if (getBBArea(PART_T)+bbArea[boundaryBB] > cArea) {
-			pushNewPartition(PART_T);
-			ret = true;
-		}
-		bbPartState[boundaryBB] = PART_T;
-	}
+	//}
 	
 	return ret;
 }
@@ -1234,8 +1329,11 @@ void SchedulerDAG::networkFlowPartitionBBs(Function &F) {
 	// 2-way partition
 	unsigned pArea = getLimitAreaByPercentage(F);
 	unsigned cArea = getcArea();
+	errs() << "Area constraint (user)= " << pArea << "\n";
+	errs() << "Area constraint (max bb)= " << cArea << "\n";
 	if (pArea>cArea)
 		setcArea(pArea);
+
 	//int minGraphSize = getMinGraphSize(F);
 	//int boundaryEdge = -1;
 	VBB p0;
@@ -1274,6 +1372,7 @@ void SchedulerDAG::networkFlowPartitionBBs(Function &F) {
 			break;
 		}
 		if (boundaryBB == NULL) {
+			//assert(isEmptyCand());
 			pushNewPartition(PART_S);
 			pushNewPartition(PART_T);
 			break;
@@ -1290,6 +1389,15 @@ void SchedulerDAG::networkFlowPartitionBBs(Function &F) {
 		checkAreaConstraint(frontMerge, boundaryBB, p0, p1);
 		//setPartitions(boundaryBB, frontMerge);
 	} while( itrCount++ < nodeSize );
+}
+
+bool SchedulerDAG::isEmptyCand() {
+	for (VBB::iterator b = bbs.begin(); b != bbs.end(); ++b) {
+		if (bbPartState[*b] == PART_UNKNOWN) {
+			return false;
+		}
+	}
+	return true;
 }
 
 void SchedulerDAG::pushNewPartition(PART_STATE s) {
@@ -1432,13 +1540,25 @@ const BasicBlock* SchedulerDAG::maxFlow(int n, int start, int target,
 	}
 
 	//Select min-area boundaryBB from the out of min-cut list
-	if (boundaryBB == NULL) {
+	if (boundaryBB == NULL && p0.size()>1) {
 		unsigned minArea = -1;
 		for(VBB::iterator b = p0.begin(); b != p0.end(); ++b) {
 			if (bbPartState[*b] == PART_UNKNOWN) {
 				if ((unsigned)bbArea[*b]<minArea) {
 					minArea = bbArea[*b];
 					frontMerge = true;
+					boundaryBB = *b;
+				}
+			}
+		}
+	}
+	if (boundaryBB == NULL && p1.size()>1) {
+		unsigned minArea = -1;
+		for(VBB::iterator b = p1.begin(); b != p1.end(); ++b) {
+			if (bbPartState[*b] == PART_UNKNOWN) {
+				if ((unsigned)bbArea[*b]<minArea) {
+					minArea = bbArea[*b];
+					frontMerge = false;
 					boundaryBB = *b;
 				}
 			}
@@ -1711,6 +1831,8 @@ void SchedulerDAG::findPartitionSignals() {
 void SchedulerDAG::bfsPartitionBBs(Function &F) {
 	unsigned pArea = getLimitAreaByPercentage(F);
 	unsigned cArea = getcArea();
+	errs() << "Area constraint (user)= " << pArea << "\n";
+	errs() << "Area constraint (max bb)= " << cArea << "\n";
 	unsigned areaLimit = pArea<cArea? cArea : pArea;
 	unsigned areaTotal = 0;
 
@@ -1735,6 +1857,38 @@ void SchedulerDAG::bfsPartitionBBs(Function &F) {
 	}
 	if (!partitionPath.empty()) {
 		Partitions.push_back(partitionPath);
+	}
+}
+
+void SchedulerDAG::revisitPartitions() {
+	for (std::vector<VBB>::iterator p = Partitions.begin(),
+	                                pe = Partitions.end(); p != pe; ++p) {
+		VBB path = *p;
+		int areaTotal = 0;
+		for (VBB::const_iterator b = path.begin(),
+		                         be = path.end(); b != be; ++b) {
+			areaTotal += bbArea[*b];
+		}
+		if (areaTotal==0) {
+			Partitions.erase(p);
+		}
+	}
+
+	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2) {
+		errs() << "\n\n# DEBUG_TMR=2 - Partition List (n=" << Partitions.size() << ")\n";
+		int cnt = 0;
+		for (std::vector<VBB>::const_iterator p = Partitions.begin(),
+		                                      pe = Partitions.end();
+		                                      p != pe; ++p) {
+			VBB path = *p;
+			errs() << " [" << cnt++ << "] ";
+			for (VBB::const_iterator b = path.begin(),
+			                         be = path.end();
+			                         b != be; ++b) {
+				errs() << getLabel(*b) << " - ";
+			}
+			errs() << " (" << getBBArea(path) << ")\n";
+		}
 	}
 }
 
@@ -1773,24 +1927,8 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
 			//findAllPaths(F);
 			networkFlowPartitionBBs(F);
 		}
+		revisitPartitions();
 		//insertPartitionVoter(F);
-
-		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2) {
-			errs() << "\n\n# DEBUG_TMR=2 - Partition List\n";
-			int cnt = 0;
-			for (std::vector<VBB>::const_iterator p = Partitions.begin(),
-			                                      pe = Partitions.end();
-			                                      p != pe; ++p) {
-				VBB path = *p;
-				errs() << " [" << cnt++ << "] ";
-				for (VBB::const_iterator b = path.begin(),
-				                         be = path.end();
-				                         b != be; ++b) {
-					errs() << getLabel(*b) << " - ";
-				}
-				errs() << " (" << getBBArea(path) << ")\n";
-			}
-		}
 	}
 
 	// set delay

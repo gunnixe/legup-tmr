@@ -6575,6 +6575,10 @@ RTLModule* GenerateRTL::generateRTL(MinimizeBitwidth *_MBW) {
 	// add voter tag
 	if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==6) {
 		updateSyncVoterWithLatency(dag);
+	} else if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==7) {
+		insertSyncVoterOnMaxFanIn(dag);
+	} else if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==8) {
+		insertSyncVoterOnMaxFanOut(dag);
 	}
 	updateVoterSignal(dag);
 
@@ -6683,6 +6687,59 @@ void GenerateRTL::makeFSMSensitiveList(SchedulerDAG *dag, std::vector<const Inst
 	//                                               i != fsmSens.end(); ++i) {
 	//	errs() << getValueStr(*i) << "\n";
 	//}
+}
+
+void GenerateRTL::insertSyncVoterOnMaxFanIn(SchedulerDAG *dag) {
+	for (std::vector<VINST>::const_iterator i = dag->SCCs.begin();
+	                                        i != dag->SCCs.end(); ++i) {
+		VINST scc = *i;
+		const Instruction *maxFanInInst = NULL;
+		int maxFanInCnt = 0;
+		for (VINST::const_iterator si = scc.begin(); si != scc.end(); ++si) {
+			int fanInCnt = 0;
+			for(const Use &U : (*si)->operands()) {
+				Value *v = U.get();
+				if (!isa<Constant>(v))
+					fanInCnt++;
+			}
+			//errs() << getValueStr(*si) << "(fanInCnt=" << fanInCnt << ")\n";
+    		std::string regName = verilogName(*si) + "_reg";
+    		if (rtl->exists(regName) && maxFanInCnt < fanInCnt) {
+				maxFanInCnt = fanInCnt;
+				maxFanInInst = *si;
+			}
+		}
+		//errs() << "MaxFanInInst = " << getValueStr(maxFanInInst) << "\n";
+		InstructionNode* iNode = dag->getInstructionNode(const_cast<Instruction*>(maxFanInInst));
+		iNode->setBackward(true);//, *scc); //use(phi)
+	}	
+}
+
+void GenerateRTL::insertSyncVoterOnMaxFanOut(SchedulerDAG *dag) {
+	for (std::vector<VINST>::const_iterator i = dag->SCCs.begin();
+	                                        i != dag->SCCs.end(); ++i) {
+		VINST scc = *i;
+		const Instruction *maxFanOutInst = NULL;
+		int maxFanOutCnt = 0;
+		for (VINST::const_iterator si = scc.begin(); si != scc.end(); ++si) {
+			int fanOutCnt = 0;
+			//errs() << "def: " << getValueStr(*si) << "\n";
+			for (const User *U : (*si)->users()) {
+				fanOutCnt++;
+				//if (const Instruction *Inst = dyn_cast<const Instruction>(U)) {
+				//	errs() << " -" << *Inst << "\n";
+				//}
+			}
+    		std::string regName = verilogName(*si) + "_reg";
+    		if (rtl->exists(regName) && maxFanOutCnt < fanOutCnt) {
+				maxFanOutCnt = fanOutCnt;
+				maxFanOutInst = *si;
+			}
+		}
+		//errs() << "MaxFanOutInst = " << getValueStr(maxFanOutInst) << "\n";
+		InstructionNode* iNode = dag->getInstructionNode(const_cast<Instruction*>(maxFanOutInst));
+		iNode->setBackward(true);//, *scc); //use(phi)
+	}
 }
 
 void GenerateRTL::updateSyncVoterWithLatency(SchedulerDAG *dag) {

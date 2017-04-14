@@ -6,6 +6,7 @@ my $DEST = output_part;
 my $START_CNT = 0;
 my $SYN_TOP = top;
 my $PNR_TOP = ML605;
+my $TEMPLATE = template_inline;
 
 my @example_list;
 
@@ -75,7 +76,7 @@ my @sensitive_1B;
 if($fname eq "all") {
 	&do_work($_) for(@example_list);
 } else {
-	$dest_folder = "template/".$fname;
+	$dest_folder = "$TEMPLATE/".$fname;
 	die "Folder '$dest_folder' is not exist\n" if(!-d $dest_folder);
 	&do_work($fname);
 }
@@ -126,9 +127,9 @@ sub do_work {
 
 		#if($scenario_cnt==5) { $scenario_cnt++; next; }
 
-		if(m/^\d \d \d \d \d \d \d$/) {
-			@arg_list = split(/ /, $_, 7);
-			#my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram $clkmargin) = @arg_list; 
+		if(m/^\d \d \d \d \d \d \d \d$/) {
+			@arg_list = split(/ /, $_, 8);
+			#my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram $clkmargin $numpart) = @arg_list; 
 
 			# LegUp4.0 does not support complex data dependency analysis.
 			# - need to skip pipelining
@@ -154,13 +155,18 @@ sub do_work {
 				$arg_list[3] = 0;
 			}
 
+			# minimum partition size = 2
+			if($arg_list[2] != 0 && $arg_list[7]<2) {
+				$arg_list[7] = 2;
+			}
+
 			# prepare work dir
 			my $cname = $fname."_".$scenario_cnt;
 
 			if($flag_create) {
 				system("rm -rf $DEST/$cname");
 				system("mkdir -p $DEST") if(!-d "$DEST");
-				system("cp -r template/$fname $DEST/$cname");
+				system("cp -r $TEMPLATE/$fname $DEST/$cname");
 			}
 			chdir "$DEST/$cname";
 			&change_config(@arg_list, $xilinx) if($flag_create);
@@ -228,7 +234,7 @@ sub change_makefile {
 }
 
 sub change_config {
-	my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram, $clkmargin, $xilinx) = @_;
+	my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram, $clkmargin, $numpart, $xilinx) = @_;
 	open(FH, '+<', "config.tcl") or die "cannot open 'config.tcl' $!";
 	my $out = '';
 	while(<FH>) {
@@ -239,6 +245,7 @@ sub change_config {
 		next if(m/set_parameter LOCAL_RAMS \d$/);
 		next if(m/set_parameter USE_REG_VOTER_FOR_LOCAL_RAMS \d$/);
 		next if(m/set_parameter PIPELINE_ALL \d$/);
+		next if(m/set_parameter NUMBER_OF_PARTITIONS \d$/);
 		next if(m/loop_pipeline \"loop\"$/);
 
 		$out .= "$_\n";
@@ -251,6 +258,7 @@ sub change_config {
 	$out .= "set_parameter PART_VOTER_MODE $pmode\n";
 	$out .= "set_parameter LOCAL_RAMS $lram\n";
 	$out .= "set_parameter USE_REG_VOTER_FOR_LOCAL_RAMS $rvlram\n";
+	$out .= "set_parameter NUMBER_OF_PARTITIONS $numpart\n";
 	#add locam mem constrant for FMax
 	#if($lram && (($tmr==0) || ($tmr==1 && $smode==2))) {
 	#	$out .= "set_operation_latency local_mem_dual_port 2\n";

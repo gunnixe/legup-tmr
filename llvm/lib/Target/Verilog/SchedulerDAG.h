@@ -235,12 +235,15 @@ public:
     void printDFGDot(formatted_raw_ostream &out, BasicBlock *BB);
 
 	// voter
+	void syncVoterScc(Function &F);
 	void addSCC(VINST scc);
 	void addSCC(VINST scc, const Instruction *use);
 	bool isSCCInst(const Instruction *def);
-	void findSCC(const BasicBlock* succ);
-	void findSCC(VINST scc, const Instruction *i2);
+	void findSCC(const BasicBlock* succ, bool findWithinBB = false);
+	void findSCC(VINST scc, const Instruction *i2, bool findWithinBB = false);
 	void insertSyncVoterWithSCC();
+	void insertSyncVoterOnMaxFanIn();
+	void insertSyncVoterOnMaxFanOut(Function &F);
 	void insertSyncVoter(Function &F);
 	void insertSyncVoter(const BasicBlock* pred, const BasicBlock* succ);
 	bool foundBackwardDependency(const Instruction *use, const Instruction *def,
@@ -282,6 +285,8 @@ public:
 	bool skipInst(const Instruction *I);
 	int getLimitAreaByPercentage(Function &F);
 	void findPartitionSignals();
+	bool isEmptyCand();
+	void revisitPartitions();
 	bool checkAreaConstraint(bool frontMerge, const BasicBlock *boundaryBB,
 				VBB p0, VBB p1);
 	void pushPlist(VBB &plist, VBB pNodes);
@@ -290,6 +295,8 @@ public:
 	void dumpVBB(VBB blist, std::string str);
 	void dumpbbPartState(std::string str);
 	void dumpFlow(int flow[][MAX_NODE], int s, int t, int max_flow);
+	void initInstMap(Function &F);
+	void clearInstMap();
 
 	int getcArea() { return cArea; }
 	void setcArea(int a) { cArea = a; }

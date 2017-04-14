@@ -66,6 +66,11 @@ class DebugType;
 /// @brief Legup Hardware Module Representation
 class GenerateRTL : public InstVisitor<GenerateRTL> {
 public:
+	typedef std::vector<const BasicBlock*> VBB;
+	typedef std::vector<const Instruction*> VINST;
+	typedef DenseMap<const BasicBlock*, int> MBB;
+	typedef DenseMap<const Instruction*, int> MINST;
+
     GenerateRTL(Allocation *alloc, Function* F) :
         sched(0), binding(0), fsm(0), bindingFSM(0),  alloc(alloc), Fp(F),
         rtl(0),  mc_force_wire_operand(false) {
@@ -161,6 +166,8 @@ public:
 	void addOpToInput(RTLBBModule *bbm, RTLOp *op);
 	void addSensitiveListToInput(RTLBBModule *bbm, RTLSignal *sig);
 	void updateBBModuleInputs();
+	void insertSyncVoterOnMaxFanOut(SchedulerDAG *dag);
+	void insertSyncVoterOnMaxFanIn(SchedulerDAG *dag);
 
     void scheduleOperations();
 
