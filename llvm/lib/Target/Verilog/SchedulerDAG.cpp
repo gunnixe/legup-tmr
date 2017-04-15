@@ -578,7 +578,7 @@ bool SchedulerDAG::isSCCInst(const Instruction *def) {
 	return false;
 }
 
-void SchedulerDAG::findSCC(VINST scc, const Instruction *def, bool findWithinBB) {
+bool SchedulerDAG::findSCC(VINST scc, const Instruction *def, bool findWithinBB) {
    	for (User::const_op_iterator i = def->op_begin(), e = def->op_end(); i != e; ++i) {
 		const Instruction *use = dyn_cast<Instruction>(*i);
 
@@ -594,22 +594,22 @@ void SchedulerDAG::findSCC(VINST scc, const Instruction *def, bool findWithinBB)
 		//if (isa<LoadInst>(use))
 		//	continue;
 
-		if (instMap[use]==1)
-			continue;
-
-		instMap[use] = 1;
-		if (std::find(scc.begin(), scc.end(), use) == scc.end()) {
+		if (scc.front()==use) {
+			addSCC(scc,use);
+			return false;
+		} else if (instMap[use]==0) {
+			instMap[use] = 1;
 			scc.push_back(use);
 			//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
 			//	errs() << "     <- (" << scc.size() << ")" << getValueStr(use) << "\n";
-			findSCC(scc, use, findWithinBB);
+			if (!findSCC(scc, use, findWithinBB))
+				return false;
 			//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
 			//	errs() << "     pop (" << scc.size() << ") : " << getValueStr(scc.back()) << "\n";
 			scc.pop_back();
-		} else {
-			addSCC(scc, use);
 		}
 	}
+	return true;
 }
 
 //bool SchedulerDAG::findSCC(VINST scc, const Instruction *def) {
@@ -658,16 +658,17 @@ void SchedulerDAG::findSCC(VINST scc, const Instruction *def, bool findWithinBB)
 //}
 
 void SchedulerDAG::findSCC(const BasicBlock* succ, bool findWithinBB) {
-	clearInstMap();
 	for (BasicBlock::const_iterator si = succ->begin();
 	                                si != succ->end(); si++) {
 		const Instruction *def = si;
+		clearInstMap();
 		instMap[def] = 1;
 		VINST scc;
-		//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
-		//	errs() << "    INSTRUCTION:" << getValueStr(def) << "\n";
 		if (!isa<PHINode>(def))
 			continue;
+
+		//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+		//	errs() << "    INSTRUCTION:" << getValueStr(def) << "\n";
 		scc.push_back(def);
 		findSCC(scc, def, findWithinBB);
 	}

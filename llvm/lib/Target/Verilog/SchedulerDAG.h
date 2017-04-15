@@ -240,7 +240,7 @@ public:
 	void addSCC(VINST scc, const Instruction *use);
 	bool isSCCInst(const Instruction *def);
 	void findSCC(const BasicBlock* succ, bool findWithinBB = false);
-	void findSCC(VINST scc, const Instruction *i2, bool findWithinBB = false);
+	bool findSCC(VINST scc, const Instruction *i2, bool findWithinBB = false);
 	void insertSyncVoterWithSCC();
 	void insertSyncVoterOnMaxFanIn();
 	void insertSyncVoterOnMaxFanOut(Function &F);

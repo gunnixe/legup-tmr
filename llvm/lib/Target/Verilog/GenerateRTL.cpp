@@ -6720,16 +6720,16 @@ void GenerateRTL::insertSyncVoterOnMaxFanOut(SchedulerDAG *dag) {
 	                                        i != dag->SCCs.end(); ++i) {
 		VINST scc = *i;
 		const Instruction *maxFanOutInst = NULL;
-		int maxFanOutCnt = 0;
+		unsigned maxFanOutCnt = 0;
 		for (VINST::const_iterator si = scc.begin(); si != scc.end(); ++si) {
-			int fanOutCnt = 0;
+			unsigned fanOutCnt = (*si)->getNumUses();
 			//errs() << "def: " << getValueStr(*si) << "\n";
-			for (const User *U : (*si)->users()) {
-				fanOutCnt++;
-				//if (const Instruction *Inst = dyn_cast<const Instruction>(U)) {
-				//	errs() << " -" << *Inst << "\n";
-				//}
-			}
+			//for (const User *U : (*si)->users()) {
+			//	fanOutCnt++;
+			//	//if (const Instruction *Inst = dyn_cast<const Instruction>(U)) {
+			//	//	errs() << " -" << *Inst << "\n";
+			//	//}
+			//}
     		std::string regName = verilogName(*si) + "_reg";
     		if (rtl->exists(regName) && maxFanOutCnt < fanOutCnt) {
 				maxFanOutCnt = fanOutCnt;
