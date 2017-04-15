@@ -1779,31 +1779,16 @@ void SchedulerDAG::findPartitionSignals() {
 	if (Partitions.empty())
 		return;
 
-	VBB predPartBBs;
-	VBB path = Partitions.front();
-	for (VBB::const_iterator b = path.begin(),
-	                                                     be = path.end();
-	                                                     b != be; ++b) {
-		predPartBBs.push_back(*b);
-	}
-	for (std::vector<VBB>::const_iterator p = Partitions.begin()+1,
-	                                                     pe = Partitions.end();
-	                                                     p != pe; ++p) {
+	for (std::vector<VBB>::const_iterator p = Partitions.begin(),
+	                                      pe = Partitions.end(); p != pe; ++p) {
 		VBB path = *p;
 		for (VBB::const_iterator b = path.begin(),
-		                                                     be = path.end();
-		                                                     b != be; ++b) {
+		                         be = path.end(); b != be; ++b) {
 			BasicBlock *BB = const_cast<BasicBlock *>(*b);
     		for (BasicBlock::iterator I = BB->begin(), ie = BB->end(); I != ie; ++I) {
     			// these instructions are not scheduled
     			if (isa<AllocaInst>(I))// || isa<PHINode>(I))
     			    continue;
-
-				//if (isa<ReturnInst>(I)) {
-				//	InstructionNode *INode = getInstructionNode(I);
-				//	INode->setPartition(true);
-				//	continue;
-				//}
 
     			for (User::op_iterator i = I->op_begin(), e = I->op_end(); i != e; ++i) {
     			    // we only care about operands that are created by other instructions
@@ -1813,20 +1798,60 @@ void SchedulerDAG::findPartitionSignals() {
     			    if (!dep || isa<AllocaInst>(dep))
     			        continue;
 
-    			    // ignore operands from other basic blocks, these are
-    			    // guaranteed to be in another state
-    		    	InstructionNode *depNode = getInstructionNode(dep);
-    			    if (isPredPartition(predPartBBs, dep->getParent()))
-						//if (!depNode->getBackward())
-							depNode->setPartition(true);
+					if (dep->getParent() != BB) {
+    		    		InstructionNode *depNode = getInstructionNode(dep);
+						depNode->setPartition(true);
+					}
     			}
     		}
 		}
-		for (VBB::const_iterator b = path.begin(),
-		                         be = path.end(); b != be; ++b) {
-			predPartBBs.push_back(*b);
-		}
 	}
+
+	//VBB predPartBBs;
+	//VBB path = Partitions.front();
+	//for (VBB::const_iterator b = path.begin(),
+	//                         be = path.end(); b != be; ++b) {
+	//	predPartBBs.push_back(*b);
+	//}
+	//for (std::vector<VBB>::const_iterator p = Partitions.begin()+1,
+	//                                      pe = Partitions.end(); p != pe; ++p) {
+	//	VBB path = *p;
+	//	for (VBB::const_iterator b = path.begin(),
+	//	                         be = path.end(); b != be; ++b) {
+	//		BasicBlock *BB = const_cast<BasicBlock *>(*b);
+    //		for (BasicBlock::iterator I = BB->begin(), ie = BB->end(); I != ie; ++I) {
+    //			// these instructions are not scheduled
+    //			if (isa<AllocaInst>(I))// || isa<PHINode>(I))
+    //			    continue;
+
+	//			//if (isa<ReturnInst>(I)) {
+	//			//	InstructionNode *INode = getInstructionNode(I);
+	//			//	INode->setPartition(true);
+	//			//	continue;
+	//			//}
+
+    //			for (User::op_iterator i = I->op_begin(), e = I->op_end(); i != e; ++i) {
+    //			    // we only care about operands that are created by other instructions
+    //			    Instruction *dep = dyn_cast<Instruction>(*i);
+
+    //			    // also ignore if the dependency is an alloca
+    //			    if (!dep || isa<AllocaInst>(dep))
+    //			        continue;
+
+    //			    // ignore operands from other basic blocks, these are
+    //			    // guaranteed to be in another state
+    //		    	InstructionNode *depNode = getInstructionNode(dep);
+    //			    if (isPredPartition(predPartBBs, dep->getParent()))
+	//					//if (!depNode->getBackward())
+	//						depNode->setPartition(true);
+    //			}
+    //		}
+	//	}
+	//	for (VBB::const_iterator b = path.begin(),
+	//	                         be = path.end(); b != be; ++b) {
+	//		predPartBBs.push_back(*b);
+	//	}
+	//}
 }
 
 void SchedulerDAG::bfsPartitionBBs(Function &F) {
