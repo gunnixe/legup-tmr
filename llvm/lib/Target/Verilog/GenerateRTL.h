@@ -165,9 +165,11 @@ public:
 	void printDebugSignal(std::string chr);
 	void addOpToInput(RTLBBModule *bbm, RTLOp *op);
 	void addSensitiveListToInput(RTLBBModule *bbm, RTLSignal *sig);
-	void updateBBModuleInputs();
+	void updateBBModuleInputs(SchedulerDAG *dag);
+	void updateBBfinput(Instruction *I);
 	void insertSyncVoterOnMaxFanOut(SchedulerDAG *dag);
 	void insertSyncVoterOnMaxFanIn(SchedulerDAG *dag);
+	void relocatePrimitiveModules(RTLBBModule *bbm, Instruction *I);
 
     void scheduleOperations();
 

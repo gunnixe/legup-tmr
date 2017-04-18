@@ -434,19 +434,19 @@ void SchedulerDAG::insertSyncVoterWithSCC() {
 void SchedulerDAG::insertSyncVoter(const BasicBlock* pred, const BasicBlock* succ) {
 	unsigned siIdx = 0;
 	for (BasicBlock::const_iterator si = succ->begin();
-	     si != succ->end(); si++) {
+	                                si != succ->end(); si++) {
 		const Instruction *i2 = si;
 		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
 			errs() << "    INSTRUCTION:" << getValueStr(i2) << "\n";
-   		for (User::const_op_iterator i = i2->op_begin(), e = i2->op_end(); i != e;
-   		     ++i) {
+   		for (User::const_op_iterator i = i2->op_begin(),
+		                             e = i2->op_end(); i != e; ++i) {
 			const Instruction *use = dyn_cast<Instruction>(*i);
 			if (!use || isa<AllocaInst>(use))
 				continue;
 
 			unsigned piIdx = 0;
 			for (BasicBlock::const_iterator pi = pred->begin();
-			     pi != pred->end(); pi++) {
+			                                pi != pred->end(); pi++) {
 				const Instruction *i1 = pi;
 				if (foundBackwardDependency(use, i1, pred, succ, siIdx, piIdx)) {
 					if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
@@ -1664,7 +1664,9 @@ int SchedulerDAG::getLimitAreaByPercentage(Function &F) {
 		}
 	}
 
+	unsigned pMode = LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE");
 	unsigned nPart = LEGUP_CONFIG->getParameterInt("NUMBER_OF_PARTITIONS");
+	assert(nPart>0 || pMode==0);
 	unsigned areaMarginPercentage = LEGUP_CONFIG->getParameterInt("PART_AREA_MARGIN_PERCENTAGE");
 	unsigned areaConstraint = totalArea/nPart;
 	unsigned areaMargin = areaConstraint*areaMarginPercentage/100;
@@ -1941,8 +1943,10 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
 
 	// TMR - detect backward edges and mark on them (setBackward())
 	if (LEGUP_CONFIG->getParameterInt("TMR")) {
-		FindFunctionBackedges(F, BackEdges);
-		insertSyncVoter(F);
+		if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")!=0) {
+			FindFunctionBackedges(F, BackEdges);
+			insertSyncVoter(F);
+		}
 
 		//findSCCBBs(F);
 		if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==1) {
@@ -1983,7 +1987,7 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
         for (BasicBlock::iterator instr = b->begin(), ie = b->end();
              instr != ie; ++instr) {
 			Instruction *I = instr;
-			InstructionNode *iNode = getInstructionNode(I);
+			//InstructionNode *iNode = getInstructionNode(I);
 
 			if (I->getType()->getTypeID() == Type::VoidTyID)
 				continue;
@@ -1994,6 +1998,8 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
         	if (I->hasNUses(0))
         	    continue; // ignore instructions with no uses
 
+			bbNode->addOutput(I);
+			//errs() << "  output " << getValueStr(I) << ",\n";
     		for (User::op_iterator i = I->op_begin(), e = I->op_end(); i != e; ++i) {
     		    // we only care about operands that are created by other instructions
     		    Instruction *dep = dyn_cast<Instruction>(*i);
@@ -2002,17 +2008,17 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
    			    if (!dep)// || isa<AllocaInst>(dep))
    			        continue;
 
-   		    	//InstructionNode *depNode = getInstructionNode(dep);
+				InstructionNode *depNode = getInstructionNode(dep);
 				if (I->getParent() != dep->getParent()) {
 					bbNode->addInput(dep);
-					//errs() << "\tinput " << getValueStr(dep) << ",\n";
+					//errs() << "    input " << getValueStr(dep) << ",\n";
 				}
-				if (I->getParent()==dep->getParent() && (iNode->getBackward()))
+				if (I->getParent()==dep->getParent() && (depNode->getBackward())) {
 						//|| LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==1))
-					bbNode->addFeedbackInput(I);
+					bbNode->addFeedbackInput(dep);
+					//errs() << "    finput " << getValueStr(dep) << ",\n";
+				}
    			}
-			bbNode->addOutput(I);
-			//errs() << "\toutput " << getValueStr(I) << ",\n";
         }
     }
 

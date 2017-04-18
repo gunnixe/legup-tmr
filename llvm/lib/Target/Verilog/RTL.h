@@ -345,6 +345,13 @@ public:
 
     typedef std::vector<RTLSignal*>::iterator signal_iterator;
     typedef std::vector<RTLSignal*>::const_iterator const_signal_iterator;
+    typedef std::vector<RTLModule*>::iterator module_iterator;
+    typedef std::vector<RTLModule*>::const_iterator const_module_iterator;
+
+    module_iterator       modules_begin()       { return modules.begin(); }
+    const_module_iterator modules_begin() const { return modules.begin(); }
+    module_iterator       modules_end()         { return modules.end(); }
+    const_module_iterator modules_end()   const { return modules.end(); }
 
     signal_iterator       signals_begin()       { return signals.begin(); }
     const_signal_iterator signals_begin() const { return signals.begin(); }
@@ -374,6 +381,7 @@ public:
 	void add_finput(RTLSignal *in) { finputs.push_back(in); }
 	void add_output(RTLSignal *out) { outputs.push_back(out); }
 	void add_signal(RTLSignal *sig) { signals.push_back(sig); }
+	void add_module(RTLModule *mod) { modules.push_back(mod); }
 
 	bool empty() { return signals.empty(); }
 
@@ -381,9 +389,11 @@ public:
 	void remove_finput(std::string name);
 	void remove_output(std::string name);
 	void remove_signal(std::string name);
+	void remove_module(std::string name);
 
 private:
 	std::string name;
+	std::vector<RTLModule *> modules;
 	std::vector<RTLSignal *> signals;
 	std::vector<RTLSignal *> inputs;
 	std::vector<RTLSignal *> finputs;
@@ -508,6 +518,7 @@ public:
 
     /// add an instantiated module
     RTLModule *addModule(std::string name, std::string instName);
+    void removeModule(std::string name);
 
     /// remove a signal
     void remove(std::string name);

@@ -5987,6 +5987,22 @@ void GenerateRTL::createRTLSignals() {
     }
 }
 
+void GenerateRTL::relocatePrimitiveModules(RTLBBModule *bbm, Instruction *I) {
+   	for (RTLModule::const_module_iterator m = rtl->instances_begin();
+   	                                      m != rtl->instances_end(); ++m) {
+		RTLModule *mod = *m;
+		errs() << "reloMod: " << mod->getName() << "\n";
+		for (RTLModule::const_signal_iterator i = mod->signals_begin();
+		                                      i != mod->signals_end(); ++i) {
+			errs() << (*i)->getName() << "\n";
+			if ((*i)->getInst(0) == I) {
+				errs() << "Find primitive module: " << getValueStr(I) << "\n";
+				break;
+			}
+		}
+	}
+}
+
 void GenerateRTL::createRTLSignalsForInstructions() {
 
     for (inst_iterator i = inst_begin(Fp), e = inst_end(Fp); i != e; ++i) {
@@ -6030,6 +6046,8 @@ void GenerateRTL::createRTLSignalsForInstructions() {
 					bbm->add_input(sig);
 				if (sig_reg)
 					bbm->add_input(sig_reg);
+			//} else {
+			//	errs() << "bbNode input: " << getValueStr(*I) << "\n";
 			}
 		}
 
@@ -6042,6 +6060,8 @@ void GenerateRTL::createRTLSignalsForInstructions() {
 				RTLSignal *sig_reg = rtl->find(reg);
 				if (sig_reg)
 					bbm->add_finput(sig_reg);
+			//} else {
+			//	errs() << "bbNode finput: " << getValueStr(*I) << "\n";
 			}
 		}
 
@@ -6058,6 +6078,8 @@ void GenerateRTL::createRTLSignalsForInstructions() {
 					bbm->add_output(sig);
 				if (sig_reg)
 					bbm->add_output(sig_reg);
+			//} else {
+			//	errs() << "bbNode output: " << getValueStr(*I) << "\n";
 			}
 		}
 
@@ -6583,7 +6605,7 @@ RTLModule* GenerateRTL::generateRTL(MinimizeBitwidth *_MBW) {
 	updateVoterSignal(dag);
 
 	// update BB Module input port list
-	updateBBModuleInputs();
+	updateBBModuleInputs(dag);
 
 	return rtl;
 }
@@ -6605,7 +6627,37 @@ void GenerateRTL::addSensitiveListToInput(RTLBBModule *bbm, RTLSignal *sig) {
 	}
 }
 
-void GenerateRTL::updateBBModuleInputs() {
+void GenerateRTL::updateBBModuleInputs(SchedulerDAG *dag) {
+    //for (Function::iterator b = Fp->begin(), be = Fp->end(); b != be; ++b) {
+	//	BasicBlockNode *bbNode = dag->getBasicBlockNode(b);
+
+	//	std::string bbModuleName = "BB_" + b->getParent()->getName().str() + verilogName(b);
+	//	RTLBBModule *bbm = new RTLBBModule(bbModuleName);
+	//	for (BasicBlockNode::iterator I = bbNode->output_begin(),
+	//	                              IE = bbNode->output_end();
+	//	                              I != IE; ++I) {
+	//		std::string wire = verilogName(*I);
+	//		std::string reg = verilogName(*I) + "_reg";
+	//		if (rtl->exists(wire)) {
+	//			RTLSignal *sig = rtl->find(wire);
+	//			RTLSignal *sig_reg = rtl->find(reg);
+	//			if (isDiv(*I) || isRem(*I)
+	//					|| (*I)->getOpcode()==Instruction::FAdd
+	//					|| (*I)->getOpcode()==Instruction::FSub
+	//					|| (*I)->getOpcode()==Instruction::FMul
+	//					|| (*I)->getOpcode()==Instruction::FDiv
+	//					|| (*I)->getOpcode()==Instruction::FCmp
+	//					|| (*I)->getOpcode()==Instruction::FPTrunc
+	//					|| (*I)->getOpcode()==Instruction::FPExt
+	//					|| (*I)->getOpcode()==Instruction::FPToSI
+	//					|| (*I)->getOpcode()==Instruction::SIToFP) {
+	//				errs() << "bbNode output: " << getValueStr(*I) << "\n";
+	//				relocatePrimitiveModules(bbm, *I);
+	//			}
+	//		}
+	//	}
+	//}
+
 	for (std::vector<RTLBBModule *>::iterator bbm = rtl->bbModules.begin(),
 	                                          bbme = rtl->bbModules.end();
 	                                          bbm != bbme; ++bbm) {
@@ -6744,15 +6796,15 @@ void GenerateRTL::insertSyncVoterOnMaxFanOut(SchedulerDAG *dag) {
 
 void GenerateRTL::updateSyncVoterWithLatency(SchedulerDAG *dag) {
 
-	std::vector<const Instruction*> FSMSensitiveList;
+	VINST FSMSensitiveList;
 	makeFSMSensitiveList(dag, FSMSensitiveList);
 
 	// update sync voter
 	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
 		errs() << "\n\n# DEBUG_TMR=3 - SCC Update\n";
 	unsigned cnt = 0;
-	for (std::vector<std::vector<const Instruction*> >::const_iterator i = dag->SCCs.begin(),
-                                                                       e = dag->SCCs.end(); i != e; ++i) {
+	for (std::vector<VINST>::const_iterator i = dag->SCCs.begin(),
+                                            e = dag->SCCs.end(); i != e; ++i) {
 		//FIXME
 		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
 			errs() << "  SCCs[" << cnt++ << "]\n";
@@ -6769,8 +6821,8 @@ void GenerateRTL::updateSyncVoterWithLatency(SchedulerDAG *dag) {
 		// following algorithm which finds minimum latency between SCC wires.
 		const Instruction* minInst = scc.back();
 		float minDelay = InstructionNode::getMaxDelay();
-		for (std::vector<const Instruction*>::const_iterator si = scc.begin(),
-		                                                     se = scc.end(); si != se; ++si) {
+		for (VINST::const_iterator si = scc.begin(),
+		                           se = scc.end(); si != se; ++si) {
 			const Instruction* instr = *si;
 			const Instruction* instr_next = si==scc.end()? scc.front() : *(si+1);
 			InstructionNode* iNode = dag->getInstructionNode(const_cast<Instruction*>(instr));
@@ -6807,33 +6859,37 @@ void GenerateRTL::updateSyncVoterWithLatency(SchedulerDAG *dag) {
 		Instruction *I = const_cast<Instruction*>(minInst);
 		InstructionNode *minNode = dag->getInstructionNode(I);
 		minNode->setBackward(true);
-
-    	for (User::op_iterator i = I->op_begin(), e = I->op_end(); i != e; ++i) {
-    	    // we only care about operands that are created by other instructions
-    	    Instruction *dep = dyn_cast<Instruction>(*i);
-
-  			    // also ignore if the dependency is an alloca
-  			    if (!dep)// || isa<AllocaInst>(dep))
-  			        continue;
-
-			if (I->getParent()==dep->getParent()) {
-				BasicBlock *b = I->getParent();
-				BasicBlockNode *bbNode = dag->getBasicBlockNode(b);
-				if (!bbNode->addFeedbackInput(I))
-					break;
-
-				std::string bbModuleName = "BB_" + b->getParent()->getName().str() + verilogName(b);
-				RTLBBModule *bbm = rtl->getRTLBBModule(bbModuleName);
-				std::string reg = verilogName(*I) + "_reg";
-				if (rtl->exists(reg)) {
-					RTLSignal *sig_reg = rtl->find(reg);
-					if (sig_reg)
-						bbm->add_finput(sig_reg);
-				}
-				break;
-			}
-   		}
 	} //for (SCCs)
+}
+
+void GenerateRTL::updateBBfinput(Instruction *I) {
+	for (User::op_iterator i = I->op_begin(), e = I->op_end(); i != e; ++i) {
+	    // we only care about operands that are created by other instructions
+	    Instruction *dep = dyn_cast<Instruction>(*i);
+	
+		// also ignore if the dependency is an alloca
+		if (!dep)// || isa<AllocaInst>(dep))
+			continue;
+	
+       	InstructionNode *depNode = dag->getInstructionNode(dep);
+		if (I->getParent()==dep->getParent() &&
+				(depNode->getBackward() || depNode->getPartition())) {
+			BasicBlock *b = dep->getParent();
+			BasicBlockNode *bbNode = dag->getBasicBlockNode(b);
+			if (!bbNode->addFeedbackInput(dep))
+				break;
+	
+			std::string bbModuleName = "BB_" + b->getParent()->getName().str() + verilogName(b);
+			RTLBBModule *bbm = rtl->getRTLBBModule(bbModuleName);
+			std::string reg = verilogName(*dep) + "_reg";
+			if (rtl->exists(reg)) {
+				RTLSignal *sig_reg = rtl->find(reg);
+				if (sig_reg)
+					bbm->add_finput(sig_reg);
+			}
+			break;
+		}
+	}
 }
 
 void GenerateRTL::updateVoterSignal(SchedulerDAG *dag) {
@@ -6845,6 +6901,7 @@ void GenerateRTL::updateVoterSignal(SchedulerDAG *dag) {
 	for (inst_iterator i = inst_begin(Fp), e = inst_end(Fp); i != e; ++i) {
         Instruction *I = &*i;
 		InstructionNode *iNode = dag->getInstructionNode(I);
+		updateBBfinput(I);
 
 		if (iNode->getBackward()) {
 			RTLSignal *sig_wire = rtl->find(verilogName(*I));

@@ -2,7 +2,7 @@
 
 use POSIX;
 
-my $DEST = output_part;
+my $DEST = output_wrap;
 my $START_CNT = 0;
 my $SYN_TOP = top;
 my $PNR_TOP = ML605;
@@ -12,20 +12,21 @@ my @example_list;
 
 #simplelist
 #@example_list = (@example_list,qw(add fir mmult qsort fft));
-@example_list = (@example_list,qw(add));
-@example_list = (@example_list,qw(mmult));
+#@example_list = (@example_list,qw(add));
+#@example_list = (@example_list,qw(mmult));
 
 #dhrystone benchmark example
-@example_list = (@example_list,qw(aes aesdec gsm blowfish motion));
-@example_list = (@example_list,qw(mips sha));
-@example_list = (@example_list,qw(satd bellmanford));
-@example_list = (@example_list,qw(sobel));
-@example_list = (@example_list,qw(dfadd dfmul dfdiv));
-@example_list = (@example_list,qw(dfsin));
-@example_list = (@example_list,qw(adpcm));
-@example_list = (@example_list,qw(jpeg));
+#@example_list = (@example_list,qw(aes aesdec gsm blowfish motion));
+#@example_list = (@example_list,qw(mips sha));
+#@example_list = (@example_list,qw(satd bellmanford));
+#@example_list = (@example_list,qw(sobel));
+#@example_list = (@example_list,qw(dfadd dfmul dfdiv));
+#@example_list = (@example_list,qw(dfsin));
+#@example_list = (@example_list,qw(adpcm));
+#@example_list = (@example_list,qw(jpeg));
 
-@example_list = qw(adpcm aes aesdec gsm sha blowfish dfadd dfdiv dfmul dfsin jpeg mips motion satd sobel bellmanford mmult);
+#@example_list = qw(adpcm aes aesdec gsm sha blowfish dfadd dfdiv dfmul dfsin jpeg mips motion satd sobel bellmanford mmult);
+@example_list = qw(adpcm aes aesdec gsm sha blowfish dfadd dfdiv dfmul dfsin mips motion satd sobel bellmanford mmult);
 
 my ($fname) = @ARGV;
 die "Need folder name\n" if(not defined $fname);
@@ -140,7 +141,7 @@ sub do_work {
 					|| ($fname eq "motion")
 					|| ($fname eq "blowfish")
 					|| ($fname eq "sha")
-					|| ($fname eq "adpcm")
+					#|| ($fname eq "adpcm")
 					|| ($fname eq "jpeg")
 					|| ($fname eq "dfsin")
 					|| ($fname eq "bellmanford")
@@ -149,11 +150,11 @@ sub do_work {
 			}
 
 			# - need to skip localmemory use
-			if(($fname eq "adpcm")
-					#|| ($fname eq "bellmanford")
-			  ) {
-				$arg_list[3] = 0;
-			}
+			#if(($fname eq "adpcm")
+			#		#|| ($fname eq "bellmanford")
+			#  ) {
+			#	$arg_list[3] = 0;
+			#}
 
 			# minimum partition size = 2
 			if($arg_list[2] != 0 && $arg_list[7]<2) {

@@ -438,6 +438,17 @@ void RTLModule::remove(std::string name) {
     remove_from_vector(name, signals);
 }
 
+void RTLModule::removeModule(std::string name) {
+    std::vector<RTLModule*>::iterator i = instances.begin();
+    while (i != instances.end()) {
+        if ((*i)->getName() == name) {
+            i = instances.erase(i);
+        } else {
+            ++i;
+        }
+    }
+}
+
 RTLOp *RTLModule::addOp(RTLOp::Opcode opcode) {
     RTLOp *op = new RTLOp(opcode);
     operations.insert(op);
@@ -1065,6 +1076,17 @@ void RTLBBModule::remove_signal(std::string name) {
 	while (i != signals.end()) {
 	    if ((*i)->getName() == name) {
 	        i = signals.erase(i);
+	    } else {
+	        ++i;
+	    }
+	}
+}
+
+void RTLBBModule::remove_module(std::string name) {
+	module_iterator i = modules.begin();
+	while (i != modules.end()) {
+	    if ((*i)->getName() == name) {
+	        i = modules.erase(i);
 	    } else {
 	        ++i;
 	    }

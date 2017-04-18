@@ -71,6 +71,9 @@ public:
 	void printMemoryControllerInstanceNormal();
 	void printMemoryControllerInstanceDual();
 	void printMemoryControllerInstanceConnect(std::string postfix);
+	bool isTmrVoterSignal(const RTLSignal *sig);
+	void printControlModuleBody(const RTLModule *mod);
+	void printControlModuleInstance(const RTLModule *mod);
     //
     
 private:
@@ -186,6 +189,7 @@ private:
     //NC changes...
     //void printRamInstance(RAM *R);
     void printMainInstance(const bool usesPthreads);
+	void printMainInstDeclare(std::string postfix, const bool usesPthreads);
     void printLockInstance(int lockIndex);
     void printLockModule();
     void printBarrierInstance(int barrierIndex);
