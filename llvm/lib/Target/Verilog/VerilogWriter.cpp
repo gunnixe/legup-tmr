@@ -7518,7 +7518,10 @@ void VerilogWriter::printControlModuleBody(const RTLModule *mod,
 				}
 			}
 		} else if (!isBBModuleSig(*i) && !isMemInputSig(*i)) {
-       		Out << ",\n\t" << "output reg" << width << name;
+			if ((*i)->getNumConditions()!=0 || (*i)->getNumDrivers()!=0)
+       			Out << ",\n\t" << "output reg" << width << name;
+			else
+				Out << ",\n\t" << "input" << width << name;
 			//std::string type = isBBModuleSig(*i)? "input" : "output reg";
 			//Out << ",\n\t" << type << width << name;
 		} else if (findList(sensitiveList, *i)) {
