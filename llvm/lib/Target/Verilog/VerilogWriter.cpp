@@ -6640,13 +6640,18 @@ void VerilogWriter::printModelsimSignals(bool voidtype) {
 }
 
 bool VerilogWriter::isTmrVoterSignal(const RTLSignal* sig) {
+	bool isReg = false;
+	std::size_t len = sig->getName().length();
+	if ((len>4 && sig->getName().substr(len-4)=="_reg") || sig->isReg())
+		isReg = true;
+
  	if (isMemOutputSig(sig))
 		return true;
 	if (sig->getName()=="cur_state")
 		return true;
-	if (sig->getVoter()==RTLSignal::SYNC_VOTER && sig->isReg())
+	if (sig->getVoter()==RTLSignal::SYNC_VOTER && isReg)
 		return true;
-	if (sig->getVoter()==RTLSignal::PART_VOTER && sig->isReg())
+	if (sig->getVoter()==RTLSignal::PART_VOTER && isReg)
 		return true;
 
 	return false;
@@ -6813,23 +6818,23 @@ void VerilogWriter::printModuleHeader() {
 		if (moduleName=="main_tb") {
    	    	printDeclaration(*i, true);
    	   		Out << "\n";
-		} else if (isBBModuleSig(*i) || isTmrVoterSignal(*i)) {
+		} else if (isBBModuleSig(*i) || isTmrVoterSignal(*i) || !isMemInputSig(*i)) {
 			Out << "wire " << (*i)->getWidth().str() << " "
 			    << (*i)->getName() << ";\n";
-		} else if (!isMemInputSig(*i)) {
-   	    	printDeclaration(*i);
-   	   		Out << "\n";
+		//} else if (!isMemInputSig(*i)) {
+   	    //	printDeclaration(*i);
+   	   	//	Out << "\n";
 		}
 	}
 
-	Out << "\n";
-   	for (RTLModule::const_signal_iterator i = rtl->signals_begin(),
-   	   	                                  e = rtl->signals_end();
-   	                                      i != e; ++i) {
-		if (!isBBModuleSig(*i) && !isTmrVoterSignal(*i) && !isMemInputSig(*i)) {
-   	    	printSignal(*i);
-		}
-	}
+	//Out << "\n";
+   	//for (RTLModule::const_signal_iterator i = rtl->signals_begin(),
+   	//   	                                  e = rtl->signals_end();
+   	//                                      i != e; ++i) {
+	//	if (!isBBModuleSig(*i) && !isTmrVoterSignal(*i) && !isMemInputSig(*i)) {
+   	//    	printSignal(*i);
+	//	}
+	//}
 	Out << "\n";
 }
 
@@ -7344,7 +7349,7 @@ void VerilogWriter::printBBModuleBody(RTLBBModule *bbm) {
 	                                  i != e; ++i) {
 		std::string name = (*i)->getName();
 		//Out << "\tinput " << (*i)->getWidth().str() << " " << name << "_v,\n";
-		Out << "\tinput " << (*i)->getWidth().str() << " " << name << ",\n";
+		Out << "\tinput " << (*i)->getWidth().str() << " " << name << ", /*finput*/\n";
 	}
 
 	//for (RTLModule::const_signal_iterator i = rtl->signals_begin(),
@@ -7408,7 +7413,8 @@ void VerilogWriter::printBBModuleBody(RTLBBModule *bbm) {
 	Out << "endmodule\n\n";
 }
 
-void VerilogWriter::printControlModuleInstance(const RTLModule *mod) {
+void VerilogWriter::printControlModuleInstance(const RTLModule *mod,
+		std::vector<const RTLSignal*> sensitiveList) {
 	bool isTmr = (LEGUP_CONFIG->getParameterInt("TMR")==1);
 	bool noVoter = (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==0 &&
 	                LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==0);
@@ -7446,14 +7452,19 @@ void VerilogWriter::printControlModuleInstance(const RTLModule *mod) {
        				Out << ",\n\t." << name << "_v(" << name << "_v)";
 			}
 		//} else if (!isMemInputSig(*i)) {
-		} else if (isBBModuleSig(*i)) {
+		//} else if (isBBModuleSig(*i)) {
+		} else if (findList(sensitiveList, *i)) {
+			Out << ",\n\t." << name << "(" << name << ")";
+		} else if (!isBBModuleSig(*i) && !isMemInputSig(*i)) {
 			Out << ",\n\t." << name << "(" << name << ")";
 		}
     }
+
 	Out << "\n);\n\n";
 }
 
-void VerilogWriter::printControlModuleBody(const RTLModule *mod) {
+void VerilogWriter::printControlModuleBody(const RTLModule *mod,
+		std::vector<const RTLSignal *> sensitiveList) {
 	bool isTmr = (LEGUP_CONFIG->getParameterInt("TMR")==1);
 	bool noVoter = (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==0 &&
 	                LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==0);
@@ -7506,11 +7517,12 @@ void VerilogWriter::printControlModuleBody(const RTLModule *mod) {
        				Out << ",\n\t" << "output reg" << width << name << "_v";
 				}
 			}
-		} else if (isBBModuleSig(*i)) {
+		} else if (!isBBModuleSig(*i) && !isMemInputSig(*i)) {
+       		Out << ",\n\t" << "output reg" << width << name;
+			//std::string type = isBBModuleSig(*i)? "input" : "output reg";
+			//Out << ",\n\t" << type << width << name;
+		} else if (findList(sensitiveList, *i)) {
 			Out << ",\n\t" << "input" << width << name;
-		//} else if (!isMemInputSig(*i)) {
-		//	std::string type = isBBModuleSig(*i)? "input" : "output reg";
-		//	Out << ",\n\t" << type << width << name;
 		}
     }
 	Out << "\n);\n\n";
@@ -7527,7 +7539,7 @@ void VerilogWriter::printControlModuleBody(const RTLModule *mod) {
         Out << "\n";
     }
 
-	// TMR signal delcaration
+	// signal delcaration
     for (RTLModule::const_signal_iterator i = mod->signals_begin(),
                                           e = mod->signals_end();
                                           i != e; ++i) {
@@ -7537,8 +7549,13 @@ void VerilogWriter::printControlModuleBody(const RTLModule *mod) {
 		} else if ((*i)->getName()=="cur_state") {
 			Out << "reg " << (*i)->getWidth().str()
 			    << " next_state" << ";\n";
+		//} else if (!isBBModuleSig(*i) && !isTmrVoterSignal(*i)) {
+		//	printDeclaration(*i);
+		//	Out << "\n";
 		}
     }
+	Out << "\n";
+
     for (RTLModule::const_signal_iterator i = mod->signals_begin(),
                                           e = mod->signals_end();
                                           i != e; ++i) {
@@ -7604,9 +7621,12 @@ void VerilogWriter::printControlModuleBody(const RTLModule *mod) {
 		//	useReplicaNumberForAllVariables = false;
 		//} else
         //	printSignal(*i);
-        if ((*i)->getName()=="cur_state" || isMemInputSig(*i))
+        //if ((*i)->getName()=="cur_state" || isMemInputSig(*i))
+        if (!isBBModuleSig(*i))
 			printSignal(*i);
     }
+	Out << "\n";
+
 
 	// print voters for feedback signals
 	//Out << "\n\n//voter\n";
@@ -7632,6 +7652,62 @@ void VerilogWriter::printControlModuleBody(const RTLModule *mod) {
 	Out << "endmodule\n\n";
 }
 
+void VerilogWriter::addOpToInput(std::vector<const RTLSignal*> &V, RTLOp *op) {
+	for (unsigned j=0; j<op->getNumOperands(); ++j) {
+		RTLSignal *operand = op->getOperand(j);
+		addSensitiveListToInput(V, operand);
+	}
+}
+
+void VerilogWriter::addSensitiveListToInput(std::vector<const RTLSignal*> &V, RTLSignal *sig) {
+	if (sig->isOp()) {
+		addOpToInput(V, (RTLOp*)sig);
+	} else {
+		if (sig->getValue().empty()) {
+			if (std::find(V.begin(), V.end(), sig)==V.end())
+				V.push_back(sig);
+		}
+	}
+}
+
+void VerilogWriter::getSensitiveList(std::vector<const RTLSignal*> &V, RTLSignal *sig) {
+	unsigned numConditions = sig->getNumConditions();
+	//errs() << sig->getName() << "\n";
+	//errs() << "cond= " << sig->getNumConditions() << "\n";
+	//errs() << "driver= " << sig->getNumDrivers() << "\n";
+	if (numConditions == 0) { //single driver
+		if (sig->getNumDrivers()==0)
+			return;
+		RTLSignal *driver = sig->getDriver(0);
+		addSensitiveListToInput(V, driver);
+	} else {
+		for (unsigned i=0; i<numConditions; ++i) {
+			RTLSignal *driver = sig->getDriver(i);
+			addSensitiveListToInput(V, driver);
+	
+			RTLSignal *condition = sig->getCondition(i);
+			addSensitiveListToInput(V, condition);
+		}
+	}
+}
+
+void VerilogWriter::getSensitiveList(std::vector<const RTLSignal*> &V) {
+   	for (RTLModule::const_signal_iterator i = rtl->port_begin(),
+                                          e = rtl->port_end();
+                                          i != e; ++i) {
+		getSensitiveList(V, *i);
+	}
+   	for (RTLModule::const_signal_iterator i = rtl->signals_begin(),
+                                          e = rtl->signals_end();
+                                          i != e; ++i) {
+		//if (isMemInputSig(*i) || (*i)->getName()=="cur_state")
+		if (!isBBModuleSig(*i))
+			getSensitiveList(V, *i);
+	}
+	RTLSignal* usig = const_cast<RTLSignal*>(rtl->getUnsynthesizableSignal());
+	getSensitiveList(V, usig);
+}
+
 void VerilogWriter::printRTL(const RTLModule *rtl) {
 
     this->rtl = rtl;
@@ -7642,8 +7718,12 @@ void VerilogWriter::printRTL(const RTLModule *rtl) {
         return;
     }
     printModuleHeader();
+
+	std::vector<const RTLSignal*> sensitiveList;
+	getSensitiveList(sensitiveList);
+
 	if (rtl->getName()!="main_tb")
-		printControlModuleInstance(rtl);
+		printControlModuleInstance(rtl, sensitiveList);
 
    	for (RTLModule::const_module_iterator i = rtl->instances_begin(),
    	                                      e = rtl->instances_end();
@@ -7685,7 +7765,7 @@ void VerilogWriter::printRTL(const RTLModule *rtl) {
 
 	// print control module
 	Out << "\n";
-	printControlModuleBody(rtl);
+	printControlModuleBody(rtl, sensitiveList);
 
 	// print BB submodules
 	useFeedbackPostfixForBBModules = true;

@@ -72,8 +72,8 @@ public:
 	void printMemoryControllerInstanceDual();
 	void printMemoryControllerInstanceConnect(std::string postfix);
 	bool isTmrVoterSignal(const RTLSignal *sig);
-	void printControlModuleBody(const RTLModule *mod);
-	void printControlModuleInstance(const RTLModule *mod);
+	void printControlModuleBody(const RTLModule *mod, std::vector<const RTLSignal*> V);
+	void printControlModuleInstance(const RTLModule *mod, std::vector<const RTLSignal*> V);
     //
     
 private:
@@ -248,6 +248,13 @@ private:
 	std::string getTMRPostfix(const RTLSignal *sig);
 	bool isTopModuleSig(const RTLSignal *sig);
 	bool isSameBBFeedbackSig(const RTLSignal *sig);
+	bool findList(std::vector<const RTLSignal *> V, const RTLSignal *sig) {
+		return (std::find(V.begin(), V.end(), sig)!=V.end());
+	}
+	void addOpToInput(std::vector<const RTLSignal*> &V, RTLOp *op);
+	void addSensitiveListToInput(std::vector<const RTLSignal*> &V, RTLSignal *sig);
+	void getSensitiveList(std::vector<const RTLSignal*> &V);
+	void getSensitiveList(std::vector<const RTLSignal*> &V, RTLSignal *sig);
 
 	// FIXME - use as global variables
 	std::string currReplica;
