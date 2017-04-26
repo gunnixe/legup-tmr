@@ -7157,18 +7157,30 @@ bool VerilogWriter::isMemSig(const RTLSignal *sig) {
 
 bool VerilogWriter::isMemInputSig(const RTLSignal *sig) {
 	std::string name = sig->getName();
-	if (name.find("_enable_") != std::string::npos) return true;
-	if (name.find("_size_") != std::string::npos) return true;
-	if (name.find("_address_") != std::string::npos) return true;
-	if (name.find("_write_enable_") != std::string::npos) return true;
-	if (name.find("_in_") != std::string::npos) return true;
+	for (RTLModule::const_ram_iterator i = rtl->local_ram_begin(),
+	                                   e = rtl->local_ram_end();
+	                                   i != e; ++i) {
+	    RAM *R = *i;
+		std::string rName = R->getName();
+		if (name.find(rName+"_enable_") != std::string::npos) return true;
+		if (name.find(rName+"_size_") != std::string::npos) return true;
+		if (name.find(rName+"_address_") != std::string::npos) return true;
+		if (name.find(rName+"_write_enable_") != std::string::npos) return true;
+		if (name.find(rName+"_in_") != std::string::npos) return true;
+	}
 	return false;
 }
 
 bool VerilogWriter::isMemOutputSig(const RTLSignal *sig) {
 	std::string name = sig->getName();
-	if (name.find("_out_") != std::string::npos
-			&& name.find("arg_") == std::string::npos) return true;
+	for (RTLModule::const_ram_iterator i = rtl->local_ram_begin(),
+	                                   e = rtl->local_ram_end();
+	                                   i != e; ++i) {
+	    RAM *R = *i;
+		std::string rName = R->getName();
+		if (name.find(rName+"_out_") != std::string::npos
+				&& name.find("arg_") == std::string::npos) return true;
+	}
 	return false;
 }
 
@@ -7711,6 +7723,27 @@ void VerilogWriter::getSensitiveList(std::vector<const RTLSignal*> &V) {
 	getSensitiveList(V, usig);
 }
 
+bool VerilogWriter::isFeedbackSig(const RTLSignal *sig, RTLBBModule *bbm) {
+	bool isReg = false;
+	std::size_t len = sig->getName().length();
+	if ((len>4 && sig->getName().substr(len-4)=="_reg") || sig->isReg())
+		isReg = true;
+	if (!isReg)
+		return false;
+
+	if (sig->getVoter()==RTLSignal::SYNC_VOTER
+			|| sig->getVoter()==RTLSignal::PART_VOTER) {
+		for (RTLBBModule::const_signal_iterator i = bbm->signals_begin(),
+    	                                        e = bbm->signals_end();
+    	                                        i != e; ++i) {
+			//errs() << (*i)->getName() << ":" << sig->getName() << "\n";
+			if ((*i) == sig)
+				return true;
+		}
+	}
+	return false;
+}
+
 void VerilogWriter::printRTL(const RTLModule *rtl) {
 
     this->rtl = rtl;
@@ -7724,6 +7757,26 @@ void VerilogWriter::printRTL(const RTLModule *rtl) {
 
 	std::vector<const RTLSignal*> sensitiveList;
 	getSensitiveList(sensitiveList);
+
+	// BB module sensitivi list
+	for (std::vector<RTLBBModule *>::const_iterator bbm = rtl->bbModules.begin(),
+	                                                bbme = rtl->bbModules.end();
+	                                                bbm != bbme; ++bbm) {
+		//errs() << "bbm: " << (*bbm)->getName() << "\n";
+		std::vector<const RTLSignal*> V;
+		for (RTLBBModule::const_signal_iterator i = (*bbm)->signals_begin(),
+	                                            e = (*bbm)->signals_end();
+	                                            i != e; ++i) {
+			(*bbm)->add_output(*i);
+			getSensitiveList(V, *i);
+		}
+		for (std::vector<const RTLSignal*>::iterator i = V.begin(); i != V.end(); ++i) {
+			//errs() << "    " << (*i)->getName() << "\n";
+			(*bbm)->add_input(const_cast<RTLSignal*>(*i));
+			if (isFeedbackSig(*i, *bbm))
+				(*bbm)->add_finput(const_cast<RTLSignal*>(*i));
+		}
+	}
 
 	if (rtl->getName()!="main_tb")
 		printControlModuleInstance(rtl, sensitiveList);

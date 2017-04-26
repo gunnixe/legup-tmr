@@ -255,6 +255,7 @@ private:
 	void addSensitiveListToInput(std::vector<const RTLSignal*> &V, RTLSignal *sig);
 	void getSensitiveList(std::vector<const RTLSignal*> &V);
 	void getSensitiveList(std::vector<const RTLSignal*> &V, RTLSignal *sig);
+	bool isFeedbackSig(const RTLSignal *sig, RTLBBModule *bbm);
 
 	// FIXME - use as global variables
 	std::string currReplica;

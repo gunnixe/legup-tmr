@@ -1981,46 +1981,46 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
 
 	// make BB input & output
 	//errs() << "---- BasicBlock inout analysis ----\n";
-    for (Function::iterator b = F.begin(), be = F.end(); b != be; b++) {
-		//errs() << "---- BB_" << getLabel(b) << "\n";
-		BasicBlockNode *bbNode = getBasicBlockNode(b);
-        for (BasicBlock::iterator instr = b->begin(), ie = b->end();
-             instr != ie; ++instr) {
-			Instruction *I = instr;
-			//InstructionNode *iNode = getInstructionNode(I);
+    //for (Function::iterator b = F.begin(), be = F.end(); b != be; b++) {
+	//	//errs() << "---- BB_" << getLabel(b) << "\n";
+	//	BasicBlockNode *bbNode = getBasicBlockNode(b);
+    //    for (BasicBlock::iterator instr = b->begin(), ie = b->end();
+    //         instr != ie; ++instr) {
+	//		Instruction *I = instr;
+	//		//InstructionNode *iNode = getInstructionNode(I);
 
-			if (I->getType()->getTypeID() == Type::VoidTyID)
-				continue;
-			if (isa<AllocaInst>(I))
-				continue;
-			if (isaDummyCall(I))
-				continue;
-        	if (I->hasNUses(0))
-        	    continue; // ignore instructions with no uses
+	//		if (I->getType()->getTypeID() == Type::VoidTyID)
+	//			continue;
+	//		if (isa<AllocaInst>(I))
+	//			continue;
+	//		if (isaDummyCall(I))
+	//			continue;
+    //    	if (I->hasNUses(0))
+    //    	    continue; // ignore instructions with no uses
 
-			bbNode->addOutput(I);
-			//errs() << "  output " << getValueStr(I) << ",\n";
-    		for (User::op_iterator i = I->op_begin(), e = I->op_end(); i != e; ++i) {
-    		    // we only care about operands that are created by other instructions
-    		    Instruction *dep = dyn_cast<Instruction>(*i);
+	//		bbNode->addOutput(I);
+	//		//errs() << "  output " << getValueStr(I) << ",\n";
+    //		for (User::op_iterator i = I->op_begin(), e = I->op_end(); i != e; ++i) {
+    //		    // we only care about operands that are created by other instructions
+    //		    Instruction *dep = dyn_cast<Instruction>(*i);
 
-   			    // also ignore if the dependency is an alloca
-   			    if (!dep)// || isa<AllocaInst>(dep))
-   			        continue;
+   	//		    // also ignore if the dependency is an alloca
+   	//		    if (!dep)// || isa<AllocaInst>(dep))
+   	//		        continue;
 
-				InstructionNode *depNode = getInstructionNode(dep);
-				if (I->getParent() != dep->getParent()) {
-					bbNode->addInput(dep);
-					//errs() << "    input " << getValueStr(dep) << ",\n";
-				}
-				if (I->getParent()==dep->getParent() && (depNode->getBackward())) {
-						//|| LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==1))
-					bbNode->addFeedbackInput(dep);
-					//errs() << "    finput " << getValueStr(dep) << ",\n";
-				}
-   			}
-        }
-    }
+	//			InstructionNode *depNode = getInstructionNode(dep);
+	//			if (I->getParent() != dep->getParent()) {
+	//				bbNode->addInput(dep);
+	//				//errs() << "    input " << getValueStr(dep) << ",\n";
+	//			}
+	//			if (I->getParent()==dep->getParent() && (depNode->getBackward())) {
+	//					//|| LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==1))
+	//				bbNode->addFeedbackInput(dep);
+	//				//errs() << "    finput " << getValueStr(dep) << ",\n";
+	//			}
+   	//		}
+    //    }
+    //}
 
     return false;
 }
