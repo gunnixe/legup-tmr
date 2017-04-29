@@ -61,6 +61,7 @@ public:
 	void printTmrSignal(const RTLSignal *signal, std::string postfix);
 	void printTmrVoter(const std::string sigName, const std::string lo, const std::string hi,
 	        bool isRegVoter=false, bool isModuleBoundary=false);
+	void printTmrVoter(const RTLSignal *sig);
 	bool isLocalMemSignal(const RTLSignal *signal, bool checkOutSig=false);
 	bool isLocalMemOutputSig(const RTLSignal *signal);
 	bool isPartSig(const RTLSignal *sig);
@@ -256,6 +257,9 @@ private:
 	void getSensitiveList(std::vector<const RTLSignal*> &V);
 	void getSensitiveList(std::vector<const RTLSignal*> &V, RTLSignal *sig);
 	bool isFeedbackSig(const RTLSignal *sig, RTLBBModule *bbm);
+	void initBBModules();
+	RTLBBModule* findFirstUseBBModule(RAM *R);
+	bool noSharedMemoryController();
 
 	// FIXME - use as global variables
 	std::string currReplica;

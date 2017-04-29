@@ -425,15 +425,17 @@ bool Allocation::isRAMLocaltoFct(Function *F, RAM *r) {
 bool Allocation::fctOnlyUsesLocalRAMs(Function *F) {
 
     // if PA analysis cannot determine RAM for this function
-    if (functionsWithNoPointsToSet.find(F) != functionsWithNoPointsToSet.end())
+    if (functionsWithNoPointsToSet.find(F) != functionsWithNoPointsToSet.end()) {
         return false;
+	}
 
     for (std::set<RAM *>::iterator i = functionToRams[F].begin(),
                                    ie = functionToRams[F].end();
          i != ie; ++i) {
         RAM *r = *i;
-        if (isLocalFunctionRam.find(r) == isLocalFunctionRam.end())
+        if (isLocalFunctionRam.find(r) == isLocalFunctionRam.end()) {
             return false;
+		}
     }
     return true;
 }

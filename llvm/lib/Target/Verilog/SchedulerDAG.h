@@ -261,6 +261,7 @@ public:
                std::vector<const BasicBlock *> &sortedBBs);
 	bool isPredPartition(std::vector<const BasicBlock *> path, const BasicBlock *useBB);
 	void bfsPartitionBBs(Function &F);
+	void bfsPartitionInsts(Function &F);
 
 	// NetworkFlow Partitioning
 	void networkFlowPartitionBBs(Function &F);
@@ -275,6 +276,7 @@ public:
 	int initBBArea(Function &F);
 	int getBBArea(VBB blist);
 	int getBBArea(PART_STATE s);
+	int getInstArea(VINST ilist);
 	int getMinGraphSize(Function &F);
 	bool isBalanced(int totalArea, VBB p0, VBB p1);
 	const BasicBlock *getBoundaryBB(int boundaryEdge, int flow[][MAX_NODE],
@@ -285,6 +287,7 @@ public:
 	bool skipInst(const Instruction *I);
 	int getLimitAreaByPercentage(Function &F);
 	void findPartitionSignals();
+	void findInstPartitionSignals();
 	bool isEmptyCand();
 	void revisitPartitions();
 	bool checkAreaConstraint(bool frontMerge, const BasicBlock *boundaryBB,
@@ -305,6 +308,7 @@ public:
 	SmallVector<std::pair<const BasicBlock*, const BasicBlock*>, 32> BackEdges;
 	std::queue<VBB> DAGPaths;
 	std::vector<VBB> Partitions;
+	std::vector<VINST> InstPartitions;
 	Allocation *getAlloc() { return alloc; }
 	std::vector<VINST> SCCs;
 

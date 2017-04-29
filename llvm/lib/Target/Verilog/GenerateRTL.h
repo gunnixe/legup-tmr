@@ -98,7 +98,6 @@ public:
     }
     
     // TODO: had to change this for LLVM 3.4 update. TerminatorInst??
-    //void visitUnwindInst(UnwindInst &I) {
     void visitUnwindInst(TerminatorInst &I) {
       llvm_unreachable("Lowerinvoke pass didn't work!");
     }
@@ -732,6 +731,9 @@ public:
 	// TMR
 	RTLSignal *getWire(RTLSignal *sig);
 	RTLSignal *getReg(RTLSignal *sig);
+	void makeBBModuleWithInstPartitions();
+	void makeBBModuleWithBBPartitions();
+	void makeBBModuleWithFunction();
 };
 
 } // End legup namespace

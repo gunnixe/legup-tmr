@@ -144,6 +144,8 @@ public:
 	//TMR
 	bool getDependence() const { return dep; }
 	void setDependence(bool _dep) { dep = _dep; }
+	unsigned getPartID() { return partID; }
+	void setPartID(unsigned _id) { partID = _id; }
     
 private:
     
@@ -228,6 +230,9 @@ Allocation *alloc;
     
     //NC changes   
     std::vector<std::string> debugInitialValues;
+
+	//TMR
+	unsigned partID;
 };
 
 /// PhysicalRAM represents a ram holding multiple other rams with the same

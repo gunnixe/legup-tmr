@@ -337,11 +337,13 @@ public:
 
 class RTLBBModule {
 public:
-	RTLBBModule(std::string name) : name(name) {};
+	RTLBBModule(std::string name, unsigned partID) : name(name), partID(partID) {};
 	~RTLBBModule();
 
 	std::string getName() const { return name; }
-	void setName(std::string name) { name = name; }
+	void setName(std::string _name) { name = _name; }
+	unsigned getPartID() const { return partID; }
+	void setPartID(unsigned _partID) { partID = _partID; }
 
     typedef std::vector<RTLSignal*>::iterator signal_iterator;
     typedef std::vector<RTLSignal*>::const_iterator const_signal_iterator;
@@ -393,6 +395,7 @@ public:
 
 private:
 	std::string name;
+	unsigned partID;
 	std::vector<RTLModule *> modules;
 	std::vector<RTLSignal *> signals;
 	std::vector<RTLSignal *> inputs;
