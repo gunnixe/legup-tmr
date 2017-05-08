@@ -6343,6 +6343,8 @@ void VerilogWriter::printMainInstDeclare(std::string postfix, const bool usesPth
 				name = "next_state";
 			if (isTmrVoterSignal(*i)) {
 				Out << ",\n\n\t." << name << "_v(" << name << postfix << "),\n";
+				if ((*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg())
+					Out << "\t." << name << "_e(" << name << "_e" << postfix << "),\n";
 				Out << "\t." << name << "_r0(" << name << "_r0),\n";
 				Out << "\t." << name << "_r1(" << name << "_r1),\n";
 				Out << "\t." << name << "_r2(" << name << "_r2)";
@@ -6390,6 +6392,13 @@ void VerilogWriter::printMainInstance(const bool usesPthreads) {
 				    << name << "_r0, "
 				    << name << "_r1, "
 				    << name << "_r2;\n";
+				if ((*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg()) {
+					Out << "wire [1:0] "
+					    << name << "_e_r0, "
+					    << name << "_e_r1, "
+					    << name << "_e_r2; /*part voter ("
+						<< getPartID(*i) << ") unconnected*/\n";
+				}
 			}
 		}
 		Out << "\n";
@@ -6399,6 +6408,19 @@ void VerilogWriter::printMainInstance(const bool usesPthreads) {
 		printMainInstDeclare("_r2", usesPthreads);
 	} else {
 		printMainInstDeclare("", usesPthreads);
+	}
+}
+
+unsigned VerilogWriter::getPartID(const RTLSignal* sig) {
+	for (std::vector<RTLBBModule *>::const_iterator bbm = rtl->bbModules.begin(),
+	                                                bbme = rtl->bbModules.end();
+	                                                bbm != bbme; ++bbm) {
+		for (RTLBBModule::const_signal_iterator i = (*bbm)->signals_begin(),
+	                                            e = (*bbm)->signals_end();
+	                                            i != e; ++i) {
+			if (*i == sig)
+				return (*bbm)->getPartID();
+		}
 	}
 }
 
@@ -6717,9 +6739,8 @@ void VerilogWriter::printModuleHeader() {
 					name = "next_state";
 				Out << ",\n";
        			Out << "\toutput " << width << " " << name << "_v,\n";
-				if (sig->getVoter()==RTLSignal::PART_VOTER && sig->isReg())
+				if ((*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg())
        				Out << "\toutput [1:0] " << name << "_e, /*part voter*/\n";
-       			Out << "\toutput " << width << " " << name << "_v,\n";
        			Out << "\tinput " << width << " " << name << "_r0,\n";
        			Out << "\tinput " << width << " " << name << "_r1,\n";
        			Out << "\tinput " << width << " " << name << "_r2";
@@ -8683,7 +8704,7 @@ void VerilogWriter::printTmrVoter(const RTLSignal *sig) {
 		Out << "\t\t"<<e<<" <= 2'b00;\n";
 		Out << "end\n";
 	}
-	printTmrVoter(name, hi, lo, isRegVoter, isModuleBoundary);
+	printTmrVoter(name, lo, hi, isRegVoter, isModuleBoundary);
 }
 
 void VerilogWriter::printTmrVoter(std::string sigName,

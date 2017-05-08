@@ -260,6 +260,7 @@ private:
 	void initBBModules();
 	RTLBBModule* findFirstUseBBModule(RAM *R);
 	bool noSharedMemoryController();
+	unsigned getPartID(const RTLSignal* sig);
 
 	// FIXME - use as global variables
 	std::string currReplica;
