@@ -262,30 +262,41 @@ public:
 	bool isPredPartition(std::vector<const BasicBlock *> path, const BasicBlock *useBB);
 	void bfsPartitionBBs(Function &F);
 	void bfsPartitionInsts(Function &F);
+	void bfsPartitionInsts(Function &F, unsigned areaLimit);
 
 	// NetworkFlow Partitioning
 	void networkFlowPartitionBBs(Function &F);
+	void networkFlowPartitionInsts(Function &F);
+	void networkFlowPartitionInsts(Function &F, unsigned areaLimit, int n);
 	bool bfs(int n, int start, int target, int capacity[][MAX_NODE], int flow[][MAX_NODE], int pred[]);
 	void dfs(int n, int capacity[][MAX_NODE], int flow[][MAX_NODE], int s, bool visited[]);
 	const BasicBlock* isBBNode(int idx);
 	const Instruction* isInstNode(int idx);
 	int makeDFGBBGraph(int capacity[][MAX_NODE], int entryBB);
-	const BasicBlock* maxFlow(int n, int start, int target,
-			int capacity[][MAX_NODE], int flow[][MAX_NODE], VBB &p0, VBB &p1,
-			bool &frontMerge);
+	void makeDFGInstGraph(int capacity[][MAX_NODE], int n);
+	int maxFlow(int n, int s, int t, int capacity[][MAX_NODE], int flow[][MAX_NODE]);
 	int initBBArea(Function &F);
 	int getBBArea(VBB blist);
 	int getBBArea(PART_STATE s);
 	int getInstArea(VINST ilist);
+	int getInstArea(PART_STATE s);
 	int getMinGraphSize(Function &F);
 	bool isBalanced(int totalArea, VBB p0, VBB p1);
+	bool isBalanced(VINST p0, VINST p1);
 	const BasicBlock *getBoundaryBB(int boundaryEdge, int flow[][MAX_NODE],
 				bool &frontMerge, int s, int n);
+	const BasicBlock* getBoundaryBB(int n, int start, int target, 
+				int capacity[][MAX_NODE], int flow[][MAX_NODE],
+				VBB &p0, VBB &p1, bool &frontMerge);
+	const Instruction* getBoundaryInst(int n, 
+			int capacity[][MAX_NODE], int flow[][MAX_NODE],
+			VINST &p0, VINST &p1, bool &frontMerge);
 	void setPartitions(const BasicBlock *boundaryBB, bool frontMerge);
 	void connectDFGBB(int capacity[][MAX_NODE], const Instruction *I, int s, int t);
+	void connectDFGInst(int capacity[][MAX_NODE], const Instruction *I, int t);
 	int initMap(Function &F);
 	bool skipInst(const Instruction *I);
-	int getLimitAreaByPercentage(Function &F);
+	int getLimitAreaByPercentage(Function &F, unsigned areaMarginPercentage=0);
 	void findPartitionSignals();
 	void findInstPartitionSignals();
 	bool isEmptyCand();
@@ -294,12 +305,15 @@ public:
 				VBB p0, VBB p1);
 	void pushPlist(VBB &plist, VBB pNodes);
 	void pushNewPartition(PART_STATE s);
+	void pushNewInstPartition(PART_STATE s);
 	void dumpNF(int capacity[][MAX_NODE], int n);
 	void dumpVBB(VBB blist, std::string str);
 	void dumpbbPartState(std::string str);
 	void dumpFlow(int flow[][MAX_NODE], int s, int t, int max_flow);
-	void initInstMap(Function &F);
+	int initInstMap(Function &F);
 	void clearInstMap();
+	void mergeNodes(bool frontMerge, const Instruction *boundaryInst, VINST p0, VINST p1);
+	void connectDFGInst(int capacity[][MAX_NODE], Instruction *I, int t);
 
 	int getcArea() { return cArea; }
 	void setcArea(int a) { cArea = a; }
@@ -334,9 +348,13 @@ private:
 
 	MBB bbPartState;
 	VBB bbs;
+
 	//VBB startNodes;
 	//VBB targetNodes;
 	int cArea;
+
+	MINST instPartState;
+	VINST insts;
 };
 
 /// SchedulerMapping - Holds InstructionNode to state # mapping.

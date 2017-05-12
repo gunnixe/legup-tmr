@@ -4,7 +4,7 @@ source ../../../legup.tcl
 set_parameter DEBUG_TMR 2
 set_parameter MB_MINIMIZE_HW 1
 set_parameter VOTER_BEFORE_FSM 1
-set_parameter PART_AREA_MARGIN_PERCENTAGE 15
+set_parameter PART_AREA_MARGIN_PERCENTAGE 5
 #set_parameter PARTITION_AREA_LIMIT 3000
 set_parameter NUMBER_OF_PARTITIONS 4
 

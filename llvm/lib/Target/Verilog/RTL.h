@@ -382,7 +382,10 @@ public:
 	}
 	void add_finput(RTLSignal *in) { finputs.push_back(in); }
 	void add_output(RTLSignal *out) { outputs.push_back(out); }
-	void add_signal(RTLSignal *sig) { signals.push_back(sig); }
+	void add_signal(RTLSignal *sig) { 
+		if ((std::find(signals.begin(), signals.end(), sig) == signals.end()))
+			signals.push_back(sig);
+	}
 	void add_module(RTLModule *mod) { modules.push_back(mod); }
 
 	bool empty() { return signals.empty(); }

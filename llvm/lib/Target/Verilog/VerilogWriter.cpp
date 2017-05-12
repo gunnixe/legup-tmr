@@ -4508,22 +4508,22 @@ void VerilogWriter::printTop(const Function *F) {
         << "\t\twaitrequest,\n"
         << "\t\treturn_val";
 
-	RTLModule* rtlMain;
-   	for (Allocation::const_rtl_iterator i = alloc->rtl_begin(),
-   	                                    e = alloc->rtl_end();
-   	                                    i != e; ++i) {
-		if ((*i)->getName()=="main") {
-   			rtlMain = *i;
-			break;
-		}
-   	}
-	for (std::vector<RTLBBModule *>::const_iterator bbm = rtlMain->bbModules.begin(),
-	                                                bbme = rtlMain->bbModules.end();
-	                                                bbm != bbme; ++bbm) {
-		Out << ",\n\t\t" << (*bbm)->getName() << "_PV_e_r0";
-		Out << ",\n\t\t" << (*bbm)->getName() << "_PV_e_r1";
-		Out << ",\n\t\t" << (*bbm)->getName() << "_PV_e_r2";
-	}
+	//RTLModule* rtlMain;
+   	//for (Allocation::const_rtl_iterator i = alloc->rtl_begin(),
+   	//                                    e = alloc->rtl_end();
+   	//                                    i != e; ++i) {
+	//	if ((*i)->getName()=="main") {
+   	//		rtlMain = *i;
+	//		break;
+	//	}
+   	//}
+	//for (std::vector<RTLBBModule *>::const_iterator bbm = rtlMain->bbModules.begin(),
+	//                                                bbme = rtlMain->bbModules.end();
+	//                                                bbm != bbme; ++bbm) {
+	//	Out << ",\n\t\t" << (*bbm)->getName() << "_PV_e_r0";
+	//	Out << ",\n\t\t" << (*bbm)->getName() << "_PV_e_r1";
+	//	Out << ",\n\t\t" << (*bbm)->getName() << "_PV_e_r2";
+	//}
 
     if (alloc->getDbgInfo()->isDebugRtlEnabled()) {
         // Add serial connections for debugger control, plus some signals to
@@ -4576,14 +4576,14 @@ void VerilogWriter::printTop(const Function *F) {
     Out << "input waitrequest;\n";
     Out << "output wire [31:0] return_val;\n";
 
-	for (std::vector<RTLBBModule *>::const_iterator bbm = rtlMain->bbModules.begin(),
-	                                                bbme = rtlMain->bbModules.end();
-	                                                bbm != bbme; ++bbm) {
-		Out << "output [1:0] " << (*bbm)->getName() << "_PV_e_r0;\n";
-		Out << "output [1:0] " << (*bbm)->getName() << "_PV_e_r1;\n";
-		Out << "output [1:0] " << (*bbm)->getName() << "_PV_e_r2;\n";
-	}
-	Out << "\n";
+	//for (std::vector<RTLBBModule *>::const_iterator bbm = rtlMain->bbModules.begin(),
+	//                                                bbme = rtlMain->bbModules.end();
+	//                                                bbm != bbme; ++bbm) {
+	//	Out << "output [1:0] " << (*bbm)->getName() << "_PV_e_r0;\n";
+	//	Out << "output [1:0] " << (*bbm)->getName() << "_PV_e_r1;\n";
+	//	Out << "output [1:0] " << (*bbm)->getName() << "_PV_e_r2;\n";
+	//}
+	//Out << "\n";
 
     if (alloc->getDbgInfo()->isDebugRtlEnabled()) {
         // Signals for active instance and current state
@@ -6377,13 +6377,13 @@ void VerilogWriter::printMainInstDeclare(std::string postfix, const bool usesPth
 				Out << ",\n\t." << name << "_r2(" << name << "_r2)";
 			}
 		}
-	}
 
-	for (std::vector<RTLBBModule *>::const_iterator bbm = rtl->bbModules.begin(),
-	                                                bbme = rtl->bbModules.end();
-	                                                bbm != bbme; ++bbm) {
-		Out << ",\n\t." << (*bbm)->getName() << "_PV_e(" 
-		    << (*bbm)->getName() << "_PV_e" << postfix << ")";
+		for (std::vector<RTLBBModule *>::const_iterator bbm = rtl->bbModules.begin(),
+		                                                bbme = rtl->bbModules.end();
+		                                                bbm != bbme; ++bbm) {
+			Out << ",\n\t." << (*bbm)->getName() << "_PV_e(" 
+			    << (*bbm)->getName() << "_PV_e" << postfix << ")";
+		}
 	}
     Out << "\n);\n\n";
 }
@@ -6438,16 +6438,16 @@ void VerilogWriter::printMainInstance(const bool usesPthreads) {
 		}
 		Out << "\n";
 
-		//for (std::vector<RTLBBModule *>::const_iterator bbm = rtl->bbModules.begin(),
-	    //                                                bbme = rtl->bbModules.end();
-	    //                                                bbm != bbme; ++bbm) {
-		//	if (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT")=="xilinx")
-		//		Out << "(* KEEP=\"TRUE\" *) ";
-		//	Out << "wire [1:0] "
-		//	    << (*bbm)->getName() << "_PV_e_r0, "
-		//	    << (*bbm)->getName() << "_PV_e_r1, "
-		//	    << (*bbm)->getName() << "_PV_e_r2;\n";
-		//}
+		for (std::vector<RTLBBModule *>::const_iterator bbm = rtl->bbModules.begin(),
+	                                                    bbme = rtl->bbModules.end();
+	                                                    bbm != bbme; ++bbm) {
+			if (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT")=="xilinx")
+				Out << "(* KEEP=\"TRUE\" *) ";
+			Out << "wire [1:0] "
+			    << (*bbm)->getName() << "_PV_e_r0, "
+			    << (*bbm)->getName() << "_PV_e_r1, "
+			    << (*bbm)->getName() << "_PV_e_r2;\n";
+		}
 		Out << "\n";
 
 		printMainInstDeclare("_r0", usesPthreads);
@@ -7448,7 +7448,7 @@ void VerilogWriter::printBBModuleInstance(RTLBBModule *bbm) {
 			//	Out << ",\n\t." << name << "_e( " << name << "_e )";
 		}
 	}
-	if (LEGUP_CONFIG->getParameterInt("EXTRACT_PART_VOTERS")==0)
+	if (!extractPV && LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")!=0)
 		Out << ",\n\t.PV_e( " << bbm->getName() << "_PV_e )";
 	Out << "\n);\n\n";
 }
@@ -8049,7 +8049,7 @@ void VerilogWriter::initBBModules() {
 		errs() <<  "\n\n# DEBUG_TMR=2 - Memory grouping\n";
 	RTLModule *mod = const_cast<RTLModule*>(rtl);
     for (Allocation::ram_iterator i = alloc->ram_begin(),
-	                                    e = alloc->ram_end(); i != e; ++i) {
+	                              e = alloc->ram_end(); i != e; ++i) {
         RAM *R = *i;
         std::string name = R->getName();
 		RTLBBModule *bbm = findFirstUseBBModule(R);
@@ -8156,7 +8156,8 @@ void VerilogWriter::printRTL(const RTLModule *rtl) {
 		for (std::vector<RTLBBModule *>::const_iterator bbm = rtl->bbModules.begin(),
 		                                                bbme = rtl->bbModules.end();
 		                                                bbm != bbme; ++bbm) {
-			if (LEGUP_CONFIG->getParameterInt("EXTRACT_PART_VOTERS"))
+			if (LEGUP_CONFIG->getParameterInt("EXTRACT_PART_VOTERS") &&
+					LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")!=0)
 				printPVoterModuleInstance(*bbm);
 			printBBModuleInstance(*bbm);
 		}
@@ -8187,7 +8188,8 @@ void VerilogWriter::printRTL(const RTLModule *rtl) {
 	for (std::vector<RTLBBModule *>::const_iterator bbm = rtl->bbModules.begin(),
 	                                                bbme = rtl->bbModules.end();
 	                                                bbm != bbme; ++bbm) {
-		if (LEGUP_CONFIG->getParameterInt("EXTRACT_PART_VOTERS"))
+		if (LEGUP_CONFIG->getParameterInt("EXTRACT_PART_VOTERS") &&
+				LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")!=0)
 			printPVoterModuleBody(*bbm);
 		//curBBModule = *bbm;
 		printBBModuleBody(*bbm);

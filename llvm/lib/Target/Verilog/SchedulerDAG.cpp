@@ -785,17 +785,13 @@ void SchedulerDAG::clearInstMap() {
 	}
 }
 
-void SchedulerDAG::initInstMap(Function &F) {
+void SchedulerDAG::insertSyncVoter(Function &F) {
 	instMap.clear();
 	for (Function::iterator b = F.begin(); b != F.end(); ++b) {
 		for (BasicBlock::const_iterator i = (*b).begin(); i != (*b).end(); ++i) {
 			instMap[i] = 0;
 		}
 	}
-}
-
-void SchedulerDAG::insertSyncVoter(Function &F) {
-	initInstMap(F);
 
 	int syncMode = LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE");
 	if (syncMode==8 || syncMode==7 || syncMode==6 || syncMode==5) {
@@ -900,6 +896,40 @@ bool SchedulerDAG::bfs(int n, int start, int target,
 	return (visited[target]==true);
 }
 
+void SchedulerDAG::connectDFGInst(int capacity[][MAX_NODE], Instruction *I, int t) {
+	int idx = instMap[I];
+	capacity[idx][idx+1] = 1;//isa<LoadInst>(I)? INF : 1;
+	
+	for (User::op_iterator op = I->op_begin(), e = I->op_end(); op != e; ++op) {
+	    // we only care about operands that are created by other instructions
+	    Instruction *dep = dyn_cast<Instruction>(*op);
+
+	    // also ignore if the dependency is an alloca
+	    if (!dep)// || isa<AllocaInst>(dep))
+	        continue;
+
+		//if (instMap[dep]!=0 || instMap[I]!=t) {
+			int d = instMap[dep];
+			capacity[d+1][idx] = INF;
+			//errs() << getValueStr(dep) << "->" << getValueStr(I) << "\n";
+			//errs() << instMap[dep] << "->" << instMap[I] << "\n";
+		//}
+	}
+
+	if (isa<LoadInst>(I)) {
+		for (VINST::iterator d = storeInsts.begin();
+		                     d != storeInsts.end(); ++d) {
+			Instruction *dep = const_cast<Instruction *>(*d);
+        	if (hasDependencyAA(dep, I) /*&& (instMap[dep]!=0 || instMap[I]!=t)*/) {
+				int c = instMap[dep];
+				capacity[c+1][idx] = INF;
+				//errs() << getValueStr(I) << "<-" << getValueStr(dep) << "\n";
+				//errs() << bbMap[dep->getParent()] << "(LD)->" << b << "\n";
+			}
+		}
+	}
+}
+
 void SchedulerDAG::connectDFGBB(int capacity[][MAX_NODE], const Instruction *Inst,
 			int s, int t) {
 	Instruction *I = const_cast<Instruction *>(Inst);
@@ -956,6 +986,30 @@ bool SchedulerDAG::skipInst(const Instruction *I) {
 		return true;
 
 	return false;
+}
+
+void SchedulerDAG::makeDFGInstGraph(int capacity[][MAX_NODE], int n) {
+	for(int i=0; i<n; i++)
+		for(int j=0; j<n; j++)
+			capacity[i][j] = 0;
+
+	// make INF path within merged nodes
+	for (VINST::iterator i = insts.begin(); i != insts.end(); ++i) {
+		int instIdx = instMap[*i];
+		int state = instPartState[*i];
+		if (state==PART_S || state==PART_S_FINISH)
+			capacity[0][instIdx] = INF;
+		else if (state==PART_T || state==PART_T_FINISH)
+			capacity[instIdx][n-1] = INF;
+	}
+
+	// connectInsts
+	for (VINST::iterator i = insts.begin(); i != insts.end(); ++i) {
+		connectDFGInst(capacity, const_cast<Instruction*>(*i), n-1);
+	}
+
+	//dumpNF(capacity, n);
+	assert(n<MAX_NODE);
 }
 
 int SchedulerDAG::makeDFGBBGraph(int capacity[][MAX_NODE], int entryBB) {
@@ -1149,6 +1203,14 @@ int SchedulerDAG::getBBArea(VBB blist) {
 	return pArea;
 }
 
+bool SchedulerDAG::isBalanced(VINST p0, VINST p1) {
+	if (getInstArea(p0)-getInstArea(PART_S_FINISH) < getcArea()
+			&& getInstArea(p1)-getInstArea(PART_T_FINISH) < getcArea())
+		return true;
+
+	return false;
+}
+
 bool SchedulerDAG::isBalanced(int totalArea, VBB p0, VBB p1) {
 	int cArea = getcArea();
 	int p0Area = getBBArea(p0);
@@ -1229,6 +1291,29 @@ void SchedulerDAG::dumpbbPartState(std::string str) {
 	errs() << "sArea=" << sArea << ", tArea=" << tArea << "\n";
 }
 
+int SchedulerDAG::initInstMap(Function &F) {
+	int n=0;
+	for (Function::iterator b = F.begin(); b != F.end(); ++b) {
+        if (isEmptyFirstBB(b))
+			continue;
+
+		for (BasicBlock::iterator i = (*b).begin(); i != (*b).end(); ++i) {
+			if (skipInst(i))
+				continue;
+
+			insts.push_back(i);
+
+			instMap[i] = n;
+			instPartState[i] = PART_UNKNOWN;
+
+			n+=2;
+			if (isa<StoreInst>(i))
+				storeInsts.push_back(i);
+		}
+	}
+	return n;
+}
+
 int SchedulerDAG::initMap(Function &F) {
 	int n=0;
 	for (Function::iterator b = F.begin(); b != F.end(); ++b) {
@@ -1255,6 +1340,15 @@ int SchedulerDAG::initMap(Function &F) {
 	return n;
 }
 
+int SchedulerDAG::getInstArea(PART_STATE s) {
+	int area = 0;
+	for (VINST::iterator i=insts.begin(); i!=insts.end(); ++i) {
+		if (instPartState[*i] == s)
+			area += getInstructionArea(const_cast<Instruction*>(*i));
+	}
+	return area;
+}
+
 int SchedulerDAG::getBBArea(PART_STATE s) {
 	int area = 0;
 	for (VBB::iterator b=bbs.begin(); b!=bbs.end(); ++b) {
@@ -1262,6 +1356,35 @@ int SchedulerDAG::getBBArea(PART_STATE s) {
 			area += bbArea[*b];
 	}
 	return area;
+}
+
+void SchedulerDAG::mergeNodes(bool frontMerge,
+			const Instruction *boundaryInst, VINST p0, VINST p1) {
+	int cArea = getcArea();
+
+	// merge start and target nodes
+	if (getInstArea(p0)-getInstArea(PART_S_FINISH) < cArea) {
+		for (VINST::iterator i=p0.begin(); i!=p0.end(); ++i)
+			if (instPartState[*i] == PART_UNKNOWN)
+				instPartState[*i] = PART_S;
+	}
+	if (getInstArea(p1)-getInstArea(PART_T_FINISH) < cArea) {
+		for (VINST::iterator i=p1.begin(); i!=p1.end(); ++i)
+			if (instPartState[*i] == PART_UNKNOWN)
+				instPartState[*i] = PART_T;
+	}
+
+	// boundary node merge
+	int bArea = getInstructionArea(const_cast<Instruction*>(boundaryInst));
+	if (frontMerge) {
+		if (getInstArea(PART_S)+bArea > cArea)
+			pushNewInstPartition(PART_S);
+		instPartState[boundaryInst] = PART_S;
+	} else {
+		if (getInstArea(PART_T)+bArea > cArea)
+			pushNewInstPartition(PART_T);
+		instPartState[boundaryInst] = PART_T;
+	}
 }
 
 bool SchedulerDAG::checkAreaConstraint(bool frontMerge,
@@ -1318,6 +1441,63 @@ void SchedulerDAG::dumpVBB(VBB blist, std::string str) {
 	errs() << "(" << area << ")\n";
 }
 
+void SchedulerDAG::networkFlowPartitionInsts(Function &F) {
+	int n = initInstMap(F);
+
+	unsigned k = LEGUP_CONFIG->getParameterInt("NUMBER_OF_PARTITIONS");
+	unsigned p = LEGUP_CONFIG->getParameterInt("PART_AREA_MARGIN_PERCENTAGE");
+	do {
+		unsigned areaLimit = getLimitAreaByPercentage(F, p);
+		networkFlowPartitionInsts(F, areaLimit, n);
+		if (InstPartitions.size()>k) {
+			p += 5;
+			errs() << " - WARNING: Number of Partitions: " << InstPartitions.size()
+			       << " (expected = " << k << ")"
+			       << " / forced to increase area limit by 5%\n";
+		} else if (InstPartitions.size()<k) {
+			p -= 5;
+			errs() << " - WARNING: Number of Partitions: " << InstPartitions.size()
+			       << " (expected = " << k << ")"
+			       << " / forced to decrease area limit by 5%\n";
+		}
+		assert(p<=100);
+	} while (InstPartitions.size()!=k);
+}
+
+void SchedulerDAG::networkFlowPartitionInsts(Function &F, unsigned areaLimit, int n) {
+	int capacity[MAX_NODE][MAX_NODE];
+	int flow[MAX_NODE][MAX_NODE];
+
+	InstPartitions.clear();
+	instPartState.clear();
+	//instMap.clear();
+	//storeInsts.clear();
+
+	setcArea(areaLimit);
+
+	VINST p0;
+	VINST p1;
+
+	int itrCount = 0;
+	const Instruction *boundaryInst = NULL;
+	bool frontMerge;
+	do {
+		makeDFGInstGraph(capacity, n);
+		maxFlow(n, 0, n-1, capacity, flow);
+		boundaryInst = getBoundaryInst(n, capacity, flow, p0, p1, frontMerge);
+		if (!boundaryInst)
+			errs() << "Error - boundaryInst not found\n";
+
+		if (isBalanced(p0, p1) || boundaryInst == NULL) {
+			InstPartitions.push_back(p0);
+			InstPartitions.push_back(p1);
+			break;
+		}
+
+		mergeNodes(frontMerge, boundaryInst, p0, p1);
+	} while( itrCount++ < n );
+}
+
 void SchedulerDAG::networkFlowPartitionBBs(Function &F) {
 	//Ford-Fulkerson Algorithm source from
 	//http://aduni.org/courses/algorithms/courseware/handouts/Reciation_09.html
@@ -1368,7 +1548,8 @@ void SchedulerDAG::networkFlowPartitionBBs(Function &F) {
 		//	errs() << "Error: Fail to find balanced partitioning\n";
 		//	break;
 		//}
-		boundaryBB = maxFlow(n, entryBB, n-1, capacity, flow, 
+		maxFlow(n, entryBB, n-1, capacity, flow);
+		boundaryBB = getBoundaryBB(n, entryBB, n-1, capacity, flow, 
 				p0, p1, frontMerge);
 		if (boundaryBB) {
 			errs() << "*boundaryBB= " << getLabel(boundaryBB) << "\n";
@@ -1409,6 +1590,18 @@ bool SchedulerDAG::isEmptyCand() {
 	return true;
 }
 
+void SchedulerDAG::pushNewInstPartition(PART_STATE s) {
+	VINST pNodes;
+	for (VINST::iterator i = insts.begin(); i != insts.end(); ++i) {
+		if (instPartState[*i] == s) {
+			pNodes.push_back(*i);
+			instPartState[*i] = (s==PART_S)? PART_S_FINISH : PART_T_FINISH;
+		}
+	}
+	errs() << "Push partitions " << (s==PART_S? "PART_S" : "PART_T") << "\n";
+	InstPartitions.push_back(pNodes);
+}
+
 void SchedulerDAG::pushNewPartition(PART_STATE s) {
 	VBB pNodes;
 	for (VBB::iterator b = bbs.begin(); b != bbs.end(); ++b) {
@@ -1439,13 +1632,92 @@ void SchedulerDAG::pushPlist(VBB &plist, VBB pNodes) {
 //	}
 //}
 
-const BasicBlock* SchedulerDAG::maxFlow(int n, int start, int target,
+const Instruction* SchedulerDAG::getBoundaryInst(int n, 
 			int capacity[][MAX_NODE], int flow[][MAX_NODE],
-			VBB &p0, VBB &p1,
-			bool &frontMerge) {
+			VINST &p0, VINST &p1, bool &frontMerge) {
+	const Instruction* boundaryInst = NULL;
+
+	bool visited[MAX_NODE];
+	for(int i=0; i<MAX_NODE; i++)
+		visited[i] = false;
+	dfs(n-1, capacity, flow, 0, visited);
+
+	p0.clear();
+	p1.clear();
+	for (VINST::iterator i = insts.begin(); i != insts.end(); ++i) {
+		int idx = instMap[*i];
+		if (visited[idx])
+			p0.push_back(*i);
+		else
+			p1.push_back(*i);
+	}
+
+	int minCut = 0;
+	for(int i=0; i<n; i+=2) {
+		if ((visited[i] && !visited[i+1]) && capacity[i][i+1]==1) {
+			minCut++;
+		}
+	}
+	fprintf(stderr, "  %4d / %4d | %4d / %4d | %4d | %4d / %4d | minCut= %2d\n",
+			getInstArea(PART_S_FINISH), getInstArea(PART_T_FINISH),
+			getInstArea(PART_S), getInstArea(PART_T),
+			getInstArea(PART_UNKNOWN), 
+			getInstArea(p0), getInstArea(p1), minCut);
+
+	frontMerge = getInstArea(p0) < getInstArea(p1);
+	for(int i=0; i<n; i+=2) {
+		if ((visited[i] && !visited[i+1]) && capacity[i][i+1]==1) {
+			for (int j=0; j<n; j++) {
+				int f = frontMerge? flow[i+1][j] : flow[j][i];
+				if (f) {
+					const Instruction *d = isInstNode(j);
+					if (instPartState[d]==PART_UNKNOWN) {
+						boundaryInst = d;
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	//Select min-area boundaryBB from the out of min-cut list
+	if (boundaryInst == NULL) {
+		const Instruction *pred = NULL;
+		const Instruction *succ = NULL;
+		if (p0.size()>1) {
+			for(VINST::iterator i = p0.begin(); i != p0.end(); ++i) {
+				if (instPartState[*i] == PART_UNKNOWN) {
+					pred = *i;
+				}
+			}
+		}
+		if (p1.size()>1) {
+			for (VINST::iterator i = p1.begin(); i != p1.end(); ++i) {
+				if (instPartState[*i] == PART_UNKNOWN) {
+					succ = *i;
+				}
+			}
+		}
+
+		if (frontMerge && succ!=NULL) {
+			boundaryInst = succ;
+		} else if (!frontMerge && pred!=NULL) {
+			boundaryInst = pred;
+		} else if (succ) {
+			frontMerge = true;
+			boundaryInst = succ;
+		} else if (pred) {
+			frontMerge = false;
+			boundaryInst = pred;
+		}
+	}
+
+	return boundaryInst;
+}
+
+int SchedulerDAG::maxFlow(int n, int start, int target,
+			int capacity[][MAX_NODE], int flow[][MAX_NODE]) {
 	int pred[MAX_NODE];
-	//int boundaryEdge = -1;
-	const BasicBlock* boundaryBB = NULL;
 
 	int max_flow = 0;
 	for(int i=0; i<n; i++)
@@ -1469,8 +1741,8 @@ const BasicBlock* SchedulerDAG::maxFlow(int n, int start, int target,
 	}
 	//No aumenting path anymore. We are done.
 
-	dumpbbPartState("bb states");
-	fprintf(stderr, "\n# flow(%d->%d) (maxflow=%d)\n", start, target, max_flow);
+	//dumpbbPartState("bb states");
+	//fprintf(stderr, "\n# flow(%d->%d) (maxflow=%d)\n", start, target, max_flow);
 	//dumpFlow(flow, start, target, max_flow);
 	//fprintf(stderr, "     ");
 	//for(int i=0; i<n; i++)
@@ -1485,6 +1757,14 @@ const BasicBlock* SchedulerDAG::maxFlow(int n, int start, int target,
 	//	}
 	//	fprintf(stderr, "\n");
 	//}
+
+	return max_flow;
+}
+
+const BasicBlock* SchedulerDAG::getBoundaryBB(int n, int start, int target, 
+			int capacity[][MAX_NODE], int flow[][MAX_NODE],
+			VBB &p0, VBB &p1, bool &frontMerge) {
+	const BasicBlock* boundaryBB = NULL;
 
 	bool visited[MAX_NODE];
 	for(int i=0; i<MAX_NODE; i++)
@@ -1661,7 +1941,7 @@ void SchedulerDAG::findTopologicalBBList(Function &F) {
 	DAGPaths.push(path);
 }
 
-int SchedulerDAG::getLimitAreaByPercentage(Function &F) {
+int SchedulerDAG::getLimitAreaByPercentage(Function &F, unsigned areaMarginPercentage) {
 	unsigned totalArea = 0;
 	for (Function::iterator b = F.begin(); b != F.end(); ++b) {
         if (isEmptyFirstBB(b))
@@ -1675,7 +1955,8 @@ int SchedulerDAG::getLimitAreaByPercentage(Function &F) {
 	unsigned pMode = LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE");
 	unsigned nPart = LEGUP_CONFIG->getParameterInt("NUMBER_OF_PARTITIONS");
 	assert(nPart>0 || pMode==0);
-	unsigned areaMarginPercentage = LEGUP_CONFIG->getParameterInt("PART_AREA_MARGIN_PERCENTAGE");
+	if (areaMarginPercentage == 0)
+		areaMarginPercentage = LEGUP_CONFIG->getParameterInt("PART_AREA_MARGIN_PERCENTAGE");
 	unsigned areaConstraint = totalArea/nPart;
 	unsigned areaMargin = areaConstraint*areaMarginPercentage/100;
 
@@ -1688,10 +1969,31 @@ int SchedulerDAG::getLimitAreaByPercentage(Function &F) {
 }
 
 void SchedulerDAG::bfsPartitionInsts(Function &F) {
+	unsigned k = LEGUP_CONFIG->getParameterInt("NUMBER_OF_PARTITIONS");
+	unsigned p = LEGUP_CONFIG->getParameterInt("PART_AREA_MARGIN_PERCENTAGE");
+	do {
+		unsigned areaLimit = getLimitAreaByPercentage(F, p);
+		bfsPartitionInsts(F, areaLimit);
+		if (InstPartitions.size()>k) {
+			p += 5;
+			errs() << " - WARNING: Number of Partitions: " << InstPartitions.size()
+			       << " (expected = " << k << ")"
+			       << " / forced to increase area limit by 5%\n";
+		} else if (InstPartitions.size()<k) {
+			p -= 5;
+			errs() << " - WARNING: Number of Partitions: " << InstPartitions.size()
+			       << " (expected = " << k << ")"
+			       << " / forced to decrease area limit by 5%\n";
+		}
+		assert(p<=100);
+	} while (InstPartitions.size()!=k);
+}
+
+void SchedulerDAG::bfsPartitionInsts(Function &F, unsigned areaLimit) {
+	InstPartitions.clear();
 
 	// there is only one DAG path in bfs partition (topologicallly sorted)
 	VBB path = DAGPaths.front();
-	unsigned areaLimit = getLimitAreaByPercentage(F);
 	unsigned areaRecommand = 0;
 	unsigned areaLimitViolation = false;
 	unsigned areaTotal = 0;
@@ -1733,12 +2035,13 @@ void SchedulerDAG::bfsPartitionInsts(Function &F) {
 		InstPartitions.push_back(partitionPath);
 	}
 
-	if(areaLimitViolation) {
+	if (areaLimitViolation) {
 		unsigned areaLimit = LEGUP_CONFIG->getParameterInt("PARTITION_AREA_LIMIT");
 		errs() << "Error: PARTITION_AREA_LIMIT=" << areaLimit << " is too small\n";
 		errs() << "       Recommanded area = (larger than) " << (areaRecommand) << "\n";
 		//assert(0);
 	}
+
 }
 
 bool SchedulerDAG::isPredPartition(VBB path, const BasicBlock *useBB) {
@@ -1959,6 +2262,8 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
 		} else if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==3) {
 			findTopologicalBBList(F);
 			bfsPartitionInsts(F);
+		} else if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==4) {
+			networkFlowPartitionInsts(F);
 		}
 		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2) {
 			if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")<=2) {
