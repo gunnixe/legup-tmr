@@ -1704,13 +1704,13 @@ void SchedulerDAG::bfsPartitionInsts(Function &F) {
 		for (BasicBlock::const_iterator instr = BB->begin(), ie = BB->end();
 		                                instr != ie; ++instr) {
 			const Instruction *I = instr;
-			InstructionNode *iNode = getInstructionNode(const_cast<Instruction *>(I));
+			//InstructionNode *iNode = getInstructionNode(const_cast<Instruction *>(I));
 			unsigned area = getInstructionArea(const_cast<Instruction *>(I));
 			if ((areaTotal+area > areaLimit) && (areaLimit!=0)) {
 				if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
 					errs() << "  ---- Insert Part. Voter ----\n";
 				if (!partitionPath.empty()) {
-					iNode->setPartition(true);
+					//iNode->setPartition(true);
 					InstPartitions.push_back(partitionPath);
 					partitionPath.clear();
 					areaTotal = 0;
@@ -1783,7 +1783,7 @@ void SchedulerDAG::findInstPartitionSignals() {
     		    if (!dep || isa<AllocaInst>(dep))
     		        continue;
 
-				if (pMap[dep] != pMap[I]) {
+				if (pMap[dep] != pMap[I] || isa<ReturnInst>(I)) {
     	    		InstructionNode *depNode = getInstructionNode(dep);
 					depNode->setPartition(true);
 				}
@@ -1815,7 +1815,7 @@ void SchedulerDAG::findPartitionSignals() {
     			    if (!dep || isa<AllocaInst>(dep))
     			        continue;
 
-					if (dep->getParent() != BB) {
+					if (dep->getParent() != BB || isa<ReturnInst>(I)) {
     		    		InstructionNode *depNode = getInstructionNode(dep);
 						depNode->setPartition(true);
 					}
@@ -2001,6 +2001,13 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
 		}
 	}
 
+	// setPartition Bounday
+	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")<=2)
+		findPartitionSignals();
+	else
+		findInstPartitionSignals();
+
+
 	// set delay
     for (Function::iterator b = F.begin(), be = F.end(); b != be; b++) {
         for (BasicBlock::iterator instr = b->begin(), ie = b->end();
@@ -2015,12 +2022,6 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
             generateDependencies(instr);
         }
     }
-
-	// setPartition Bounday
-	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")<=2)
-		findPartitionSignals();
-	else
-		findInstPartitionSignals();
 
 	// make BB input & output
 	//errs() << "---- BasicBlock inout analysis ----\n";

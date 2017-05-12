@@ -2347,7 +2347,8 @@ void VerilogWriter::printInferredRAMModule(bool readonly) {
             "end\n"
             << "else\n"
             << "    q_a_wire <= ram[address_a];\n";
-        if (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT") != "xilinx") {
+        if (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT") != "xilinx" ||
+				LEGUP_CONFIG->getParameterInt("VIVADO_FLOW")) {
             // Xilinx expects inferred dual port ram to be in a single always
             // block
             // Altera: separate always blocks
@@ -4507,6 +4508,23 @@ void VerilogWriter::printTop(const Function *F) {
         << "\t\twaitrequest,\n"
         << "\t\treturn_val";
 
+	RTLModule* rtlMain;
+   	for (Allocation::const_rtl_iterator i = alloc->rtl_begin(),
+   	                                    e = alloc->rtl_end();
+   	                                    i != e; ++i) {
+		if ((*i)->getName()=="main") {
+   			rtlMain = *i;
+			break;
+		}
+   	}
+	for (std::vector<RTLBBModule *>::const_iterator bbm = rtlMain->bbModules.begin(),
+	                                                bbme = rtlMain->bbModules.end();
+	                                                bbm != bbme; ++bbm) {
+		Out << ",\n\t\t" << (*bbm)->getName() << "_PV_e_r0";
+		Out << ",\n\t\t" << (*bbm)->getName() << "_PV_e_r1";
+		Out << ",\n\t\t" << (*bbm)->getName() << "_PV_e_r2";
+	}
+
     if (alloc->getDbgInfo()->isDebugRtlEnabled()) {
         // Add serial connections for debugger control, plus some signals to
         // debug the debugger.
@@ -4557,6 +4575,15 @@ void VerilogWriter::printTop(const Function *F) {
 
     Out << "input waitrequest;\n";
     Out << "output wire [31:0] return_val;\n";
+
+	for (std::vector<RTLBBModule *>::const_iterator bbm = rtlMain->bbModules.begin(),
+	                                                bbme = rtlMain->bbModules.end();
+	                                                bbm != bbme; ++bbm) {
+		Out << "output [1:0] " << (*bbm)->getName() << "_PV_e_r0;\n";
+		Out << "output [1:0] " << (*bbm)->getName() << "_PV_e_r1;\n";
+		Out << "output [1:0] " << (*bbm)->getName() << "_PV_e_r2;\n";
+	}
+	Out << "\n";
 
     if (alloc->getDbgInfo()->isDebugRtlEnabled()) {
         // Signals for active instance and current state
@@ -6342,16 +6369,22 @@ void VerilogWriter::printMainInstDeclare(std::string postfix, const bool usesPth
 			if (name=="cur_state")
 				name = "next_state";
 			if (isTmrVoterSignal(*i)) {
-				Out << ",\n\n\t." << name << "_v(" << name << postfix << "),\n";
-				if ((*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg())
-					Out << "\t." << name << "_e(" << name << "_e" << postfix << "),\n";
-				Out << "\t." << name << "_r0(" << name << "_r0),\n";
-				Out << "\t." << name << "_r1(" << name << "_r1),\n";
-				Out << "\t." << name << "_r2(" << name << "_r2)";
+				Out << ",\n\n\t." << name << "_v(" << name << postfix << ")";
+				//if ((*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg())
+				//	Out << ",\n\t." << name << "_e(" << name << "_e" << postfix << ")";
+				Out << ",\n\t." << name << "_r0(" << name << "_r0)";
+				Out << ",\n\t." << name << "_r1(" << name << "_r1)";
+				Out << ",\n\t." << name << "_r2(" << name << "_r2)";
 			}
 		}
 	}
 
+	for (std::vector<RTLBBModule *>::const_iterator bbm = rtl->bbModules.begin(),
+	                                                bbme = rtl->bbModules.end();
+	                                                bbm != bbme; ++bbm) {
+		Out << ",\n\t." << (*bbm)->getName() << "_PV_e(" 
+		    << (*bbm)->getName() << "_PV_e" << postfix << ")";
+	}
     Out << "\n);\n\n";
 }
 
@@ -6388,19 +6421,33 @@ void VerilogWriter::printMainInstance(const bool usesPthreads) {
 			bool noVoter = LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==0 &&
 					       LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==0;
 			if (isTmrVoterSignal(*i) && !noVoter) {
+				if (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT")=="xilinx")
+					Out << "(* KEEP=\"TRUE\" *) ";
 				Out << "wire " << (*i)->getWidth().str() << " "
 				    << name << "_r0, "
 				    << name << "_r1, "
 				    << name << "_r2;\n";
-				if ((*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg()) {
-					Out << "wire [1:0] "
-					    << name << "_e_r0, "
-					    << name << "_e_r1, "
-					    << name << "_e_r2; /*part voter ("
-						<< getPartID(*i) << ") unconnected*/\n";
-				}
+				//if ((*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg()) {
+				//	Out << "wire [1:0] "
+				//	    << name << "_e_r0, "
+				//	    << name << "_e_r1, "
+				//	    << name << "_e_r2; /*part voter ("
+				//		<< getPartID(*i) << ") unconnected*/\n";
+				//}
 			}
 		}
+		Out << "\n";
+
+		//for (std::vector<RTLBBModule *>::const_iterator bbm = rtl->bbModules.begin(),
+	    //                                                bbme = rtl->bbModules.end();
+	    //                                                bbm != bbme; ++bbm) {
+		//	if (LEGUP_CONFIG->getParameter("INFERRED_RAM_FORMAT")=="xilinx")
+		//		Out << "(* KEEP=\"TRUE\" *) ";
+		//	Out << "wire [1:0] "
+		//	    << (*bbm)->getName() << "_PV_e_r0, "
+		//	    << (*bbm)->getName() << "_PV_e_r1, "
+		//	    << (*bbm)->getName() << "_PV_e_r2;\n";
+		//}
 		Out << "\n";
 
 		printMainInstDeclare("_r0", usesPthreads);
@@ -6422,6 +6469,8 @@ unsigned VerilogWriter::getPartID(const RTLSignal* sig) {
 				return (*bbm)->getPartID();
 		}
 	}
+	assert(0);
+	return 0;
 }
 
 void VerilogWriter::printMemoryControllerInstance() {
@@ -6739,12 +6788,17 @@ void VerilogWriter::printModuleHeader() {
 					name = "next_state";
 				Out << ",\n";
        			Out << "\toutput " << width << " " << name << "_v,\n";
-				if ((*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg())
-       				Out << "\toutput [1:0] " << name << "_e, /*part voter*/\n";
+				//if ((*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg())
+       			//	Out << "\toutput [1:0] " << name << "_e, /*part voter*/\n";
        			Out << "\tinput " << width << " " << name << "_r0,\n";
        			Out << "\tinput " << width << " " << name << "_r1,\n";
        			Out << "\tinput " << width << " " << name << "_r2";
 			}
+		}
+		for (std::vector<RTLBBModule *>::const_iterator bbm = rtl->bbModules.begin(),
+		                                                bbme = rtl->bbModules.end();
+		                                                bbm != bbme; ++bbm) {
+			Out << ",\n\toutput [1:0] " << (*bbm)->getName() << "_PV_e";
 		}
     }
     Out << "\n);"
@@ -7282,10 +7336,39 @@ bool VerilogWriter::isLocalMemOutputSig(const RTLSignal *sig) {
 	return false;
 }
 
+void VerilogWriter::printPVoterModuleInstance(RTLBBModule *bbm) {
+	bool isTmr = (LEGUP_CONFIG->getParameterInt("TMR")==1);
+	bool noVoter = (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==0 &&
+	                LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==0);
+
+	if (bbm->empty() || !isTmr || noVoter)
+		return;
+
+	std::string name = bbm->getName();
+	Out << name << "_PV " << name << "_PV(\n";
+	Out << "\t.clk( clk )";
+	Out << ",\n\t.reset( reset )";
+
+	for (RTLBBModule::signal_iterator i = bbm->signals_begin(),
+	                                  e = bbm->signals_end();
+	                                  i != e; ++i) {
+		if ((*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg()) {
+			std::string name = (*i)->getName();
+			Out << ",\n\t." << name << "_r0( " << name << "_r0 )";
+			Out << ",\n\t." << name << "_r1( " << name << "_r1 )";
+			Out << ",\n\t." << name << "_r2( " << name << "_r2 )";
+			Out << ",\n\t." << name << "( " << name << " )";
+		}
+	}
+	Out << ",\n\t.PV_e( " << bbm->getName() << "_PV_e )";
+	Out << "\n);\n\n";
+}
+
 void VerilogWriter::printBBModuleInstance(RTLBBModule *bbm) {
 	if (bbm->empty())
 		return;
 
+	bool extractPV = (LEGUP_CONFIG->getParameterInt("EXTRACT_PART_VOTERS")!=0);
 	bool isTmr = (LEGUP_CONFIG->getParameterInt("TMR")==1);
 	bool noVoter = (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==0 &&
 	                LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==0);
@@ -7328,6 +7411,8 @@ void VerilogWriter::printBBModuleInstance(RTLBBModule *bbm) {
 	                                  e = bbm->signals_end();
 	                                  i != e; ++i) {
 		if (isTmrVoterSignal(*i) && isTmr && !noVoter) {
+			if (extractPV && (*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg())
+				continue;
 			std::string name = (*i)->getName();
 			if (name=="cur_state")
 				name = "next_state";
@@ -7351,24 +7436,68 @@ void VerilogWriter::printBBModuleInstance(RTLBBModule *bbm) {
 	for (RTLBBModule::signal_iterator i = bbm->outputs_begin(),
 	                                  e = bbm->outputs_end();
 	                                  i != e; ++i) {
+		bool extPV = (extractPV && (*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg());
 		std::string name = (*i)->getName();
-    	if ((*i)!=rtl->getUnsynthesizableSignal())
+    	if ((*i)!=rtl->getUnsynthesizableSignal() && !extPV)
 			Out << ",\n\t." << name << "( " << name << " )";
 		if (isTmrVoterSignal(*i) && isTmr && !noVoter) {
 			if (name=="cur_state")
 				name = "next_state";
 			Out << ",\n\t." << name << "_v( " << name << "_v )";
-			if ((*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg())
-				Out << ",\n\t." << name << "_e( " << name << "_e )";
+			//if ((*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg() && !extractPV)
+			//	Out << ",\n\t." << name << "_e( " << name << "_e )";
 		}
 	}
+	if (LEGUP_CONFIG->getParameterInt("EXTRACT_PART_VOTERS")==0)
+		Out << ",\n\t.PV_e( " << bbm->getName() << "_PV_e )";
 	Out << "\n);\n\n";
+}
+
+void VerilogWriter::printPVoterModuleBody(RTLBBModule *bbm) {
+	bool isTmr = (LEGUP_CONFIG->getParameterInt("TMR")==1);
+	bool noVoter = (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==0 &&
+	                LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==0);
+
+	if (bbm->empty() || !isTmr || noVoter)
+		return;
+
+	std::string name = bbm->getName();
+	Out << "\nmodule " << name << "_PV (\n";
+	Out << "\tinput clk";
+	Out << ",\n\tinput reset";
+	for (RTLBBModule::signal_iterator i = bbm->signals_begin(),
+	                                  e = bbm->signals_end();
+	                                  i != e; ++i) {
+		if ((*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg()) {
+			std::string name = (*i)->getName();
+			Out << ",\n\tinput " << (*i)->getWidth().str() << " " << name << "_r0";
+			Out << ",\n\tinput " << (*i)->getWidth().str() << " " << name << "_r1";
+			Out << ",\n\tinput " << (*i)->getWidth().str() << " " << name << "_r2";
+			Out << ",\n\toutput reg " << (*i)->getWidth().str() << " " << name;
+		}
+	}
+
+	Out << ",\n\toutput reg [1:0] PV_e";
+	Out << "\n);\n\n";
+
+	Out << "integer i;\n";
+
+	for (RTLBBModule::signal_iterator i = bbm->signals_begin(),
+	                                  e = bbm->signals_end();
+	                                  i != e; ++i) {
+		if ((*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg())
+			printTmrVoter(*i);
+	}
+
+	printVoterStatusSignal(bbm);
+	Out << "endmodule\n\n";
 }
 
 void VerilogWriter::printBBModuleBody(RTLBBModule *bbm) {
 	if (bbm->empty())
 		return;
 
+	bool extractPV = (LEGUP_CONFIG->getParameterInt("EXTRACT_PART_VOTERS")!=0);
 	bool isTmr = (LEGUP_CONFIG->getParameterInt("TMR")==1);
 	bool noVoter = (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==0 &&
 	                LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==0);
@@ -7389,6 +7518,8 @@ void VerilogWriter::printBBModuleBody(RTLBBModule *bbm) {
 	                                  e = bbm->signals_end();
 	                                  i != e; ++i) {
 		if (isTmrVoterSignal(*i) && isTmr && !noVoter) {
+			if (extractPV && (*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg())
+				continue;
 			std::string name = (*i)->getName();
 			if (name=="cur_state")
 				name = "next_state";
@@ -7438,17 +7569,20 @@ void VerilogWriter::printBBModuleBody(RTLBBModule *bbm) {
 		if ((isTmrVoterSignal(*i) && isTmr && !noVoter)
 				 || (*i)->getNumDrivers()!=0 || (*i)->getNumConditions()!=0)
 			type += " reg";
-    	if ((*i)!=rtl->getUnsynthesizableSignal())
+		bool extPV = (extractPV && (*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg());
+    	if ((*i)!=rtl->getUnsynthesizableSignal() && !extPV)
 			Out << ",\n\t" << type << " " << width << " " << name;
 		if (name=="cur_state")
 			name = "next_state";
 		if (isTmrVoterSignal(*i) && isTmr && !noVoter) {
 			type = isMemOutputSig(*i)? "output" : "output reg";
 			Out << ",\n\t" << type << " " << width << " " << name << "_v";
-			if ((*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg())
-				Out << ",\n\toutput reg [1:0] " << name << "_e";
+			//if ((*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg() && !extractPV)
+			//	Out << ",\n\toutput reg [1:0] " << name << "_e";
 		}
 	}
+	if (!extractPV)
+		Out << ",\n\toutput reg [1:0] PV_e";
 	Out << "\n);\n\n";
 
 	//parameter
@@ -7502,10 +7636,58 @@ void VerilogWriter::printBBModuleBody(RTLBBModule *bbm) {
 	                                  e = bbm->signals_end();
 	                                  i != e; ++i) {
 		printSignal(*i);
-		if (isTmrVoterSignal(*i) && isTmr && !noVoter)
+		if (isTmrVoterSignal(*i) && isTmr && !noVoter) {
+			if (extractPV && (*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg())
+				continue;
 			printTmrVoter(*i);
+		}
 	}
+
+	// generate e bits - voter status
+	if (!extractPV)
+		printVoterStatusSignal(bbm);
+
 	Out << "endmodule\n\n";
+}
+
+void VerilogWriter::printVoterStatusSignal(RTLBBModule *bbm) {
+	unsigned totalEBits = 0;
+	std::string r0, r1, r2;
+	for (RTLBBModule::signal_iterator i = bbm->signals_begin(),
+	                                  e = bbm->signals_end();
+	                                  i != e; ++i) {
+		if ((*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg()) {
+			if (totalEBits!=0) {
+				r0 += ",\n\t";
+				r1 += ",\n\t";
+				r2 += ",\n\t";
+			}
+			r0 += (*i)->getName() + "_r0";
+			r1 += (*i)->getName() + "_r1";
+			r2 += (*i)->getName() + "_r2";
+			totalEBits += (*i)->getWidth().numBits(rtl, alloc);
+		}
+	}
+
+	// generate e bits - voter status
+	Out << "\n";
+	Out << "wire [" << totalEBits-1 << ":0] r0 = {" << r0 << "};\n";
+	Out << "wire [" << totalEBits-1 << ":0] r1 = {" << r1 << "};\n";
+	Out << "wire [" << totalEBits-1 << ":0] r2 = {" << r2 << "};\n";
+	Out << "\n";
+
+	Out << "always @(posedge clk) begin\n";
+	Out << "\tif (r0==r1 && r1==r2)\n";
+	Out << "\t\tPV_e <= 2'b11;\n";
+	Out << "\telse if (r0==r1 && r2!=r1)\n";
+	Out << "\t\tPV_e <= 2'b10;\n";
+	Out << "\telse if (r0==r2 && r1!=r2)\n";
+	Out << "\t\tPV_e <= 2'b01;\n";
+	Out << "\telse if (r1==r2 && r0!=r2)\n";
+	Out << "\t\tPV_e <= 2'b00;\n";
+	Out << "\telse\n";
+	Out << "\t\tPV_e <= 2'b00;\n";
+	Out << "end\n\n";
 }
 
 void VerilogWriter::printControlModuleInstance(const RTLModule *mod,
@@ -7943,7 +8125,12 @@ void VerilogWriter::initBBModules() {
 		}
 		for (std::vector<const RTLSignal*>::iterator i = V.begin(); i != V.end(); ++i) {
 			//errs() << "    " << (*i)->getName() << "\n";
-			(*bbm)->add_input(const_cast<RTLSignal*>(*i));
+			bool extractPV = (LEGUP_CONFIG->getParameterInt("EXTRACT_PART_VOTERS")!=0);
+			bool isPartVoterSig = (*i)->getVoter()==RTLSignal::PART_VOTER && (*i)->isReg();
+			bool isOutputSig = (std::find((*bbm)->signals_begin(), (*bbm)->signals_end(), *i)
+					!= (*bbm)->signals_end());
+			if ((extractPV && isPartVoterSig) || !isOutputSig)
+				(*bbm)->add_input(const_cast<RTLSignal*>(*i));
 			//if (isFeedbackSig(*i, *bbm))
 			//	(*bbm)->add_finput(const_cast<RTLSignal*>(*i));
 		}
@@ -7969,6 +8156,8 @@ void VerilogWriter::printRTL(const RTLModule *rtl) {
 		for (std::vector<RTLBBModule *>::const_iterator bbm = rtl->bbModules.begin(),
 		                                                bbme = rtl->bbModules.end();
 		                                                bbm != bbme; ++bbm) {
+			if (LEGUP_CONFIG->getParameterInt("EXTRACT_PART_VOTERS"))
+				printPVoterModuleInstance(*bbm);
 			printBBModuleInstance(*bbm);
 		}
 	} else {
@@ -7998,6 +8187,8 @@ void VerilogWriter::printRTL(const RTLModule *rtl) {
 	for (std::vector<RTLBBModule *>::const_iterator bbm = rtl->bbModules.begin(),
 	                                                bbme = rtl->bbModules.end();
 	                                                bbm != bbme; ++bbm) {
+		if (LEGUP_CONFIG->getParameterInt("EXTRACT_PART_VOTERS"))
+			printPVoterModuleBody(*bbm);
 		//curBBModule = *bbm;
 		printBBModuleBody(*bbm);
 	}
@@ -8681,29 +8872,29 @@ void VerilogWriter::printTmrVoter(const RTLSignal *sig) {
 
 	bool isRegVoter = isMemOutputSig(sig);
 	bool isModuleBoundary = false;
-	bool isPartVoter = sig->getVoter()==RTLSignal::PART_VOTER && sig->isReg();
+	//bool isPartVoter = sig->getVoter()==RTLSignal::PART_VOTER && sig->isReg();
 
-	if (isPartVoter) {
-		Out << "\n/* " << name << " - TMR PartVoter */";
+	//if (isPartVoter) {
+	//	Out << "\n/* " << name << " - TMR PartVoter */";
 
-		std::string a = name + "_r0";
-		std::string b = name + "_r1";
-		std::string c = name + "_r2";
-		std::string e = name + "_e";
+	//	std::string a = name + "_r0";
+	//	std::string b = name + "_r1";
+	//	std::string c = name + "_r2";
+	//	std::string e = name + "_e";
 
-		Out << "\nalways @(posedge clk) begin\n";
-		Out << "\tif ("<<a<<"=="<<b<<" && "<<b<<"=="<<c<<")\n";
-		Out << "\t\t"<<e<<" <= 2'b11;\n";
-		Out << "\telse if ("<<a<<"=="<<b<<" && "<<c<<"!="<<b<<")\n";
-		Out << "\t\t"<<e<<" <= 2'b10;\n";
-		Out << "\telse if ("<<a<<"=="<<c<<" && "<<b<<"!="<<c<<")\n";
-		Out << "\t\t"<<e<<" <= 2'b01;\n";
-		Out << "\telse if ("<<b<<"=="<<c<<" && "<<a<<"!="<<c<<")\n";
-		Out << "\t\t"<<e<<" <= 2'b00;\n";
-		Out << "\telse\n";
-		Out << "\t\t"<<e<<" <= 2'b00;\n";
-		Out << "end\n";
-	}
+	//	Out << "\nalways @(posedge clk) begin\n";
+	//	Out << "\tif ("<<a<<"=="<<b<<" && "<<b<<"=="<<c<<")\n";
+	//	Out << "\t\t"<<e<<" <= 2'b11;\n";
+	//	Out << "\telse if ("<<a<<"=="<<b<<" && "<<c<<"!="<<b<<")\n";
+	//	Out << "\t\t"<<e<<" <= 2'b10;\n";
+	//	Out << "\telse if ("<<a<<"=="<<c<<" && "<<b<<"!="<<c<<")\n";
+	//	Out << "\t\t"<<e<<" <= 2'b01;\n";
+	//	Out << "\telse if ("<<b<<"=="<<c<<" && "<<a<<"!="<<c<<")\n";
+	//	Out << "\t\t"<<e<<" <= 2'b00;\n";
+	//	Out << "\telse\n";
+	//	Out << "\t\t"<<e<<" <= 2'b00;\n";
+	//	Out << "end\n";
+	//}
 	printTmrVoter(name, lo, hi, isRegVoter, isModuleBoundary);
 }
 

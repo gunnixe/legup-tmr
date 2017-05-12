@@ -376,8 +376,8 @@ public:
     const_signal_iterator outputs_end()   const { return outputs.end(); }
 
 	void add_input(RTLSignal *in) {
-		if ((std::find(inputs.begin(), inputs.end(), in) == inputs.end())
-				&& (std::find(signals.begin(), signals.end(), in) == signals.end()))
+		if ((std::find(inputs.begin(), inputs.end(), in) == inputs.end()))
+				//&& (std::find(signals.begin(), signals.end(), in) == signals.end()))
 			inputs.push_back(in);
 	}
 	void add_finput(RTLSignal *in) { finputs.push_back(in); }

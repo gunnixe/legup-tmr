@@ -235,6 +235,9 @@ private:
 	void printBBModuleInstance(RTLBBModule *bbm);
 	void printBBModuleInstance(RTLBBModule *bbm, std::string postfix);
 	void printBBModuleBody(RTLBBModule *bbm);
+	void printPVoterModuleInstance(RTLBBModule *bbm);
+	void printPVoterModuleBody(RTLBBModule *bbm);
+	void printVoterStatusSignal(RTLBBModule *bbm);
 
 	// added for TMR
 	bool isTmrSig(const RTLSignal *sig);
