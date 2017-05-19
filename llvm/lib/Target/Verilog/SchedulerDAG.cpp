@@ -899,7 +899,8 @@ bool SchedulerDAG::bfs(int n, int start, int target,
 
 void SchedulerDAG::connectDFGInst(int capacity[][MAX_NODE], Instruction *I, int t) {
 	int idx = instMap[I];
-	capacity[idx][idx+1] = 1;//isa<LoadInst>(I)? INF : 1;
+	//capacity[idx][idx+1] = 1;//isa<LoadInst>(I)? INF : 1;
+	capacity[idx][idx+1] = I->getType()->getPrimitiveSizeInBits();
 	
 	for (User::op_iterator op = I->op_begin(), e = I->op_end(); op != e; ++op) {
 	    // we only care about operands that are created by other instructions
@@ -1487,10 +1488,10 @@ void SchedulerDAG::networkFlowPartitionInsts(Function &F, unsigned areaLimit, in
 	bool frontMerge;
 	do {
 		makeDFGInstGraph(capacity, n);
-		maxFlow(n, 0, n-1, capacity, flow);
+		maxFlow(n, 0, n-2, capacity, flow);
 		boundaryInst = getBoundaryInst(n, capacity, flow, p0, p1, frontMerge);
-		if (boundaryInst)
-			errs() << "boundaryInst = " << getValueStr(boundaryInst) << "\n";
+		if (boundaryInst == NULL)
+			errs() << "WARNING: not found boundaryInst\n";
 
 		if (isBalanced(p0, p1) || boundaryInst == NULL) {
 			pushNewInstPartition(p0, PART_S_FINISH);
@@ -1667,11 +1668,17 @@ const Instruction* SchedulerDAG::getBoundaryInst(int n,
 		} else
 			p1.push_back(*i);
 	}
+	//for (VINST::iterator i = p0.begin(); i != p0.end(); ++i)
+	//	errs() << "[0] " << getValueStr(*i) << "\n";
+	//for (VINST::iterator i = p1.begin(); i != p1.end(); ++i)
+	//	errs() << "[1] " << getValueStr(*i) << "\n";
 
 	int minCut = 0;
+	//VINST cutList;
 	for(int i=0; i<n; i+=2) {
-		if ((visited[i] && !visited[i+1]) && capacity[i][i+1]==1) {
+		if ((visited[i] && !visited[i+1]) && capacity[i][i+1]!=INF) {
 			minCut++;
+			//cutList.push_back(isInstNode(i));
 		}
 	}
 	fprintf(stderr, "  %4d / %4d | %4d / %4d | %4d | %4d / %4d | minCut= %2d\n",
@@ -1679,15 +1686,19 @@ const Instruction* SchedulerDAG::getBoundaryInst(int n,
 			getInstArea(PART_S), getInstArea(PART_T),
 			getInstArea(PART_UNKNOWN), 
 			getInstArea(p0), getInstArea(p1), minCut);
+	//for (VINST::iterator i = cutList.begin(); i != cutList.end(); ++i)
+	//	errs() << "  -" << getValueStr(*i) << "\n";
 
+	//VINST blist;
 	frontMerge = getInstArea(p0) < getInstArea(p1);
 	for(int i=0; i<n; i+=2) {
-		if ((visited[i] && !visited[i+1]) && capacity[i][i+1]==1) {
+		if ((visited[i] && !visited[i+1]) && capacity[i][i+1]!=INF) {
 			for (int j=2; j<n-2; j++) {
 				int f = frontMerge? flow[i+1][j] : flow[j][i];
-				if (f) {
+				if (f>0) {
 					const Instruction *d = isInstNode(j);
 					if (instPartState[d]==PART_UNKNOWN) {
+						//blist.push_back(d);
 						boundaryInst = d;
 						break;
 					}
@@ -1695,6 +1706,14 @@ const Instruction* SchedulerDAG::getBoundaryInst(int n,
 			}
 		}
 	}
+	//unsigned minBit = INF;
+	//for (VINST::iterator i = blist.begin(); i != blist.end(); ++i) {
+	//	unsigned cbit = (*i)->getType()->getPrimitiveSizeInBits();
+	//	if (cbit < minBit) {
+	//		boundaryInst = *i;
+	//		minBit = cbit;
+	//	}
+	//}
 
 	//Select min-area boundaryBB from the out of min-cut list
 	if (boundaryInst == NULL) {
@@ -1728,6 +1747,8 @@ const Instruction* SchedulerDAG::getBoundaryInst(int n,
 		}
 	}
 
+	//if (boundaryInst)
+	//	errs() << getValueStr(boundaryInst) << "\n";
 	return boundaryInst;
 }
 
@@ -2097,7 +2118,6 @@ void SchedulerDAG::findInstPartitionSignals() {
 			if (isa<ReturnInst>(I)) {
    	    		InstructionNode *iNode = getInstructionNode(I);
 				iNode->setPartition(true);
-				continue;
 			}
 
     		for (User::op_iterator op = I->op_begin(); op != I->op_end(); ++op) {
@@ -2287,39 +2307,39 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
 		} else if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==4) {
 			networkFlowPartitionInsts(F);
 		}
-		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2) {
-			if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")<=2) {
-				errs() << "\n\n# DEBUG_TMR=2 - Partition List (n="
-				       << Partitions.size() << ")\n";
-				int cnt = 0;
-				for (std::vector<VBB>::const_iterator p = Partitions.begin(),
-				                                      pe = Partitions.end();
-				                                      p != pe; ++p) {
-					VBB path = *p;
-					errs() << " [" << cnt++ << "] ";
-					for (VBB::const_iterator b = path.begin(),
-					                         be = path.end();
-					                         b != be; ++b) {
-						errs() << getLabel(*b) << " - ";
-					}
-					errs() << " (" << getBBArea(path) << ")\n";
-				}
-			} else {
-				errs() << "\n\n# DEBUG_TMR=2 - Partition List (n="
-				       << InstPartitions.size() << ")\n";
-				int cnt = 0;
-				for (std::vector<VINST>::const_iterator p = InstPartitions.begin();
-				                                        p != InstPartitions.end(); ++p) {
-					VINST path = *p;
-					for (VINST::const_iterator i = path.begin();
-					                           i != path.end(); ++i) {
-						errs() << " [" << cnt << "] " << getValueStr(*i) << "\n";
-					}
-					errs() << " ---- Total area = " << getInstArea(path) << " ----\n";
-					cnt++;
-				}
-			}
-		}
+		//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2) {
+		//	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")<=2) {
+		//		errs() << "\n\n# DEBUG_TMR=2 - Partition List (n="
+		//		       << Partitions.size() << ")\n";
+		//		int cnt = 0;
+		//		for (std::vector<VBB>::const_iterator p = Partitions.begin(),
+		//		                                      pe = Partitions.end();
+		//		                                      p != pe; ++p) {
+		//			VBB path = *p;
+		//			errs() << " [" << cnt++ << "] ";
+		//			for (VBB::const_iterator b = path.begin(),
+		//			                         be = path.end();
+		//			                         b != be; ++b) {
+		//				errs() << getLabel(*b) << " - ";
+		//			}
+		//			errs() << " (" << getBBArea(path) << ")\n";
+		//		}
+		//	} else {
+		//		errs() << "\n\n# DEBUG_TMR=2 - Partition List (n="
+		//		       << InstPartitions.size() << ")\n";
+		//		int cnt = 0;
+		//		for (std::vector<VINST>::const_iterator p = InstPartitions.begin();
+		//		                                        p != InstPartitions.end(); ++p) {
+		//			VINST path = *p;
+		//			for (VINST::const_iterator i = path.begin();
+		//			                           i != path.end(); ++i) {
+		//				errs() << " [" << cnt << "] " << getValueStr(*i) << "\n";
+		//			}
+		//			errs() << " ---- Total area = " << getInstArea(path) << " ----\n";
+		//			cnt++;
+		//		}
+		//	}
+		//}
 	}
 
 	// setPartition Bounday

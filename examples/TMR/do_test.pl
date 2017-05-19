@@ -6,7 +6,7 @@ my $DEST = output_wrap;
 my $START_CNT = 0;
 my $SYN_TOP = top;
 my $PNR_TOP = ML605;
-my $TEMPLATE = template_inline;
+my $TEMPLATE = template;
 
 my @example_list;
 
@@ -214,7 +214,7 @@ sub do_work {
 
 sub change_makefile {
 	my ($xilinx) = @_;
-	return if($xilinx==0);
+	#return if($xilinx==0);
 
 	open(FH, '+<', "Makefile") or die "cannot open 'Makefile' $!";
 	my $out = '';
@@ -223,7 +223,8 @@ sub change_makefile {
 		if(m/^XILINX/) {
 			next;
 		} elsif(m/^include/ && m/Makefile.common/) {
-			$out .= "XILINX = 1\n";
+			$out .= "XILINX = 1\n" if($xilinx);
+			$out .= "ALWAYS_INLINE=1\n";
 			$out .= "$_\n";
 		} else {
 			$out .= "$_\n";
