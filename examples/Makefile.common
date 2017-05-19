@@ -105,7 +105,14 @@ ifeq ($(LLVM_PROFILE),1)
 	cp -f $(NAME).c $(NAME)_labeled.c	
 endif # LLVM_PROFILE
 	# produces pre-link time optimization binary bitcode: $(NAME).prelto.bc
+
+
+ifdef ALWAYS_INLINE
+	$(FRONT_END) $(NAME)_labeled.c -emit-llvm -c $(CFLAG) $(CLANG_FLAG) -o $(NAME).prelto.inline.bc
+	$(LLVM_HOME)opt -always-inline < $(NAME).prelto.inline.bc > $(NAME).prelto.1.bc
+else
 	$(FRONT_END) $(NAME)_labeled.c -emit-llvm -c $(CFLAG) $(CLANG_FLAG) -o $(NAME).prelto.1.bc
+endif
 	$(LLVM_HOME)llvm-dis $(NAME).prelto.1.bc
 
 ifeq ($(CUSTOM_VERILOG_FUNCTIONS),y)
