@@ -316,7 +316,8 @@ void SchedulerDAG::updateDAGwithInst(Instruction *instr) {
     std::string opName = LEGUP_CONFIG->getOpNameFromInst(instr, alloc);
 	if (iNode->getPartition()
 			&& LEGUP_CONFIG->getParameterInt("TMR")
-			&& LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")!=0) {
+			&& LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")!=0
+			&& LEGUP_CONFIG->getParameterInt("SEQUENTIAL_PART_VOTER")) {
 		iNode->setAtMaxDelay();
 	} else if (opName.empty() || isMem(instr)) {
         if (isa<GetElementPtrInst>(instr)) {
@@ -1311,6 +1312,7 @@ int SchedulerDAG::initInstMap(Function &F) {
 				storeInsts.push_back(i);
 		}
 	}
+	assert(isa<ReturnInst>(isInstNode(n-2)));
 	return n;
 }
 
@@ -1474,6 +1476,8 @@ void SchedulerDAG::networkFlowPartitionInsts(Function &F, unsigned areaLimit, in
 	//storeInsts.clear();
 
 	setcArea(areaLimit);
+	//instPartState[isInstNode(0)] = PART_S_FINISH;
+	//instPartState[isInstNode(n-2)] = PART_T_FINISH;
 
 	VINST p0;
 	VINST p1;
@@ -1485,12 +1489,12 @@ void SchedulerDAG::networkFlowPartitionInsts(Function &F, unsigned areaLimit, in
 		makeDFGInstGraph(capacity, n);
 		maxFlow(n, 0, n-1, capacity, flow);
 		boundaryInst = getBoundaryInst(n, capacity, flow, p0, p1, frontMerge);
-		if (!boundaryInst)
-			errs() << "Error - boundaryInst not found\n";
+		if (boundaryInst)
+			errs() << "boundaryInst = " << getValueStr(boundaryInst) << "\n";
 
 		if (isBalanced(p0, p1) || boundaryInst == NULL) {
-			InstPartitions.push_back(p0);
-			InstPartitions.push_back(p1);
+			pushNewInstPartition(p0, PART_S_FINISH);
+			pushNewInstPartition(p1, PART_T_FINISH);
 			break;
 		}
 
@@ -1602,6 +1606,17 @@ void SchedulerDAG::pushNewInstPartition(PART_STATE s) {
 	InstPartitions.push_back(pNodes);
 }
 
+void SchedulerDAG::pushNewInstPartition(VINST v, PART_STATE s) {
+	VINST pNodes;
+	for (VINST::iterator i = v.begin(); i != v.end(); ++i) {
+		if (instPartState[*i] != s) {
+			pNodes.push_back(*i);
+		}
+	}
+	errs() << "Push partitions " << (s==PART_S_FINISH? "p0" : "p1") << "\n";
+	InstPartitions.push_back(pNodes);
+}
+
 void SchedulerDAG::pushNewPartition(PART_STATE s) {
 	VBB pNodes;
 	for (VBB::iterator b = bbs.begin(); b != bbs.end(); ++b) {
@@ -1646,9 +1661,10 @@ const Instruction* SchedulerDAG::getBoundaryInst(int n,
 	p1.clear();
 	for (VINST::iterator i = insts.begin(); i != insts.end(); ++i) {
 		int idx = instMap[*i];
-		if (visited[idx])
+		if (visited[idx]) {
 			p0.push_back(*i);
-		else
+			assert(!isa<ReturnInst>(*i));
+		} else
 			p1.push_back(*i);
 	}
 
@@ -1667,7 +1683,7 @@ const Instruction* SchedulerDAG::getBoundaryInst(int n,
 	frontMerge = getInstArea(p0) < getInstArea(p1);
 	for(int i=0; i<n; i+=2) {
 		if ((visited[i] && !visited[i+1]) && capacity[i][i+1]==1) {
-			for (int j=0; j<n; j++) {
+			for (int j=2; j<n-2; j++) {
 				int f = frontMerge? flow[i+1][j] : flow[j][i];
 				if (f) {
 					const Instruction *d = isInstNode(j);
@@ -1686,14 +1702,14 @@ const Instruction* SchedulerDAG::getBoundaryInst(int n,
 		const Instruction *succ = NULL;
 		if (p0.size()>1) {
 			for(VINST::iterator i = p0.begin(); i != p0.end(); ++i) {
-				if (instPartState[*i] == PART_UNKNOWN) {
+				if (instPartState[*i] == PART_UNKNOWN && instMap[*i]!=0) {
 					pred = *i;
 				}
 			}
 		}
 		if (p1.size()>1) {
 			for (VINST::iterator i = p1.begin(); i != p1.end(); ++i) {
-				if (instPartState[*i] == PART_UNKNOWN) {
+				if (instPartState[*i] == PART_UNKNOWN && instMap[*i]!=n-2) {
 					succ = *i;
 				}
 			}
@@ -2078,6 +2094,12 @@ void SchedulerDAG::findInstPartitionSignals() {
     		if (isa<AllocaInst>(I))// || isa<PHINode>(I))
     		    continue;
 
+			if (isa<ReturnInst>(I)) {
+   	    		InstructionNode *iNode = getInstructionNode(I);
+				iNode->setPartition(true);
+				continue;
+			}
+
     		for (User::op_iterator op = I->op_begin(); op != I->op_end(); ++op) {
     		    // we only care about operands that are created by other instructions
     		    Instruction *dep = dyn_cast<Instruction>(*op);
@@ -2086,7 +2108,7 @@ void SchedulerDAG::findInstPartitionSignals() {
     		    if (!dep || isa<AllocaInst>(dep))
     		        continue;
 
-				if (pMap[dep] != pMap[I] || isa<ReturnInst>(I)) {
+				if (pMap[dep] < pMap[I]) {
     	    		InstructionNode *depNode = getInstructionNode(dep);
 					depNode->setPartition(true);
 				}
@@ -2286,21 +2308,15 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
 				errs() << "\n\n# DEBUG_TMR=2 - Partition List (n="
 				       << InstPartitions.size() << ")\n";
 				int cnt = 0;
-				for (std::vector<VINST>::const_iterator p = InstPartitions.begin(),
-				                                        pe = InstPartitions.end();
-				                                        p != pe; ++p) {
+				for (std::vector<VINST>::const_iterator p = InstPartitions.begin();
+				                                        p != InstPartitions.end(); ++p) {
 					VINST path = *p;
-					errs() << " [" << cnt++ << "] ";
-					const BasicBlock *bb = NULL;
-					for (VINST::const_iterator i = path.begin(),
-					                           ie = path.end();
-					                           i != ie; ++i) {
-						if ((*i)->getParent() != bb) {
-							bb = (*i)->getParent();
-							errs() << getLabel((*i)->getParent()) << " - ";
-						}
+					for (VINST::const_iterator i = path.begin();
+					                           i != path.end(); ++i) {
+						errs() << " [" << cnt << "] " << getValueStr(*i) << "\n";
 					}
-					errs() << " (" << getInstArea(path) << ")\n";
+					errs() << " ---- Total area = " << getInstArea(path) << " ----\n";
+					cnt++;
 				}
 			}
 		}

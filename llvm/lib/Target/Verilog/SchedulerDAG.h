@@ -306,6 +306,7 @@ public:
 	void pushPlist(VBB &plist, VBB pNodes);
 	void pushNewPartition(PART_STATE s);
 	void pushNewInstPartition(PART_STATE s);
+	void pushNewInstPartition(VINST v, PART_STATE s);
 	void dumpNF(int capacity[][MAX_NODE], int n);
 	void dumpVBB(VBB blist, std::string str);
 	void dumpbbPartState(std::string str);

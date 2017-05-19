@@ -6914,52 +6914,117 @@ void GenerateRTL::updateBBfinput(Instruction *I) {
 
 void GenerateRTL::updateVoterSignal(SchedulerDAG *dag) {
 
+	if (dag->InstPartitions.size()==0) {
+		VINST pNodes;
+		for (inst_iterator i = inst_begin(Fp), e = inst_end(Fp); i != e; ++i)
+			pNodes.push_back(&*i);
+		dag->InstPartitions.push_back(pNodes);
+	}
+
 	// synchronization voter check
 	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
 		std::cerr << "\n\n# DEBUG_TMR=1 - Backward signal\n";
 
-	for (inst_iterator i = inst_begin(Fp), e = inst_end(Fp); i != e; ++i) {
-        Instruction *I = &*i;
-		InstructionNode *iNode = dag->getInstructionNode(I);
-		//updateBBfinput(I);
+	unsigned partNum = 0;
+	for (std::vector<VINST>::iterator p = dag->InstPartitions.begin();
+	                                  p != dag->InstPartitions.end(); ++p) {
+		VINST ins = *p;
+		unsigned vNum = 0;
+       	for (VINST::const_iterator i = ins.begin(), ie = ins.end();
+		                           i != ie; ++i) {
+			Instruction *I = const_cast<Instruction*>(*i);
+			InstructionNode *iNode = dag->getInstructionNode(I);
+			if (iNode->getBackward()) {
+				RTLSignal *sig_wire = rtl->find(verilogName(*I));
+				RTLSignal *sig_reg = rtl->find(verilogName(*I) + "_reg");
+				sig_wire->setVoter(RTLSignal::SYNC_VOTER);
+				sig_reg->setVoter(RTLSignal::SYNC_VOTER);
 
-		if (iNode->getBackward()) {
-			RTLSignal *sig_wire = rtl->find(verilogName(*I));
-			RTLSignal *sig_reg = rtl->find(verilogName(*I) + "_reg");
-			sig_wire->setVoter(RTLSignal::SYNC_VOTER);
-			sig_reg->setVoter(RTLSignal::SYNC_VOTER);
-
-			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
-				std::cerr << "    " << getValueStr(I) << endl;
+				if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
+					errs() << "  [" << partNum << "]" << getValueStr(I) << "\n";
+				vNum++;
+			}
 		}
-
-  		//for (InstructionNode::iterator i = iNode->back_use_begin(),
-		//     e = iNode->back_use_end(); i != e; ++i) {
-		//	if (Instruction *use = dyn_cast<Instruction>(*i)) {
-		//		std::string wire = verilogName(*use);
-		//		RTLSignal *sig = rtl->find(wire);
-		//		sig->setVoter(RTLSignal::SYNC_VOTER);
-		//	}
-		//}
+		errs() << "    Total number of sync voters of [" << partNum << "] = " << vNum << "\n";
+		partNum++;
 	}
+
+	//for (inst_iterator i = inst_begin(Fp), e = inst_end(Fp); i != e; ++i) {
+    //    Instruction *I = &*i;
+	//	InstructionNode *iNode = dag->getInstructionNode(I);
+	//	//updateBBfinput(I);
+
+	//	if (iNode->getBackward()) {
+	//		RTLSignal *sig_wire = rtl->find(verilogName(*I));
+	//		RTLSignal *sig_reg = rtl->find(verilogName(*I) + "_reg");
+	//		sig_wire->setVoter(RTLSignal::SYNC_VOTER);
+	//		sig_reg->setVoter(RTLSignal::SYNC_VOTER);
+
+	//		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
+	//			std::cerr << "    " << getValueStr(I) << endl;
+	//	}
+
+  	//	//for (InstructionNode::iterator i = iNode->back_use_begin(),
+	//	//     e = iNode->back_use_end(); i != e; ++i) {
+	//	//	if (Instruction *use = dyn_cast<Instruction>(*i)) {
+	//	//		std::string wire = verilogName(*use);
+	//	//		RTLSignal *sig = rtl->find(wire);
+	//	//		sig->setVoter(RTLSignal::SYNC_VOTER);
+	//	//	}
+	//	//}
+	//}
 
 	// partitioning voter check
 	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
 		std::cerr << "\n\n# DEBUG_TMR=1 - Partitioned signal\n";
 
-	for (inst_iterator i = inst_begin(Fp), e = inst_end(Fp); i != e; ++i) {
-        Instruction *I = &*i;
-		InstructionNode *iNode = dag->getInstructionNode(I);
+	partNum = 0;
+	for (std::vector<VINST>::iterator p = dag->InstPartitions.begin();
+	                                  p != dag->InstPartitions.end(); ++p) {
+		VINST ins = *p;
+		unsigned vNum = 0;
+       	for (VINST::const_iterator i = ins.begin(), ie = ins.end();
+		                           i != ie; ++i) {
+			Instruction *I = const_cast<Instruction*>(*i);
+			InstructionNode *iNode = dag->getInstructionNode(const_cast<Instruction*>(*i));
+			if (iNode->getPartition()) {
+				if (!isa<ReturnInst>(I)) {
+					RTLSignal *sig_wire = rtl->find(verilogName(*I));
+					RTLSignal *sig_reg = rtl->find(verilogName(*I) + "_reg");
+					sig_wire->setVoter(RTLSignal::PART_VOTER);
+					sig_reg->setVoter(RTLSignal::PART_VOTER);
+				} else {
+        			RTLSignal *return_val = rtl->find("return_val");
+					return_val->setVoter(RTLSignal::PART_VOTER);
+				}
 
-		if (iNode->getPartition()) {
-			RTLSignal *sig_wire = rtl->find(verilogName(*I));
-			RTLSignal *sig_reg = rtl->find(verilogName(*I) + "_reg");
-			sig_wire->setVoter(RTLSignal::PART_VOTER);
-			sig_reg->setVoter(RTLSignal::PART_VOTER);
-
-			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
-				std::cerr << "    " << getValueStr(I) << endl;
+				if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
+					errs() << "  [" << partNum << "]" << getValueStr(I) << "\n";
+				if (!iNode->getBackward())
+					vNum++;
+			}
 		}
+		errs() << "    Total number of part voters of [" << partNum << "] = " << vNum << "\n";
+		partNum++;
+	}
+
+	//for (inst_iterator i = inst_begin(Fp), e = inst_end(Fp); i != e; ++i) {
+    //    Instruction *I = &*i;
+	//	InstructionNode *iNode = dag->getInstructionNode(I);
+
+	//	if (iNode->getPartition()) {
+	//		RTLSignal *sig_wire = rtl->find(verilogName(*I));
+	//		RTLSignal *sig_reg = rtl->find(verilogName(*I) + "_reg");
+	//		sig_wire->setVoter(RTLSignal::PART_VOTER);
+	//		sig_reg->setVoter(RTLSignal::PART_VOTER);
+
+	//		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
+	//			std::cerr << "    " << getValueStr(I) << endl;
+	//	}
+	//}
+
+	if (dag->InstPartitions.size()==1) {
+		dag->InstPartitions.clear();
 	}
 }
 
