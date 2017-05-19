@@ -31,9 +31,10 @@ my @example_list;
 my ($fname) = @ARGV;
 die "Need folder name\n" if(not defined $fname);
 
+my $max_number_of_partitions = 2;
 my @name_list;
-my @verilog_number_of_dp_feedback_voters;
-my @verilog_number_of_all_voters;
+my @verilog_number_of_sync_voters;
+my @verilog_number_of_part_voters;
 my @number_of_slice_registers;
 my @number_of_slice_luts;
 my @number_of_occupied_slices;
@@ -128,8 +129,8 @@ sub do_work {
 
 		#if($scenario_cnt==5) { $scenario_cnt++; next; }
 
-		if(m/^\d \d \d \d \d \d \d \d$/) {
-			@arg_list = split(/ /, $_, 8);
+		if(m/^\d \d \d \d \d \d \d \d \d$/) {
+			@arg_list = split(/ /, $_, 9);
 			#my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram $clkmargin $numpart) = @arg_list; 
 
 			# LegUp4.0 does not support complex data dependency analysis.
@@ -235,7 +236,7 @@ sub change_makefile {
 }
 
 sub change_config {
-	my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram, $clkmargin, $numpart, $xilinx) = @_;
+	my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram, $clkmargin, $numpart, $seqvote, $xilinx) = @_;
 	open(FH, '+<', "config.tcl") or die "cannot open 'config.tcl' $!";
 	my $out = '';
 	while(<FH>) {
@@ -247,6 +248,7 @@ sub change_config {
 		next if(m/set_parameter USE_REG_VOTER_FOR_LOCAL_RAMS \d$/);
 		next if(m/set_parameter PIPELINE_ALL \d$/);
 		next if(m/set_parameter NUMBER_OF_PARTITIONS \d$/);
+		next if(m/set_parameter SEQUENTIAL_PART_VOTER \d$/);
 		next if(m/loop_pipeline \"loop\"$/);
 
 		$out .= "$_\n";
@@ -260,6 +262,7 @@ sub change_config {
 	$out .= "set_parameter LOCAL_RAMS $lram\n";
 	$out .= "set_parameter USE_REG_VOTER_FOR_LOCAL_RAMS $rvlram\n";
 	$out .= "set_parameter NUMBER_OF_PARTITIONS $numpart\n";
+	$out .= "set_parameter SEQUENTIAL_PART_VOTER $seqvote\n";
 	#add locam mem constrant for FMax
 	#if($lram && (($tmr==0) || ($tmr==1 && $smode==2))) {
 	#	$out .= "set_operation_latency local_mem_dual_port 2\n";
@@ -358,7 +361,7 @@ sub summary_for_xilinx_syn {
 
 	&parse_vsim_log($cname, $current_design_delay);
 	&parse_generate_log($cname);
-	&parse_verilog($cname);
+	#&parse_verilog($cname);
 }
 
 sub summary_for_xilinx_pnr {
@@ -410,7 +413,7 @@ sub summary_for_xilinx_pnr {
 
 	&parse_vsim_log($cname, $current_design_delay);
 	&parse_generate_log($cname);
-	&parse_verilog($cname);
+	#&parse_verilog($cname);
 
 	open(FWH, '>', "info.txt") or die "cannot open '$cname/info.txt' $!";
 	my $now = `date`;
@@ -497,80 +500,84 @@ sub summary_for_altera_pnr {
 
 	&parse_vsim_log($cname, $current_design_delay);
 	&parse_generate_log($cname);
-	&parse_verilog($cname);
+	#&parse_verilog($cname);
 }
 
-sub parse_verilog {
-	my $cname = $_[0];
-	my $verilog_name;
-
-	open(FMAKEH, '<', "Makefile") or die "cannot open 'Makefile' $!";
-	while(<FMAKEH>) {
-		chomp;
-		if(/^NAME=(\w+)$/) {
-			$verilog_name = $1;
-			last;
-		}
-	}
-	die "cannot find string in '$cname/Makefile'" if(eof FMAKEH);
-	close(FMAKEH);
-
-	my $voter_count = 0;
-	my $start_find = 0;
-	open(FVH, '<', "$verilog_name.v") or die "cannot open '$cname/$verilog_name.v' $!";
-	while(<FVH>) {
-		chomp;
-		if($x) {
-			if(/^module \w+/) {
-				if(!/^module BB_\w+/) {
-					$start_find = 1; 
-				}
-			} elsif(/^endmodule/) {
-				$start_find = 0;
-			} elsif(/\(\* KEEP=\"TRUE\" \*\) reg / && $start_find==1) {
-				if(/_v0,/) {
-					$voter_count++;
-				}
-			}
-		} else {
-			if(/^module \w+/) {
-				if(!/^module BB_\w+/) {
-					$start_find = 1; 
-				}
-			} elsif(/^endmodule/) {
-				$start_find = 0;
-			} elsif(/^reg/ && /\/*synthesis keep\*\// && $start_find==1) {
-				if(/_v0,/) {
-					$voter_count++;
-				}
-			}
-		}
-	}
-	close(FVH);
-
-	push @verilog_number_of_all_voters, $voter_count;
-}
+#sub parse_verilog {
+#	my $cname = $_[0];
+#	my $verilog_name;
+#
+#	open(FMAKEH, '<', "Makefile") or die "cannot open 'Makefile' $!";
+#	while(<FMAKEH>) {
+#		chomp;
+#		if(/^NAME=(\w+)$/) {
+#			$verilog_name = $1;
+#			last;
+#		}
+#	}
+#	die "cannot find string in '$cname/Makefile'" if(eof FMAKEH);
+#	close(FMAKEH);
+#
+#	my $voter_count = 0;
+#	my $start_find = 0;
+#	open(FVH, '<', "$verilog_name.v") or die "cannot open '$cname/$verilog_name.v' $!";
+#	while(<FVH>) {
+#		chomp;
+#		if($x) {
+#			if(/^module \w+/) {
+#				if(!/^module BB_\w+/) {
+#					$start_find = 1; 
+#				}
+#			} elsif(/^endmodule/) {
+#				$start_find = 0;
+#			} elsif(/\(\* KEEP=\"TRUE\" \*\) reg / && $start_find==1) {
+#				if(/_v0,/) {
+#					$voter_count++;
+#				}
+#			}
+#		} else {
+#			if(/^module \w+/) {
+#				if(!/^module BB_\w+/) {
+#					$start_find = 1; 
+#				}
+#			} elsif(/^endmodule/) {
+#				$start_find = 0;
+#			} elsif(/^reg/ && /\/*synthesis keep\*\// && $start_find==1) {
+#				if(/_v0,/) {
+#					$voter_count++;
+#				}
+#			}
+#		}
+#	}
+#	close(FVH);
+#
+#	push @verilog_number_of_all_voters, $voter_count;
+#}
 
 sub parse_generate_log {
 	my $cname = $_[0];
 	my $fv_count = 0;
-	my $start_count = 0;
+	my $pv_count = 0;
 	open(FGENH, '<', "make.log") or die "cannot open '$cname/make.log' $!";
 	while(<FGENH>) {
 		chomp;
-		if(/^# DEBUG_TMR=1 - Backward signal/) {
-			$start_count = 1;
-		} elsif(/^# DEBUG_TMR=1 - Partitioned signal/) {
-			$start_count = 0;
-		} elsif($start_count == 1) {
-			if(/ = /) {
-				$fv_count++;
-			}
+		if(/^    Total number of sync voters of \[\d+\] = (\d+)$/) {
+			push @verilog_number_of_sync_voters, $1;
+			$fv_count++;
+		} elsif(/^    Total number of part voters of \[\d+\] = (\d+)$/) {
+			push @verilog_number_of_part_voters, $1;
+			$pv_count++;
+		#} elsif(/^# DEBUG_TMR=2 - Partition List \(n=(\d+)\)$/) {
+		#	$max_number_of_partitions = $1;
 		}
 	}
+	while($fv_count++<$max_number_of_partitions) {
+		push @verilog_number_of_sync_voters, "";
+	}
+	while($pv_count++<$max_number_of_partitions) {
+		push @verilog_number_of_part_voters, "";
+	}
 	close(FGENH);
-
-	push @verilog_number_of_dp_feedback_voters, $fv_count;
 }
 
 sub parse_vsim_log {
@@ -598,13 +605,18 @@ sub write_csv_file_vertical {
 	my $xilinx = $_[0];
 	my $csv_name = "$DEST/report.csv";
 	open(FCSV, '>', $csv_name) or die "cannot open '$csv_name' $!";
+	print FCSV ",Mode";
 
-	print FCSV ",Number of All Voters";
-	print FCSV ",Number of Feedback Voters";
+	for (my $i=0; $i<$max_number_of_partitions; $i++) {
+		print FCSV ",Number of Sync Voters of partition $i";
+	}
+	for (my $i=0; $i<$max_number_of_partitions; $i++) {
+		print FCSV ",Number of Part Voters of partition $i";
+	}
 	print FCSV ",Number of Slice Registers";
 	print FCSV ",Number of Slice LUTs";
-	print FCSV ",Number of occupied Slices";
-	print FCSV ",Number of bounded IOBS" if($xilinx);
+	#print FCSV ",Number of occupied Slices";
+	#print FCSV ",Number of bounded IOBS" if($xilinx);
 	print FCSV ",Number of RAMB36E1/FIFO36E1s" if($xilinx);
 	print FCSV ",Number of RAMB18E1/FIFO18E1s";
 	print FCSV ",Number of DSP48E1s";
@@ -647,14 +659,19 @@ sub write_csv_file_vertical {
 
 	my $val;
 	while($val = shift(@name_list)) {
-		print FCSV "$val";
-		$val = shift(@verilog_number_of_all_voters);  print FCSV ",$val";
-		$val = shift(@verilog_number_of_dp_feedback_voters);  print FCSV ",$val";
+		my @name = split(/_/, $val);
+		print FCSV "$name[0],$name[1]";
+		for (my $i=0; $i<$max_number_of_partitions; $i++) {
+			$val = shift(@verilog_number_of_sync_voters);  print FCSV ",$val";
+		}
+		for (my $i=0; $i<$max_number_of_partitions; $i++) {
+			$val = shift(@verilog_number_of_part_voters);  print FCSV ",$val";
+		}
 
 		$val = shift(@number_of_slice_registers);  print FCSV ",$val";
 		$val = shift(@number_of_slice_luts);       print FCSV ",$val";
-		$val = shift(@number_of_occupied_slices);  print FCSV ",$val";
-		$val = shift(@number_of_bounded_iobs);     print FCSV ",$val" if($xilinx);
+		#$val = shift(@number_of_occupied_slices);  print FCSV ",$val";
+		#$val = shift(@number_of_bounded_iobs);     print FCSV ",$val" if($xilinx);
 		$val = shift(@number_of_ramb36e1s);        print FCSV ",$val" if($xilinx);
 		$val = shift(@number_of_ramb18e1s);        print FCSV ",$val";
 		$val = shift(@number_of_dsp48e1s);         print FCSV ",$val";
