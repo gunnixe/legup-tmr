@@ -97,9 +97,11 @@ unsigned Scheduler::getNumInstructionCycles(Instruction *instr) {
     case (Instruction::URem):
     case (Instruction::SDiv):
     case (Instruction::SRem): {
-        unsigned pipelineDepth;
+    	if (isa<ConstantInt>(instr->getOperand(1))) {
+			return 1;
+		}
 
-        pipelineDepth = getBitWidth(instr->getType());
+        unsigned pipelineDepth = getBitWidth(instr->getType());
         if (LEGUP_CONFIG->getParameter("DIVIDER_MODULE") == "generic") {
             pipelineDepth++;
         }

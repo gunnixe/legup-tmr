@@ -2,7 +2,7 @@
 
 use POSIX;
 
-my $DEST = output_wrap;
+my $DEST = output_vivado;
 my $START_CNT = 0;
 my $SYN_TOP = top;
 my $PNR_TOP = ML605;
@@ -26,7 +26,8 @@ my @example_list;
 #@example_list = (@example_list,qw(jpeg));
 
 #@example_list = qw(adpcm aes aesdec gsm sha blowfish dfadd dfdiv dfmul dfsin jpeg mips motion satd sobel bellmanford mmult);
-@example_list = qw(adpcm aes aesdec gsm sha blowfish dfadd dfdiv dfmul dfsin mips motion satd sobel bellmanford mmult);
+@example_list = qw(aes aesdec gsm sha dfadd dfdiv dfmul dfsin mips motion satd sobel bellmanford mmult);
+#@example_list = qw(gsm satd mmult);
 
 my ($fname) = @ARGV;
 die "Need folder name\n" if(not defined $fname);
@@ -129,8 +130,8 @@ sub do_work {
 
 		#if($scenario_cnt==5) { $scenario_cnt++; next; }
 
-		if(m/^\d \d \d \d \d \d \d \d \d$/) {
-			@arg_list = split(/ /, $_, 9);
+		if(m/^\d \d \d \d \d \d \d \d \d \d \d \d \d$/) {
+			@arg_list = split(/ /, $_, 13);
 			#my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram $clkmargin $numpart) = @arg_list; 
 
 			# LegUp4.0 does not support complex data dependency analysis.
@@ -237,7 +238,8 @@ sub change_makefile {
 }
 
 sub change_config {
-	my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram, $clkmargin, $numpart, $seqvote, $xilinx) = @_;
+	my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram, $clkmargin,
+		$numpart, $seqvote, $epvoter, $esvoter, $emode, $mergev, $xilinx) = @_;
 	open(FH, '+<', "config.tcl") or die "cannot open 'config.tcl' $!";
 	my $out = '';
 	while(<FH>) {
@@ -250,6 +252,10 @@ sub change_config {
 		next if(m/set_parameter PIPELINE_ALL \d$/);
 		next if(m/set_parameter NUMBER_OF_PARTITIONS \d$/);
 		next if(m/set_parameter SEQUENTIAL_PART_VOTER \d$/);
+		next if(m/set_parameter EBIT_FOR_PART_VOTER \d$/);
+		next if(m/set_parameter EBIT_FOR_SYNC_VOTER \d$/);
+		next if(m/set_parameter EBIT_MODE \d$/);
+		next if(m/set_parameter MERGE_PVOTER_WITH_SVOTER \d$/);
 		next if(m/loop_pipeline \"loop\"$/);
 
 		$out .= "$_\n";
@@ -264,6 +270,10 @@ sub change_config {
 	$out .= "set_parameter USE_REG_VOTER_FOR_LOCAL_RAMS $rvlram\n";
 	$out .= "set_parameter NUMBER_OF_PARTITIONS $numpart\n";
 	$out .= "set_parameter SEQUENTIAL_PART_VOTER $seqvote\n";
+	$out .= "set_parameter EBIT_FOR_PART_VOTER $epvoter\n";
+	$out .= "set_parameter EBIT_FOR_SYNC_VOTER $esvoter\n";
+	$out .= "set_parameter EBIT_MODE $emode\n";
+	$out .= "set_parameter MERGE_PVOTER_WITH_SVOTER $mergev\n";
 	#add locam mem constrant for FMax
 	#if($lram && (($tmr==0) || ($tmr==1 && $smode==2))) {
 	#	$out .= "set_operation_latency local_mem_dual_port 2\n";
@@ -341,9 +351,11 @@ sub summary_for_xilinx_syn {
 			push @number_of_bounded_iobs, $num;
 		} elsif(/\s+Number of Block RAM\/FIFO:\s+([\d,]+)/) {
 			$num = $1; $num =~ s/,//g;
+			$num = "-" if ($num eq "0");
 			push @number_of_ramb36e1s, $num;
 		} elsif(/\s+Number of DSP48E1s:\s+([\d,]+)/) {
 			$num = $1; $num =~ s/,//g;
+			$num = "-" if ($num eq "0");
 			push @number_of_dsp48e1s, $num;
 		} elsif(/Maximum Frequency:\s+(\d+\.\d+)MHz/) {
 			push @sim_max_freq_mhz, $1;
@@ -386,12 +398,15 @@ sub summary_for_xilinx_pnr {
 			push @number_of_bounded_iobs, $num;
 		} elsif(/\s+Number of RAMB36E1\/FIFO36E1s:\s+([\d,]+) out of\s+[\d,]+\s+\d+%/) {
 			$num = $1; $num =~ s/,//g;
+			$num = "-" if ($num eq "0");
 			push @number_of_ramb36e1s, $num;
 		} elsif(/\s+Number of RAMB18E1\/FIFO18E1s:\s+([\d,]+) out of\s+[\d,]+\s+\d+%/) {
 			$num = $1; $num =~ s/,//g;
+			$num = "-" if ($num eq "0");
 			push @number_of_ramb18e1s, $num;
 		} elsif(/\s+Number of DSP48E1s:\s+([\d,]+) out of\s+[\d,]+\s+\d+%/) {
 			$num = $1; $num =~ s/,//g;
+			$num = "-" if ($num eq "0");
 			push @number_of_dsp48e1s, $num;
 			last;
 		}
@@ -455,9 +470,11 @@ sub summary_for_altera_pnr {
 				push @number_of_slice_registers, $num;
 			} elsif(/^Total memory bits : ([\d,]+) \/ [\d,]+ /) {
 				$num = $1; $num =~ s/,//g;
+				$num = "" if ($num eq "0");
 				push @number_of_ramb18e1s, $num;
 			} elsif(/^Embedded Multiplier 9-bit elements : ([\d,]+) \/ [\d,]+ /) {
 				$num = $1; $num =~ s/,//g;
+				$num = "" if ($num eq "0");
 				push @number_of_dsp48e1s, $num;
 				last;
 			}
@@ -470,9 +487,11 @@ sub summary_for_altera_pnr {
 				push @number_of_slice_registers, $num;
 			} elsif(/^Total RAM Blocks : ([\d,]+) \/ [\d,]+ /) {
 				$num = $1; $num =~ s/,//g;
+				$num = "" if ($num eq "0");
 				push @number_of_ramb18e1s, $num;
 			} elsif(/^Total DSP Blocks : ([\d,]+) \/ [\d,]+ /) {
 				$num = $1; $num =~ s/,//g;
+				$num = "" if ($num eq "0");
 				push @number_of_dsp48e1s, $num;
 				last;
 			}
@@ -563,10 +582,12 @@ sub parse_generate_log {
 	while(<FGENH>) {
 		chomp;
 		if(/^    Total number of sync voters of \[\d+\] = (\d+)$/) {
-			push @verilog_number_of_sync_voters, $1;
+			my $num = $1; $num = "-" if ($num eq "0");
+			push @verilog_number_of_sync_voters, $num;
 			$fv_count++;
 		} elsif(/^    Total number of part voters of \[\d+\] = (\d+)$/) {
-			push @verilog_number_of_part_voters, $1;
+			my $num = $1; $num = "-" if ($num eq "0");
+			push @verilog_number_of_part_voters, $num;
 			$pv_count++;
 		#} elsif(/^# DEBUG_TMR=2 - Partition List \(n=(\d+)\)$/) {
 		#	$max_number_of_partitions = $1;
@@ -609,21 +630,26 @@ sub write_csv_file_vertical {
 	print FCSV ",Mode";
 
 	for (my $i=0; $i<$max_number_of_partitions; $i++) {
-		print FCSV ",Number of Sync Voters of partition $i";
+		#print FCSV ",Number of Sync Voters of partition $i";
+		print FCSV ",SV$i";
 	}
 	for (my $i=0; $i<$max_number_of_partitions; $i++) {
-		print FCSV ",Number of Part Voters of partition $i";
+		#print FCSV ",Number of Part Voters of partition $i";
+		print FCSV ",PV$i";
 	}
-	print FCSV ",Number of Slice Registers";
-	print FCSV ",Number of Slice LUTs";
-	#print FCSV ",Number of occupied Slices";
-	#print FCSV ",Number of bounded IOBS" if($xilinx);
-	print FCSV ",Number of RAMB36E1/FIFO36E1s" if($xilinx);
-	print FCSV ",Number of RAMB18E1/FIFO18E1s";
-	print FCSV ",Number of DSP48E1s";
-	print FCSV ",Maximum Clock Frequency (MHz)";
-	print FCSV ",Number of clock cycles";
-	print FCSV ",Wall clock (us)";
+	print FCSV ",REG,LUT";
+	print FCSV ",MEM36" if($xilinx);
+	print FCSV ",MEM,DSP,Fmax,Lat,ExTime";
+	#print FCSV ",Number of Slice Registers";
+	#print FCSV ",Number of Slice LUTs";
+	##print FCSV ",Number of occupied Slices";
+	##print FCSV ",Number of bounded IOBS" if($xilinx);
+	#print FCSV ",Number of RAMB36E1/FIFO36E1s" if($xilinx);
+	#print FCSV ",Number of RAMB18E1/FIFO18E1s";
+	#print FCSV ",Number of DSP48E1s";
+	#print FCSV ",Maximum Clock Frequency (MHz)";
+	#print FCSV ",Number of clock cycles";
+	#print FCSV ",Wall clock (us)";
 
 	if($e) {
 	print FCSV ",Sensitive bits (total)";                     

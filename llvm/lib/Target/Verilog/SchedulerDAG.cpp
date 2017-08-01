@@ -833,13 +833,61 @@ void SchedulerDAG::findSCCBBs(Function &F) {
 
 unsigned SchedulerDAG::getInstructionArea(Instruction *instr) {
 	//InstructionNode *iNode = getInstructionNode(instr);
+
    	std::string opName = LEGUP_CONFIG->getOpNameFromInst(instr, alloc);
-	if (opName.empty() || isMem(instr))
+	if (isa<PHINode>(instr)) {
+		std::string param[3];
+		param[0] = "mux";
+		int k = instr->getNumOperands();
+		if (k<=2) k=2;
+		else if(k<=4) k=4;
+		else k=8;
+		param[1] = utostr(k);
+		int b = instr->getType()->getPrimitiveSizeInBits();
+		if (b<=8) b=8;
+		else if(b<=16) b=16;
+		else if(b<=32) b=32;
+		else b=64;
+		param[2] = utostr(b);
+		opName = param[0] + "_" + param[1] + "_" + param[2];
+	//} else if (isa<GetElementPtrInst>(instr)) {
+	//	opName = "unsigned_add_32";//utostr(instr->getType()->getPrimitiveSizeInBits());
+	} else if (isMem(instr)) {
+		opName = "";//"unsigned_add_32";
+	}
+
+	// mul or div insturctions are shared via BB_CTRL module
+	if (LEGUP_CONFIG->getParameterInt("SEPERATE_BB_CTRL")) {
+		if (isa<BinaryOperator>(instr) /*&& !isa<ConstantInt>(instr->getOperand(1))*/) {
+			if (instr->getOpcode() == Instruction::SRem
+					//|| instr->getOpcode() == Instruction::Mul
+					//|| instr->getOpcode() == Instruction::FMul
+					//|| instr->getOpcode() == Instruction::FDiv
+					|| instr->getOpcode() == Instruction::URem
+					|| instr->getOpcode() == Instruction::SDiv
+					|| instr->getOpcode() == Instruction::UDiv) {
+				return 0;
+			}
+		}
+	}
+
+    if (instr->getOpcode() == Instruction::Add || instr->getOpcode() == Instruction::Sub) {
+    	if (isa<ConstantInt>(instr->getOperand(1))) {
+			opName = "signed_inc_" + utostr(instr->getType()->getPrimitiveSizeInBits());
+		}
+	}
+
+	if (opName.empty()) {
+		//errs() << getValueStr(instr) << "\n";
 		return 0;
+	}
 
 	Operation *Op = LEGUP_CONFIG->getOperationRef(opName);
 	assert(Op);
 
+	//errs() << opName << "(" << Op->getLogicElements() << ") :" << getValueStr(instr) << "\n";
+
+	//return Op->getLogicElements();
 	return Op->getLUTs();
 }
 
@@ -900,7 +948,9 @@ bool SchedulerDAG::bfs(int n, int start, int target,
 void SchedulerDAG::connectDFGInst(int capacity[][MAX_NODE], Instruction *I, int t) {
 	int idx = instMap[I];
 	//capacity[idx][idx+1] = 1;//isa<LoadInst>(I)? INF : 1;
-	capacity[idx][idx+1] = I->getType()->getPrimitiveSizeInBits();
+	capacity[idx+1][idx+2] = I->getType()->getPrimitiveSizeInBits();
+	capacity[idx][idx+1] = INF;
+	capacity[idx+2][idx] = INF;
 	
 	for (User::op_iterator op = I->op_begin(), e = I->op_end(); op != e; ++op) {
 	    // we only care about operands that are created by other instructions
@@ -912,24 +962,25 @@ void SchedulerDAG::connectDFGInst(int capacity[][MAX_NODE], Instruction *I, int 
 
 		//if (instMap[dep]!=0 || instMap[I]!=t) {
 			int d = instMap[dep];
-			capacity[d+1][idx] = INF;
+			capacity[d+2][idx] = INF;
+			capacity[idx][d+1] = INF;
 			//errs() << getValueStr(dep) << "->" << getValueStr(I) << "\n";
 			//errs() << instMap[dep] << "->" << instMap[I] << "\n";
 		//}
 	}
 
-	if (isa<LoadInst>(I)) {
-		for (VINST::iterator d = storeInsts.begin();
-		                     d != storeInsts.end(); ++d) {
-			Instruction *dep = const_cast<Instruction *>(*d);
-        	if (hasDependencyAA(dep, I) /*&& (instMap[dep]!=0 || instMap[I]!=t)*/) {
-				int c = instMap[dep];
-				capacity[c+1][idx] = INF;
-				//errs() << getValueStr(I) << "<-" << getValueStr(dep) << "\n";
-				//errs() << bbMap[dep->getParent()] << "(LD)->" << b << "\n";
-			}
-		}
-	}
+	//if (isa<LoadInst>(I)) {
+	//	for (VINST::iterator d = storeInsts.begin();
+	//	                     d != storeInsts.end(); ++d) {
+	//		Instruction *dep = const_cast<Instruction *>(*d);
+    //    	if (hasDependencyAA(dep, I) /*&& (instMap[dep]!=0 || instMap[I]!=t)*/) {
+	//			int c = instMap[dep];
+	//			capacity[c+1][idx] = INF;
+	//			//errs() << getValueStr(I) << "<-" << getValueStr(dep) << "\n";
+	//			//errs() << bbMap[dep->getParent()] << "(LD)->" << b << "\n";
+	//		}
+	//	}
+	//}
 }
 
 void SchedulerDAG::connectDFGBB(int capacity[][MAX_NODE], const Instruction *Inst,
@@ -1128,37 +1179,35 @@ void SchedulerDAG::dumpFlow(int flow[][MAX_NODE], int s, int t, int max_flow) {
 }
 
 void SchedulerDAG::dumpNF(int capacity[][MAX_NODE], int n) {
-	errs() << "\n# basicblock\n";
-	for (VBB::iterator b = bbs.begin(); b != bbs.end(); ++b) {
-		fprintf(stderr, "[%2d]  ", bbMap[*b]);
-		errs() << getLabel(*b);
-		fprintf(stderr, " (%d)\n", bbArea[*b]);
+	//errs() << "\n# basicblock\n";
+	//for (VBB::iterator b = bbs.begin(); b != bbs.end(); ++b) {
+	//	fprintf(stderr, "[%2d]  ", bbMap[*b]);
+	//	errs() << getLabel(*b);
+	//	fprintf(stderr, " (%d)\n", bbArea[*b]);
+	//}
+
+	errs() << "\n# instruction\n";
+	for (VINST::iterator i = insts.begin(); i != insts.end(); ++i) {
+		if (skipInst(*i))
+			continue;
+		fprintf(stderr, "[%2d]", instMap[*i]/2);
+		errs() << getValueStr(*i) <<"\n";
 	}
 
-	//errs() << "\n# instruction\n";
-	//for (VBB::iterator b = bbs.begin(); b != bbs.end(); ++b) {
-	//	for (BasicBlock::const_iterator i = (*b)->begin(); i != (*b)->end(); ++i) {
-	//		if (skipInst(i))
-	//			continue;
-	//		fprintf(stderr, "[%2d]", instMap[i]);
-	//		errs() << getValueStr(i) <<"\n";
-	//	}
-	//}
-
-	//errs() << "\n# capacity[n][n]\n";
-	//fprintf(stderr, "     ");
-	//for(int i=0; i<n; i++)
-	//	fprintf(stderr, "%d ", i%10);
-	//fprintf(stderr, "\n");
-	//for(int i=0; i<n; i++) {
-	//	fprintf(stderr, "[%2d] ", i);
-	//	for(int j=0; j<n; j++) {
-	//		if(capacity[i][j]==0) fprintf(stderr, "  ");
-	//		else if(capacity[i][j]==INF) fprintf(stderr, "x ");
-	//		else fprintf(stderr, "%d ", capacity[i][j]);
-	//	}
-	//	errs() << "\n";
-	//}
+	errs() << "\n# capacity[n][n]\n";
+	fprintf(stderr, "     ");
+	for(int i=0; i<n; i+=2)
+		fprintf(stderr, "%d ", (i/2)%10);
+	fprintf(stderr, "\n");
+	for(int i=1; i<n; i+=2) {
+		fprintf(stderr, "[%2d] ", i/2);
+		for(int j=0; j<n; j+=2) {
+			if(capacity[i][j]==0) fprintf(stderr, "  ");
+			else if(capacity[i][j]==INF) fprintf(stderr, "x ");
+			else fprintf(stderr, "%d ", capacity[i][j]);
+		}
+		errs() << "\n";
+	}
 }
 
 int SchedulerDAG::initBBArea(Function &F) {
@@ -1295,25 +1344,34 @@ void SchedulerDAG::dumpbbPartState(std::string str) {
 
 int SchedulerDAG::initInstMap(Function &F) {
 	int n=0;
+	const Instruction *ret;
 	for (Function::iterator b = F.begin(); b != F.end(); ++b) {
         if (isEmptyFirstBB(b))
 			continue;
 
 		for (BasicBlock::iterator i = (*b).begin(); i != (*b).end(); ++i) {
+   			//std::string opName = LEGUP_CONFIG->getOpNameFromInst(i, alloc);
+			//errs() << opName << "(" << getInstructionArea(i) << ") " << getValueStr(i) << "\n";
+
 			if (skipInst(i))
 				continue;
+
+			if (isa<ReturnInst>(i)) {
+				ret = i;
+				continue;
+			}
 
 			insts.push_back(i);
 
 			instMap[i] = n;
-			instPartState[i] = PART_UNKNOWN;
-
-			n+=2;
+			n+=3;
 			if (isa<StoreInst>(i))
 				storeInsts.push_back(i);
 		}
 	}
-	assert(isa<ReturnInst>(isInstNode(n-2)));
+	insts.push_back(ret);
+	instMap[ret] = n;
+	n+=1;
 	return n;
 }
 
@@ -1445,10 +1503,15 @@ void SchedulerDAG::dumpVBB(VBB blist, std::string str) {
 }
 
 void SchedulerDAG::networkFlowPartitionInsts(Function &F) {
-	int n = initInstMap(F);
-
 	unsigned k = LEGUP_CONFIG->getParameterInt("NUMBER_OF_PARTITIONS");
 	unsigned p = LEGUP_CONFIG->getParameterInt("PART_AREA_MARGIN_PERCENTAGE");
+
+	int n = initInstMap(F);
+	if (k<2) {
+		InstPartitions.push_back(insts);
+		return;
+	}
+
 	do {
 		unsigned areaLimit = getLimitAreaByPercentage(F, p);
 		networkFlowPartitionInsts(F, areaLimit, n);
@@ -1472,7 +1535,8 @@ void SchedulerDAG::networkFlowPartitionInsts(Function &F, unsigned areaLimit, in
 	int flow[MAX_NODE][MAX_NODE];
 
 	InstPartitions.clear();
-	instPartState.clear();
+	for (VINST::iterator i = insts.begin(); i != insts.end(); ++i)
+		instPartState[*i] = PART_UNKNOWN;
 	//instMap.clear();
 	//storeInsts.clear();
 
@@ -1488,7 +1552,7 @@ void SchedulerDAG::networkFlowPartitionInsts(Function &F, unsigned areaLimit, in
 	bool frontMerge;
 	do {
 		makeDFGInstGraph(capacity, n);
-		maxFlow(n, 0, n-2, capacity, flow);
+		maxFlow(n, 0, n-1, capacity, flow);
 		boundaryInst = getBoundaryInst(n, capacity, flow, p0, p1, frontMerge);
 		if (boundaryInst == NULL)
 			errs() << "WARNING: not found boundaryInst\n";
@@ -1675,8 +1739,8 @@ const Instruction* SchedulerDAG::getBoundaryInst(int n,
 
 	int minCut = 0;
 	//VINST cutList;
-	for(int i=0; i<n; i+=2) {
-		if ((visited[i] && !visited[i+1]) && capacity[i][i+1]!=INF) {
+	for(int i=0; i<n; i+=3) {
+		if ((visited[i+1] && !visited[i+2]) && capacity[i+1][i+2]!=INF) {
 			minCut++;
 			//cutList.push_back(isInstNode(i));
 		}
@@ -1691,10 +1755,10 @@ const Instruction* SchedulerDAG::getBoundaryInst(int n,
 
 	//VINST blist;
 	frontMerge = getInstArea(p0) < getInstArea(p1);
-	for(int i=0; i<n; i+=2) {
-		if ((visited[i] && !visited[i+1]) && capacity[i][i+1]!=INF) {
-			for (int j=2; j<n-2; j++) {
-				int f = frontMerge? flow[i+1][j] : flow[j][i];
+	for(int i=0; i<n; i+=3) {
+		if ((visited[i+1] && !visited[i+2]) && capacity[i+1][i+2]!=INF) {
+			for (int j=3; j<n-1; j++) {
+				int f = frontMerge? flow[i+2][j] : flow[j][i];
 				if (f>0) {
 					const Instruction *d = isInstNode(j);
 					if (instPartState[d]==PART_UNKNOWN) {
@@ -2060,7 +2124,7 @@ void SchedulerDAG::bfsPartitionInsts(Function &F, unsigned areaLimit) {
 			}
 			areaTotal += area;
 			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3) {
-				errs() << "  Area=(" << areaTotal << ") "
+				errs() << "  Area=(" << area << "/" << areaTotal << ") "
 				          << getLabel(*b) << ":" << getValueStr(instr) << "\n";
 			}
 			partitionPath.push_back(I);
@@ -2128,7 +2192,8 @@ void SchedulerDAG::findInstPartitionSignals() {
     		    if (!dep || isa<AllocaInst>(dep))
     		        continue;
 
-				if (pMap[dep] < pMap[I]) {
+				//if (pMap[dep] < pMap[I]) {
+				if (pMap[dep] != pMap[I]) {
     	    		InstructionNode *depNode = getInstructionNode(dep);
 					depNode->setPartition(true);
 				}

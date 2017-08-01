@@ -953,7 +953,8 @@ RTLSignal *GenerateRTL::createFU(Instruction *instr, RTLSignal *op0,
 		RTLSignal *op1) {
 
 	if (isDiv(instr) || isRem(instr)) {
-		return createDivFU(instr, op0, op1);
+    	if (!isa<ConstantInt>(instr->getOperand(1)))
+			return createDivFU(instr, op0, op1);
 	} else if (EXPLICIT_LPM_MULTS && alloc->useExplicitDSP(instr)) {
 		return createMulFU(instr, op0, op1);
 	}
@@ -3663,7 +3664,6 @@ void GenerateRTL::visitBinaryOperator(Instruction &I) {
 
 	unsigned pipelineStages = Scheduler::getNumInstructionCycles(instr);
 	if (pipelineStages > 0) {
-
 		create_fu_enable_signals(instr);
 
 		// drive the instruction wire signal with the output of the functional
@@ -6025,6 +6025,7 @@ void GenerateRTL::createRTLSignalsForInstructions() {
 	}
 
 	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==0 ||
+			LEGUP_CONFIG->getParameterInt("NUMBER_OF_PARTITIONS")<2 ||
 			LEGUP_CONFIG->getParameterInt("TMR")==0)
 		makeBBModuleWithFunction();
 	else if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")<=2)
@@ -6059,10 +6060,16 @@ void GenerateRTL::makeBBModuleWithFunction() {
 
 void GenerateRTL::makeBBModuleWithInstPartitions() {
 	int partNumber = 0;
+	std::string bbModuleName = "BB_" + rtl->getName() + "_CTRL";
+	if (LEGUP_CONFIG->getParameterInt("SEPERATE_BB_CTRL")) {
+		RTLBBModule *bbCtrl = new RTLBBModule(bbModuleName, partNumber++);
+		rtl->bbModules.push_back(bbCtrl);
+	}
+
 	for (std::vector<VINST>::iterator p = dag->InstPartitions.begin();
 	                                p != dag->InstPartitions.end(); ++p) {
 		VINST ins = *p;
-		std::string bbModuleName = "BB_" + rtl->getName();
+		bbModuleName = "BB_" + rtl->getName();
 		bbModuleName += "_" + std::to_string(partNumber);
 		RTLBBModule *bbm = new RTLBBModule(bbModuleName, partNumber);
        	for (VINST::const_iterator instr = ins.begin(), ie = ins.end();
@@ -6848,6 +6855,13 @@ void GenerateRTL::updateSyncVoterWithLatency(SchedulerDAG *dag) {
 			InstructionNode* iNode = dag->getInstructionNode(const_cast<Instruction*>(instr));
 			float nodeDelay = iNode->getDelay();
 
+			// If there is a partitioning voter in scc, we don't need to insert a sync voter.
+			if (iNode->getPartition() 
+					&& LEGUP_CONFIG->getParameterInt("MERGE_PVOTER_WITH_SVOTER")) {
+				minInst = instr;
+				break;
+			}
+
 			// Make max delay for the signal comes from FSM state since the FSM
 			// register already has a voter and it is likely to be a critical.
 			if (isFsmRelatedSignal(FSMSensitiveList, instr))
@@ -6923,7 +6937,7 @@ void GenerateRTL::updateVoterSignal(SchedulerDAG *dag) {
 
 	// synchronization voter check
 	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
-		std::cerr << "\n\n# DEBUG_TMR=1 - Backward signal\n";
+		std::cerr << "\n\n# DEBUG_TMR=1 - Feedback signal\n";
 
 	unsigned partNum = 0;
 	for (std::vector<VINST>::iterator p = dag->InstPartitions.begin();
@@ -6940,9 +6954,10 @@ void GenerateRTL::updateVoterSignal(SchedulerDAG *dag) {
 				sig_wire->setVoter(RTLSignal::SYNC_VOTER);
 				sig_reg->setVoter(RTLSignal::SYNC_VOTER);
 
+				unsigned nbits = I->getType()->getPrimitiveSizeInBits();
 				if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
-					errs() << "  [" << partNum << "]" << getValueStr(I) << "\n";
-				vNum++;
+					errs() << "  [" << partNum << "] (" << nbits << ")" << getValueStr(I) << "\n";
+				vNum += nbits;
 			}
 		}
 		errs() << "    Total number of sync voters of [" << partNum << "] = " << vNum << "\n";
@@ -6988,20 +7003,23 @@ void GenerateRTL::updateVoterSignal(SchedulerDAG *dag) {
 			Instruction *I = const_cast<Instruction*>(*i);
 			InstructionNode *iNode = dag->getInstructionNode(const_cast<Instruction*>(*i));
 			if (iNode->getPartition()) {
-				if (!isa<ReturnInst>(I)) {
+				if (isa<AllocaInst>(I)) {
+					continue;
+				} else if (isa<ReturnInst>(I)) {
+        			RTLSignal *return_val = rtl->find("return_val");
+					return_val->setVoter(RTLSignal::PART_VOTER);
+				} else {
 					RTLSignal *sig_wire = rtl->find(verilogName(*I));
 					RTLSignal *sig_reg = rtl->find(verilogName(*I) + "_reg");
 					sig_wire->setVoter(RTLSignal::PART_VOTER);
 					sig_reg->setVoter(RTLSignal::PART_VOTER);
-				} else {
-        			RTLSignal *return_val = rtl->find("return_val");
-					return_val->setVoter(RTLSignal::PART_VOTER);
 				}
 
+				unsigned nbits = (isa<ReturnInst>(I))? 32 : I->getType()->getPrimitiveSizeInBits();
 				if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
-					errs() << "  [" << partNum << "]" << getValueStr(I) << "\n";
+					errs() << "  [" << partNum << "] (" << nbits << ")" << getValueStr(I) << "\n";
 				if (!iNode->getBackward())
-					vNum++;
+					vNum += nbits;
 			}
 		}
 		errs() << "    Total number of part voters of [" << partNum << "] = " << vNum << "\n";

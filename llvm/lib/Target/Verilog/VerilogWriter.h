@@ -238,6 +238,7 @@ private:
 	void printPVoterModuleInstance(RTLBBModule *bbm);
 	void printPVoterModuleBody(RTLBBModule *bbm);
 	void printVoterStatusSignal(RTLBBModule *bbm);
+	void printPipelinedVoterStatusSignal(RTLBBModule *bbm);
 
 	// added for TMR
 	bool isTmrSig(const RTLSignal *sig);
@@ -247,6 +248,7 @@ private:
 	bool isModuleOutputSig(const RTLSignal *sig);
 	bool isSubModuleOutputSig(const RTLSignal *sig);
 	bool isMemInputSig(const RTLSignal *sig);
+	bool isGlobalMemInputSig(const RTLSignal *sig);
 	bool isMemOutputSig(const RTLSignal *sig);
 	bool isBBModuleSig(const RTLSignal *sig);
 	std::string getTMRPostfix(const RTLSignal *sig);
@@ -262,15 +264,23 @@ private:
 	bool isFeedbackSig(const RTLSignal *sig, RTLBBModule *bbm);
 	void initBBModules();
 	RTLBBModule* findFirstUseBBModule(RAM *R);
+	RTLBBModule* findFirstUseBBModule(const RTLSignal *sig);
+	RTLBBModule* findFirstUseBBModule(const RTLModule *mod);
 	bool noSharedMemoryController();
 	unsigned getPartID(const RTLSignal* sig);
 	bool isPartVoter(const RTLSignal* sig);
+	bool isPortSig(const RTLSignal *sig);
+	bool isPrimitiveModuleOutput(const RTLSignal *sig);
+	int getParameterInt(std::string name);
+	void findInterconnection(const RTLBBModule *dst);
+	RTLBBModule* getBBSource(RTLSignal *sig);
 
 	// FIXME - use as global variables
 	std::string currReplica;
 	bool useReplicaNumberForAllVariables;
 	RTLBBModule *curBBModule;
 	bool useFeedbackPostfixForBBModules;
+	
 };
 
 } // End legup namespace

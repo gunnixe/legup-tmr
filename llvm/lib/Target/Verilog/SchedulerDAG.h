@@ -213,7 +213,7 @@ public:
 	typedef DenseMap<const Instruction*, int> MINST;
 
 	#define INF 1000000000
-	#define MAX_NODE 8192
+	#define MAX_NODE 16384
 
 	enum PART_STATE { PART_UNKNOWN=0, PART_S, PART_T,
 			PART_S_FINISH, PART_T_FINISH };

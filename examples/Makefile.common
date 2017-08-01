@@ -335,7 +335,11 @@ w: $(VFILE)
 # create a Quartus II project
 p: $(VFILE)
 ifeq ($(XILINX),1)    
+ifeq ($(VIVADO),1)    
+	vivado -mode batch -nojournal -nolog -source $(LEVEL)/setup_proj_vivado.tcl -tclargs $(FAMILY) $(FPGA_BOARD) $(NAME)
+else
 	xtclsh $(LEVEL)/setup_proj_xilinx.tcl $(FAMILY) $(FPGA_BOARD) $(NAME) $(TOP_LEVEL_MODULE) $(DEBUGGER)
+endif
 else 
 ifeq ($(MULTICYCLE_CONSTRAINTS),1)
 	# create an sdc file with a 2ns clock period
@@ -400,8 +404,12 @@ endif
 # Run full FPGA compilation flow
 f: $(VFILE)
 ifeq ($(XILINX),1)  
+ifeq ($(VIVADO),1)
+	vivado -mode batch -nojournal -nolog -source $(LEVEL)/run_proj_vivado.tcl -tclargs $(FAMILY) $(FPGA_BOARD) $(NAME)
+else
 #	xtclsh <<< "project open top; process run \"Generate Programming File\" -force rerun_all; if {[lsearch [list \"out_of_date\" \"errors\" \"never_run\" \"aborted\"] [string tolower [process get \"Generate Programming File\" status]]] >= 0} {exit 1} "
 	xtclsh <<< "project open top; process run \"Place & Route\" -force rerun_all; if {[lsearch [list \"out_of_date\" \"errors\" \"never_run\" \"aborted\"] [string tolower [process get \"Place & Route\" status]]] >= 0} {exit 1} "
+endif
 else
 	quartus_sh $(LEGUP_QUARTUS_64BIT) --flow compile top
 endif
@@ -1502,7 +1510,10 @@ cleanall: clean
 	rm -rf $(PROC_DIR)/work
 	rm -rf $(PROC_DIR)/verilog_libs
 	rm -rf on_board
-
+# Xilinx Vivado files
+	rm -rf $(NAME).cache $(NAME).hw $(NAME).ip_user_files $(NAME).runs $(NAME).sim
+	rm -rf vivado*.jou vivado_*.str const.xdc
+	rm -rf $(NAME).xpr
 # end cleaning targets
 
 
