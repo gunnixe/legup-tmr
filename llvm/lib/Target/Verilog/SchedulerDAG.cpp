@@ -834,6 +834,10 @@ void SchedulerDAG::findSCCBBs(Function &F) {
 unsigned SchedulerDAG::getInstructionArea(Instruction *instr) {
 	//InstructionNode *iNode = getInstructionNode(instr);
 
+	if (isa<BranchInst>(instr) || isa<SwitchInst>(instr)) {
+		return 8;
+	}
+
    	std::string opName = LEGUP_CONFIG->getOpNameFromInst(instr, alloc);
 	if (isa<PHINode>(instr)) {
 		std::string param[3];
@@ -850,8 +854,8 @@ unsigned SchedulerDAG::getInstructionArea(Instruction *instr) {
 		else b=64;
 		param[2] = utostr(b);
 		opName = param[0] + "_" + param[1] + "_" + param[2];
-	//} else if (isa<GetElementPtrInst>(instr)) {
-	//	opName = "unsigned_add_32";//utostr(instr->getType()->getPrimitiveSizeInBits());
+	} else if (isa<GetElementPtrInst>(instr)) {
+		opName = "unsigned_add_8";//utostr(instr->getType()->getPrimitiveSizeInBits());
 	} else if (isMem(instr)) {
 		opName = "";//"unsigned_add_32";
 	}
@@ -946,12 +950,21 @@ bool SchedulerDAG::bfs(int n, int start, int target,
 }
 
 void SchedulerDAG::connectDFGInst(int capacity[][MAX_NODE], Instruction *I, int t) {
+	bool cInst = (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==5
+			&& (isa<BranchInst>(I) || isa<SwitchInst>(I)));
 	int idx = instMap[I];
-	//capacity[idx][idx+1] = 1;//isa<LoadInst>(I)? INF : 1;
-	capacity[idx+1][idx+2] = I->getType()->getPrimitiveSizeInBits();
+	//int bitWidth = I->getType()->getPrimitiveSizeInBits();
+	capacity[idx+1][idx+2] = 1;//(cInst || bitWidth==0)? 1 : bitWidth;
 	capacity[idx][idx+1] = INF;
 	capacity[idx+2][idx] = INF;
-	
+
+	BasicBlock *B = I->getParent();
+	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==5
+			&& !isa<BranchInst>(I) && !isa<SwitchInst>(I)) {
+		int bbIdx = bbMap[B];
+		capacity[bbIdx][idx] = INF;
+	}
+
 	for (User::op_iterator op = I->op_begin(), e = I->op_end(); op != e; ++op) {
 	    // we only care about operands that are created by other instructions
 	    Instruction *dep = dyn_cast<Instruction>(*op);
@@ -962,11 +975,28 @@ void SchedulerDAG::connectDFGInst(int capacity[][MAX_NODE], Instruction *I, int 
 
 		//if (instMap[dep]!=0 || instMap[I]!=t) {
 			int d = instMap[dep];
-			capacity[d+2][idx] = INF;
+			capacity[d+2][d] = INF;
 			capacity[idx][d+1] = INF;
-			//errs() << getValueStr(dep) << "->" << getValueStr(I) << "\n";
-			//errs() << instMap[dep] << "->" << instMap[I] << "\n";
+			//errs() << getValueStr(I) << "<-" << getValueStr(dep) << "\n";
+			//errs() << instMap[I] << "<-" << instMap[dep] << "\n";
 		//}
+
+		//update dependent edge weight to be connected tightly
+		//these dependent edges are getelementptr calculation that they must be attached
+		//to the load/store instructions
+		if (isa<LoadInst>(I) || isa<StoreInst>(I)) {
+			capacity[d+1][d+2] = INF;
+		}
+	}
+
+	if (cInst) {
+		const TerminatorInst *tInst = I->getParent()->getTerminator();
+		for (unsigned i=0, nSucc=tInst->getNumSuccessors(); i<nSucc; ++i) {
+			BasicBlock *succ = tInst->getSuccessor(i);
+			int bbIdx = bbMap[succ];
+			capacity[idx+2][idx] = INF;
+			capacity[bbIdx][idx+1] = INF;
+		}
 	}
 
 	//if (isa<LoadInst>(I)) {
@@ -1034,8 +1064,15 @@ bool SchedulerDAG::skipInst(const Instruction *I) {
 	if (isaDummyCall(I))
 		return true;
 
+	if (isa<ReturnInst>(I) || isa<StoreInst>(I))
+		return false;
+
+	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==5)
+		if (isa<BranchInst>(I) || isa<SwitchInst>(I))
+			return false;
+
 	// ignore instructions with no uses
-	if (I->hasNUses(0) && !isa<ReturnInst>(I) && !isa<StoreInst>(I))
+	if (I->hasNUses(0))
 		return true;
 
 	return false;
@@ -1054,6 +1091,17 @@ void SchedulerDAG::makeDFGInstGraph(int capacity[][MAX_NODE], int n) {
 			capacity[0][instIdx] = INF;
 		else if (state==PART_T || state==PART_T_FINISH)
 			capacity[instIdx][n-1] = INF;
+	}
+
+	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==5) {
+		// merge branch instructions
+		for (VINST::iterator i=branchInsts.begin(); i!=branchInsts.end(); ++i) {
+			for (VINST::iterator j=branchInsts.begin(); j!=branchInsts.end(); ++j) {
+				int sidx = instMap[*i];
+				int tidx = instMap[*j];
+				capacity[sidx][tidx] = INF;
+			}
+		}
 	}
 
 	// connectInsts
@@ -1349,6 +1397,11 @@ int SchedulerDAG::initInstMap(Function &F) {
         if (isEmptyFirstBB(b))
 			continue;
 
+		if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==5) {
+			bbMap[b] = n++;
+			bbs.push_back(b);
+		}
+
 		for (BasicBlock::iterator i = (*b).begin(); i != (*b).end(); ++i) {
    			//std::string opName = LEGUP_CONFIG->getOpNameFromInst(i, alloc);
 			//errs() << opName << "(" << getInstructionArea(i) << ") " << getValueStr(i) << "\n";
@@ -1367,11 +1420,20 @@ int SchedulerDAG::initInstMap(Function &F) {
 			n+=3;
 			if (isa<StoreInst>(i))
 				storeInsts.push_back(i);
+			if (isa<BranchInst>(i) || isa<SwitchInst>(i))
+				branchInsts.push_back(i);
 		}
 	}
+	// add a special node (node index = n) which has control dependency
+	//if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==5) {
+	//	//const Instruction *fsm;
+	//	//insts.push_back(fsm);
+	//	//instMap[fsm] = n;
+	//	n+=1;
+	//}
+
 	insts.push_back(ret);
-	instMap[ret] = n;
-	n+=1;
+	instMap[ret] = n++;
 	return n;
 }
 
@@ -1535,8 +1597,10 @@ void SchedulerDAG::networkFlowPartitionInsts(Function &F, unsigned areaLimit, in
 	int flow[MAX_NODE][MAX_NODE];
 
 	InstPartitions.clear();
-	for (VINST::iterator i = insts.begin(); i != insts.end(); ++i)
+	for (VINST::iterator i=insts.begin(); i!=insts.end(); ++i)
 		instPartState[*i] = PART_UNKNOWN;
+	for (VBB::iterator b=bbs.begin(); b!=bbs.end(); ++b)
+		bbPartState[*b] = PART_UNKNOWN;
 	//instMap.clear();
 	//storeInsts.clear();
 
@@ -1673,12 +1737,14 @@ void SchedulerDAG::pushNewInstPartition(PART_STATE s) {
 
 void SchedulerDAG::pushNewInstPartition(VINST v, PART_STATE s) {
 	VINST pNodes;
+	errs() << "Push partitions " << (s==PART_S_FINISH? "p0" : "p1") << "\n";
 	for (VINST::iterator i = v.begin(); i != v.end(); ++i) {
 		if (instPartState[*i] != s) {
 			pNodes.push_back(*i);
+			errs() << "\t(" << getInstructionArea(const_cast<Instruction*>(*i))
+			       << ")" << getValueStr(*i) << "\n";
 		}
 	}
-	errs() << "Push partitions " << (s==PART_S_FINISH? "p0" : "p1") << "\n";
 	InstPartitions.push_back(pNodes);
 }
 
@@ -2369,7 +2435,8 @@ bool SchedulerDAG::runOnFunction(Function &F, Allocation *_alloc) {
 		} else if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==3) {
 			findTopologicalBBList(F);
 			bfsPartitionInsts(F);
-		} else if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==4) {
+		} else if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==4
+				|| LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==5) {
 			networkFlowPartitionInsts(F);
 		}
 		//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2) {

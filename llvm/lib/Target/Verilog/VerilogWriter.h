@@ -251,6 +251,7 @@ private:
 	bool isGlobalMemInputSig(const RTLSignal *sig);
 	bool isMemOutputSig(const RTLSignal *sig);
 	bool isBBModuleSig(const RTLSignal *sig);
+	bool isBBModuleOutputSig(RTLBBModule *bbm, RTLSignal *sig);
 	std::string getTMRPostfix(const RTLSignal *sig);
 	bool isTopModuleSig(const RTLSignal *sig);
 	bool isSameBBFeedbackSig(const RTLSignal *sig);
@@ -263,6 +264,7 @@ private:
 	void getSensitiveList(std::vector<const RTLSignal*> &V, RTLSignal *sig);
 	bool isFeedbackSig(const RTLSignal *sig, RTLBBModule *bbm);
 	void initBBModules();
+	RTLBBModule* findFirstUseBBModule();
 	RTLBBModule* findFirstUseBBModule(RAM *R);
 	RTLBBModule* findFirstUseBBModule(const RTLSignal *sig);
 	RTLBBModule* findFirstUseBBModule(const RTLModule *mod);

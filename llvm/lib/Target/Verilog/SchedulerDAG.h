@@ -293,7 +293,6 @@ public:
 			VINST &p0, VINST &p1, bool &frontMerge);
 	void setPartitions(const BasicBlock *boundaryBB, bool frontMerge);
 	void connectDFGBB(int capacity[][MAX_NODE], const Instruction *I, int s, int t);
-	void connectDFGInst(int capacity[][MAX_NODE], const Instruction *I, int t);
 	int initMap(Function &F);
 	bool skipInst(const Instruction *I);
 	int getLimitAreaByPercentage(Function &F, unsigned areaMarginPercentage=0);
@@ -346,6 +345,7 @@ private:
 	MBB bbMap;
 	MINST instMap;
 	VINST storeInsts;
+	VINST branchInsts;
 
 	MBB bbPartState;
 	VBB bbs;

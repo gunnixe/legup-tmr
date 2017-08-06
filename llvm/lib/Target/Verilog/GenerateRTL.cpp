@@ -1055,6 +1055,8 @@ RTLSignal *GenerateRTL::createFU(Instruction *instr, RTLSignal *op0,
 		// lpm_* module instantiations
 
 		RTLSignal *en = rtl->addWire(getEnableName(instr));
+		RTLBBModule *bbm = getBBModule(instr);
+		bbm->add_signal(en);
 
 		RTLOp *enCond = rtl->addOp(RTLOp::EQ);
 		enCond->setOperand(0, en);
@@ -1073,6 +1075,7 @@ RTLSignal *GenerateRTL::createFU(Instruction *instr, RTLSignal *op0,
 				// first register is driven by FU wire
 				driver = FUoutput;
 			}
+			bbm->add_signal(stage_reg);
 
 			stage_reg->addCondition(enCond, driver, instr);
 
@@ -1083,6 +1086,26 @@ RTLSignal *GenerateRTL::createFU(Instruction *instr, RTLSignal *op0,
 
 	assert(FUoutput);
 	return FUoutput;
+}
+
+RTLBBModule *GenerateRTL::getBBModule(Instruction *inst) {
+	std::string wire = verilogName(*inst);
+	std::string reg = wire + "_reg";
+	const RTLSignal *sig = rtl->find(wire);
+	const RTLSignal *sig_reg = rtl->find(reg);
+
+	for (std::vector<RTLBBModule *>::const_iterator bbm = rtl->bbModules.begin(),
+	                                                bbme = rtl->bbModules.end();
+	                                                bbm != bbme; ++bbm) {
+		std::vector<const RTLSignal*> V;
+		for (RTLBBModule::const_signal_iterator i = (*bbm)->signals_begin(),
+	                                            e = (*bbm)->signals_end();
+	                                            i != e; ++i) {
+			if (sig == *i || sig_reg == *i)
+				return *bbm;
+		}
+	}
+	return rtl->bbModules.front();
 }
 
 void GenerateRTL::visitReturnInst(ReturnInst &I) {
@@ -6032,6 +6055,14 @@ void GenerateRTL::createRTLSignalsForInstructions() {
 		makeBBModuleWithBBPartitions();
 	else
 		makeBBModuleWithInstPartitions();
+
+	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")!=5) {
+		//FSM to BB_0 (or BB_CTRL)
+		RTLBBModule *bbfront = rtl->bbModules.front();
+		RTLSignal *sig = rtl->find("cur_state");
+		if (sig)
+			bbfront->add_signal(sig);
+	}
 }
 
 void GenerateRTL::makeBBModuleWithFunction() {
@@ -6072,18 +6103,32 @@ void GenerateRTL::makeBBModuleWithInstPartitions() {
 		bbModuleName = "BB_" + rtl->getName();
 		bbModuleName += "_" + std::to_string(partNumber);
 		RTLBBModule *bbm = new RTLBBModule(bbModuleName, partNumber);
+		bool addedFSMSignal = false;
        	for (VINST::const_iterator instr = ins.begin(), ie = ins.end();
 		                           instr != ie; ++instr) {
-			std::string wire = verilogName(*instr);
-			std::string reg = verilogName(*instr) + "_reg";
-			if (rtl->exists(wire)) {
-				RTLSignal *sig = rtl->find(wire);
-				RTLSignal *sig_reg = rtl->find(reg);
-				if (sig) {
+			if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==5 
+					&& (isa<BranchInst>(*instr) || isa<SwitchInst>(*instr))) {
+				RTLSignal *sig = rtl->find("cur_state");
+				if (sig && !addedFSMSignal) {
 					bbm->add_signal(sig);
+					addedFSMSignal = true;
+					if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2) {
+						errs() << "\n\n# DEBUG_TMR=2 - FSM grouping\n";
+						errs() << "  FSM signal is attached to " << bbm->getName() << "\n";
+					}
 				}
-				if (sig_reg) {
-					bbm->add_signal(sig_reg);
+			} else {
+				std::string wire = verilogName(*instr);
+				std::string reg = verilogName(*instr) + "_reg";
+				if (rtl->exists(wire)) {
+					RTLSignal *sig = rtl->find(wire);
+					RTLSignal *sig_reg = rtl->find(reg);
+					if (sig) {
+						bbm->add_signal(sig);
+					}
+					if (sig_reg) {
+						bbm->add_signal(sig_reg);
+					}
 				}
 			}
 		}
@@ -6150,13 +6195,6 @@ void GenerateRTL::createRTLSignalsForLocalRams() {
                     RTLWidth(R->getDataWidth()));
         }
     }
-
-	// insert memory signal to the related partitions
-	//FIXME - currently insert only into 0 partitions
-	RTLBBModule *bbfront = rtl->bbModules.front();
-	RTLSignal *sig = rtl->find("cur_state");
-	if (sig)
-		bbfront->add_signal(sig);
 }
 
 // this function is used to create memory_controller_storage_port signal
