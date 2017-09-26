@@ -807,5 +807,224 @@ bool fileExists(const std::string &name) {
     return (stat(name.c_str(), &buffer) == 0);
 }
 
+//TMR partitions
+bool bfs(int n, int start, int target, int capacity[][MAX_NODE], int flow[][MAX_NODE], int pred[]) {
+	bool visited[MAX_NODE];
+	for(int i=0; i<MAX_NODE; i++)
+		visited[i] = false;
+	std::queue<int> que;
+
+	que.push(start);
+	visited[start] = true;
+	pred[start] = -1;
+	while (!que.empty()) {
+		int u = que.front();
+		que.pop();
+		for (int v=0; v<n; v++) {
+			if(!visited[v] && capacity[u][v]-flow[u][v]>0) {
+				que.push(v);
+				visited[v] = true;
+				pred[v] = u;
+			}
+		}
+	}
+	//fprintf(stderr, "---------------------------------------\n");
+	//fprintf(stderr, "         ");
+	//for(int i=start; i<=target; i++)
+	//	fprintf(stderr, "%4d", i);
+	//fprintf(stderr, "\n");
+	//fprintf(stderr, "visited: ");
+	//for(int i=start; i<=target; i++)
+	//	fprintf(stderr, "%4d", visited[i]);
+	//fprintf(stderr, "\n");
+	//fprintf(stderr, "pred   : ");
+	//for(int i=start; i<=target; i++)
+	//	fprintf(stderr, "%4d", pred[i]);
+	//fprintf(stderr, "\n");
+	return (visited[target]==true);
+}
+
+void dfs(int n, int capacity[][MAX_NODE], int flow[][MAX_NODE], int s, bool visited[]) {
+	visited[s] = true;
+	for (int i=0; i<n; i++) {
+		if (capacity[s][i]-flow[s][i]>0 && !visited[i])
+			dfs(n, capacity, flow, i, visited);
+	}
+}
+
+IntGraph IntGraph::getTranspose() {
+	IntGraph g(V);
+	for (int v=0; v<V; v++) {
+		for (std::list<int>::iterator i = adj[v].begin(); i != adj[v].end(); ++i)
+			g.adj[*i].push_back(v);
+	}
+	return g;
+}
+
+void IntGraph::getSCC(int v, bool visited[], std::vector<int> &scc) {
+	//Mark the current node as visited and print it
+	visited[v] = true;
+	scc.push_back(v);
+
+	std::list<int>::iterator i;
+	for (i=adj[v].begin(); i!=adj[v].end(); ++i)
+		if (!visited[*i])
+			getSCC(*i, visited, scc);
+}
+
+void IntGraph::fillOrder(int v, bool visited[], std::stack<int> &Stack) {
+	//Mark the current node as visited and print it
+	visited[v] = true;
+
+	// Recur for all the vertices adjacent to this vertex
+	for (std::list<int>::iterator i = adj[v].begin(); i != adj[v].end(); ++i)
+		if (!visited[*i])
+			fillOrder(*i, visited, Stack);
+
+	// All vertices reachable from v are processed by now, push v
+	Stack.push(v);
+}
+
+void IntGraph::getSCCs(std::vector<std::vector<int> > &sccs) {
+	std::stack<int> Stack;
+
+	//Mark all the vertices as not visited (For first DFS)
+	bool *visited = new bool[V];
+	for (int i=0; i<V; ++i)
+		visited[i] = false;
+
+	//Fill vertices in stack according to their finishing times
+	for (int i=0; i<V; ++i)
+		if (visited[i] == false)
+			fillOrder(i, visited, Stack);
+
+	//Create a reversed graph;
+	IntGraph gr = getTranspose();
+
+	//Mark all the vertices as not visited (For second DFS)
+	for (int i=0; i<V; ++i)
+		visited[i] = false;
+
+	//Now process all vertices in order defined by Stack
+	while (Stack.empty() == false) {
+		//Pop a vertex from stack
+		int v = Stack.top();
+		Stack.pop();
+	
+		//Print Strongly connected component of the popped vertex
+		if (visited[v] == false) {
+			std::vector<int> scc;
+			gr.getSCC(v, visited, scc);
+			sccs.push_back(scc);
+		}
+	}
+}
+
+// Unblocks recursivly all blocked nodes, starting with a given node.
+void unblock(int  node, std::vector<bool> & blocked, std::vector<std::vector<int> > & B_Fruitless)
+{
+  blocked[node] = false;
+  while (B_Fruitless[node].size() > 0) {
+    int w = B_Fruitless[node][0];
+    B_Fruitless[node].erase(find (B_Fruitless[node].begin(), B_Fruitless[node].end(), w) ) ;
+    if (blocked[w]) {
+      unblock(w, blocked, B_Fruitless);
+    }
+  }
+}
+
+bool findCycles(int v,
+                int s,
+                std::vector<std::vector<int> >& adjList,
+                std::vector<bool>& blocked,  
+                std::deque<int>& stackLike,  
+                std::vector<std::vector<int> >& B_Fruitless,
+                std::vector<std::vector<int> >& cycles) {
+
+  bool f = false;
+  stackLike.push_front(v);  // insert like a stack:  so at the front
+  blocked[v] = true;
+
+// explore all neighbours -- recursively 
+  for (unsigned i = 0; i < adjList[v].size(); i++) {
+    int w =  adjList[v][i];
+               
+    // found cycle through ANY of my neighbours w.
+    if (w == s) {
+      std::vector<int>* cycle = new std::vector<int>;
+      for (unsigned j = 0; j < stackLike.size(); j++) {
+        cycle->push_back( stackLike.at (stackLike.size() - j  - 1) );
+      }
+      cycles.push_back(*cycle);
+      f = true;
+    } else if (!blocked[w]) {
+      if (findCycles(w, s, adjList, blocked, stackLike, B_Fruitless, cycles)) {
+        f = true;
+      }
+    }
+  } // for
+
+
+  if (f) {
+    unblock(v, blocked, B_Fruitless);
+  } else {
+
+    // go through all my neighbors w.
+    //  v is pushed on B_Fruitless[w].
+    // looking at B_Fruitless[w] = [v1, v2, ..] , i know i can get from v1 to w, and v2 to w, etc. 
+    // later, whenever i block w, i recursively unblock v1, and v2, and v.. 
+
+    for (unsigned i = 0; i < adjList[v].size(); i++) {
+      int w = adjList[v][i];
+
+// mark B_Fruitless[w] to point to v.  This says that going from v to w lead to an unfruitful search.
+// later when w is found to particiate in a cycle, i'd better get rid of this false assupmtion about
+// w not leading to fruitful cycles.
+
+      std::vector<int>::iterator it;
+      it = std::find(B_Fruitless[w].begin(), B_Fruitless[w].end(), v);
+      if (it == B_Fruitless[w].end()) {
+        B_Fruitless[w].push_back(v);
+      }
+    }
+  }
+  // find v and remove it from stack
+  std::deque<int>::iterator it;
+
+  it = std::find(stackLike.begin(), stackLike.end(), v);
+  if (it != stackLike.end() ) {
+    stackLike.erase(it);
+  } 
+  return f;
+} // bool  findCycles
+
+int maxFlow(int n, int start, int target, int capacity[][MAX_NODE], int flow[][MAX_NODE]) {
+	int pred[MAX_NODE];
+
+	int max_flow = 0;
+	for(int i=0; i<n; i++)
+		for(int j=0; j<n; j++)
+			flow[i][j] = 0;
+	while (bfs(n, start, target, capacity, flow, pred)) {
+		//Determin the amount by which we can increment the flow
+		int increment = INF;
+		for(int u=target; pred[u]>=0; u=pred[u]) {
+			int f = capacity[pred[u]][u] - flow[pred[u]][u];
+			if (increment > f) {
+				increment = f;
+			}
+		}
+		//Now increment the flow
+		for(int u=target; pred[u]>=0; u=pred[u]) {
+			flow[pred[u]][u] += increment;
+			flow[u][pred[u]] -= increment;
+		}
+		max_flow += increment;
+	}
+	//No aumenting path anymore. We are done.
+	return max_flow;
+}
+
+
 
 } // End legup namespace

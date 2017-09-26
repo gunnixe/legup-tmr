@@ -2,8 +2,8 @@
 
 use POSIX;
 
-my $DEST = output_vivado_ncr;
-my $START_CNT = 1;
+my $DEST = output_simplex_lat3;
+my $START_CNT = 0;
 my $SYN_TOP = top;
 my $PNR_TOP = top;
 my $TEMPLATE = template;
@@ -14,12 +14,15 @@ my @example_list;
 #simplelist
 #@example_list = (@example_list,qw(add fir mmult qsort fft));
 #@example_list = qw(adpcm aes aesdec gsm sha blowfish dfadd dfdiv dfmul dfsin jpeg mips motion satd sobel bellmanford mmult);
-@example_list = qw(aes aesdec gsm sha dfadd dfdiv dfmul dfsin mips motion satd bellmanford mmult);
+@example_list = qw(adpcm aes aesdec gsm sha blowfish dfadd dfdiv dfmul dfsin mips motion satd sobel bellmanford mmult);
+#@example_list = qw(adpcm aes aesdec gsm sha blowfish dfadd dfdiv dfmul mips motion satd bellmanford mmult);
+#@example_list = qw(aes aesdec gsm sha dfadd dfmul mips motion satd bellmanford mmult);
+#@example_list = qw(aes gsm mmult);
 
 my ($fname) = @ARGV;
 die "Need folder name\n" if(not defined $fname);
 
-my $max_number_of_partitions = 2;
+my $max_number_of_partitions = 1;
 my @name_list;
 my @verilog_number_of_sync_voters;
 my @verilog_number_of_part_voters;
@@ -34,6 +37,10 @@ my @sim_max_freq_mhz;
 my @sim_number_of_clock_cycles;
 my @sim_expected_result;
 my @sim_wall_clock_us;
+my @hier_lut;
+my @hier_reg;
+my @hier_dsp;
+my @hier_bram;
 
 open(FPH, '>', "part_report.rpt") or die "cannot open 'part_report.rpt' $!";
 
@@ -44,12 +51,11 @@ if($fname eq "all") {
 	die "Folder '$dest_folder' is not exist\n" if(!-d $dest_folder);
 	&do_work($fname);
 }
-&write_csv_file_vertical($x);
+&write_csv_file_vertical();
 
 sub do_work {
 	my $fname = $_[0];
 	# options
-	#-x : xilinx
 	#-c : create only
 	#-f : (finalize) summary only
 	#-s : simulation only
@@ -90,9 +96,9 @@ sub do_work {
 
 		#if($scenario_cnt==5) { $scenario_cnt++; next; }
 
-		if(m/^\d \d \d \d \d \d \d \d \d \d \d \d \d$/) {
-			@arg_list = split(/ /, $_, 13);
-			#my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram $clkmargin $numpart) = @arg_list; 
+		if(m/^\d \d \d \d \d \d \d \d$/) {
+			@arg_list = split(/ /, $_, 8);
+			#my ($tmr, $smode, $pmode, $lram, $pipe, $numpart) = @arg_list; 
 
 			# LegUp4.0 does not support complex data dependency analysis.
 			# - need to skip pipelining
@@ -148,8 +154,10 @@ sub do_work {
 			system("make f | tee synth.log;") if($fi);
 	
 			# summarize
+			&parse_vsim_log($cname, $fname);
+			&parse_generate_log($cname, $fname);
+			&summary_for_xilinx_pnr($cname, $fname, $pname) if($flag_summary);
 			&summary_info_txt($fname, $cname, $pname);
-			&summary_for_xilinx_pnr($fname, $cname, $pname) if($flag_summary);
 
 			# finalize work dir
 			chdir "../../";
@@ -162,15 +170,13 @@ sub do_work {
 sub summary_info_txt {
 	my ($fname, $cname, $pname) = @_;
 
-	&parse_vsim_log($cname);
-	&parse_generate_log($cname);
 	#&parse_verilog($cname);
 
 	open(FWH, '>', "info.txt") or die "cannot open '$cname/info.txt' $!";
 	my $now = `date`;
 	my $intFmax = int($sim_max_freq_mhz[-1]);
 	print FWH "projectName = $cname\n";
-	#print FWH "maxFreq = $intFmax\n";
+	print FWH "maxFreq = $intFmax\n";
 	print FWH "cycles = $sim_number_of_clock_cycles[-1]\n";
 	print FWH "expectedResult = $sim_expected_result[-1]\n";
 	print FWH "date = $now\n";
@@ -206,8 +212,8 @@ sub change_makefile {
 }
 
 sub change_config {
-	my ($tmr, $smode, $pmode, $lram, $pipe, $rvlram, $clkmargin,
-		$numpart, $seqvote, $epvoter, $esvoter, $emode, $mergev, $xilinx) = @_;
+	my ($tmr, $smode, $pmode, $lram, $pipe,
+		$numpart, $emode, $nvarea, $xilinx) = @_;
 	open(FH, '+<', "config.tcl") or die "cannot open 'config.tcl' $!";
 	my $out = '';
 	while(<FH>) {
@@ -226,6 +232,7 @@ sub change_config {
 		next if(m/set_parameter MERGE_PVOTER_WITH_SVOTER \d$/);
 		next if(m/set_parameter SEPERATE_BB_CTRL \d$/);
 		next if(m/set_parameter EXTRACT_PART_VOTERS \d$/);
+		next if(m/set_parameter NO_VOTER_AREA_ESTIMATE \d$/);
 		next if(m/loop_pipeline \"loop\"$/);
 
 		$out .= "$_\n";
@@ -233,17 +240,18 @@ sub change_config {
 
 	$out .= "\n";
 	$out .= "set_parameter TMR $tmr\n";
-	$out .= "set_parameter CLOCK_PERIOD 10\n" if($tmr && $clkmargin);
+	#$out .= "set_parameter CLOCK_PERIOD 10\n" if($tmr && $clkmargin);
 	$out .= "set_parameter SYNC_VOTER_MODE $smode\n";
 	$out .= "set_parameter PART_VOTER_MODE $pmode\n";
 	$out .= "set_parameter LOCAL_RAMS $lram\n";
-	$out .= "set_parameter USE_REG_VOTER_FOR_LOCAL_RAMS $rvlram\n";
+	#$out .= "set_parameter USE_REG_VOTER_FOR_LOCAL_RAMS $rvlram\n";
 	$out .= "set_parameter NUMBER_OF_PARTITIONS $numpart\n";
-	$out .= "set_parameter SEQUENTIAL_PART_VOTER $seqvote\n";
-	$out .= "set_parameter EBIT_FOR_PART_VOTER $epvoter\n";
-	$out .= "set_parameter EBIT_FOR_SYNC_VOTER $esvoter\n";
+	#$out .= "set_parameter SEQUENTIAL_PART_VOTER $seqvote\n";
+	#$out .= "set_parameter EBIT_FOR_PART_VOTER $epvoter\n";
+	#$out .= "set_parameter EBIT_FOR_SYNC_VOTER $esvoter\n";
 	$out .= "set_parameter EBIT_MODE $emode\n";
-	$out .= "set_parameter MERGE_PVOTER_WITH_SVOTER $mergev\n";
+	#$out .= "set_parameter MERGE_PVOTER_WITH_SVOTER $mergev\n";
+	$out .= "set_parameter NO_VOTER_AREA_ESTIMATE $nvarea\n";
 	#add locam mem constrant for FMax
 	#if($lram && (($tmr==0) || ($tmr==1 && $smode==2))) {
 	#	$out .= "set_operation_latency local_mem_dual_port 2\n";
@@ -263,8 +271,99 @@ sub change_config {
 }
 
 sub summary_for_xilinx_pnr {
-	my ($fname, $cname, $pname) = @_;
+	my $cname = $_[0];
 	push @name_list, $cname;
+
+	&parse_hierarchy_log(@_);
+	&parse_timing_log(@_);
+}
+
+sub parse_hierarchy_log {
+	my ($cname, $fname, $pname) = @_;
+
+	my $hier_rpt = "./hierarchical_utilization.rpt";
+	#open(FHL, '<', $hier_rpt) or die "cannot open '$hier_rpt' $!";
+	#print FPH "#$cname#\n";
+	#while(<FHL>) {
+	#	chomp;
+	#	if(/^\|\s+Instance\s+\|\s+Module\s+\|/) {
+	#		print FPH "$_\n";
+	#	} elsif(/^\|\s+BB_main_1\s+\|/) {
+	#		print FPH "$_\n";
+	#	} elsif(/^\|\s+BB_main_2\s+\|/) {
+	#		print FPH "$_\n";
+	#	} elsif(/^\|\s+BB_main_CTRL\s+\|/) {
+	#		print FPH "$_\n\n";
+	#		last;
+	#	} elsif(/^\|\s+BB_main_0\s+\|/) {
+	#		print FPH "$_\n\n";
+	#		last;
+	#	}
+	#}
+	#die "cannot find string in '$cname/$hier_rpt'" if(eof FHL);
+	#close(FHL);
+
+	#if(!-e $hier_rpt) {
+	#	for (my $i=0; $i<$max_number_of_partitions; $i++) {
+	#		push @hier_lut, "";
+	#		push @hier_reg, "";
+	#		push @hier_dsp, "";
+	#		push @hier_bram, "";
+	#	}
+	#	push @number_of_slice_luts, "";
+	#	push @number_of_slice_registers, "";
+	#	push @number_of_rams, "";
+	#	push @number_of_dsp48e1s, "";
+	#	return;
+	#}
+
+	open(FHL, '<', $hier_rpt) or die "cannot open '$hier_rpt' $!";
+	print FPH "#$cname#\n";
+	my $num_part_find = 0;
+	while(<FHL>) {
+		chomp;
+		if(/^\|\s+top\_inst\s+\|\s+top \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|/) {
+			push @number_of_slice_luts, $1;
+			push @number_of_slice_registers, $5;
+			#push @number_of_occupied_slices, "";
+			my $ram = $6*2 + $7;
+			push @number_of_rams, $ram;
+			push @number_of_dsp48e1s, $8;
+		} elsif(/^\|\s+BB\_main\_\d+\s+\|\s+BB\_main\_[\w\d\_]+ \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|/) {
+			push @hier_lut, $1;
+			push @hier_reg, $5;
+			my $ram = $6*2 + $7;
+			push @hier_bram, $ram;
+			push @hier_dsp, $8;
+			$num_part_find++;
+		} elsif(/^\|\s+BB\_main\_CTRL\s+\|\s+BB\_main\_CTRL* \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|/) {
+			push @hier_lut, $1;
+			push @hier_reg, $5;
+			my $ram = $6*2 + $7;
+			push @hier_bram, $ram;
+			push @hier_dsp, $8;
+			$num_part_find++;
+		} elsif(/^\|\s+main\_inst\_r1\s+\|\s+main\_*/) {
+			last;
+		} elsif($num_part_find == $max_number_of_partitions) {
+			last;
+		}
+	}
+
+	for (my $i=$num_part_find; $i<$max_number_of_partitions; $i++) {
+		push @hier_lut, "";
+		push @hier_reg, "";
+		push @hier_bram, "";
+		push @hier_dsp, "";
+	}
+
+	die "cannot find string in '$hier_rpt'" if(eof FHL);
+	close(FHL);
+}
+
+sub parse_utilization_log {
+	my ($cname, $fname, $pname) = @_;
+	#push @name_list, $cname;
 
 	my $util_rpt = "./$pname.runs/impl_1/ARTIX7_utilization_placed.rpt";
 	open(FUH, '<', "$util_rpt") or die "cannot open '$util_rpt' $!";
@@ -304,13 +403,27 @@ sub summary_for_xilinx_pnr {
 	}
 	die "cannot find string in '$util_rpt'" if(eof FUH);
 	close(FUH);
+}
+
+sub parse_timing_log {
+	my ($cname, $fname, $pname) = @_;
 
 	my $time_rpt = "./$pname.runs/impl_1/ARTIX7_timing_summary_routed.rpt";
 	open(FTL, '<', $time_rpt) or die "cannot open '$time_rpt' $!";
 	while(<FTL>) {
 		chomp;
+		#if(/Slack \(MET\) :\s+(\d+\.\d+)ns/) {
+		#	$slack = $1;
+		#} elsif (/\s+Requirement:\s+(\d+\.\d+)ns/) {
+		#	$current_design_delay = $1 - $slack;
+		#	push @sim_max_freq_mhz, 1000/$current_design_delay;
+		#	my $current_design_wall_clock = $sim_number_of_clock_cycles[-1]*$1/1000;
+		#	push @sim_wall_clock_us, $current_design_wall_clock;
+		#	last;
+		#}
 		if(/\s+Data Path Delay:\s+(\d+\.\d+)ns/) {
-			push @sim_max_freq_mhz, 1000/$1;
+			$current_design_delay = $1;
+			push @sim_max_freq_mhz, 1000/$current_design_delay;
 			my $current_design_wall_clock = $sim_number_of_clock_cycles[-1]*$1/1000;
 			push @sim_wall_clock_us, $current_design_wall_clock;
 			last;
@@ -319,79 +432,66 @@ sub summary_for_xilinx_pnr {
 	die "cannot find string in '$time_rpt'" if(eof FTL);
 	close(FTL);
 
-	my $hier_rpt = "./hierarchical_utilization.rpt";
-	open(FHL, '<', $hier_rpt) or die "cannot open '$hier_rpt' $!";
-	print FPH "#$cname#\n";
-	while(<FHL>) {
-		chomp;
-		if(/^\|\s+Instance\s+\|\s+Module\s+\|/) {
-			print FPH "$_\n";
-		} elsif(/^\|\s+BB_main_1\s+\|/) {
-			print FPH "$_\n";
-		} elsif(/^\|\s+BB_main_2\s+\|/) {
-			print FPH "$_\n";
-		} elsif(/^\|\s+BB_main_CTRL\s+\|/) {
-			print FPH "$_\n\n";
-			last;
-		} elsif(/^\|\s+BB_main_0\s+\|/) {
-			print FPH "$_\n\n";
-			last;
-		}
-	}
-	die "cannot find string in '$cname/$hier_rpt'" if(eof FHL);
-	close(FHL);
-
+	return $current_design_delay;
 }
 
 sub parse_generate_log {
-	my $cname = $_[0];
-	my $fv_count = 0;
+	my ($cname, $fname) = @_;
+	#my $fv_count = 0;
 	my $pv_count = 0;
 
-	open(FITC, '>', "connections.txt") or die "cannot open '$cname/make.log' $!";
-	print FITC "fip_inst top_inst/main_inst_r0/BB_main_1 2\n";
-	print FITC "fip_inst top_inst/main_inst_r0/BB_main_2 2\n";
-	print FITC "fip_inst top_inst/main_inst_r0/BB_main_CTRL 2\n";
-	print FITC "fip_inst top_inst/main_inst_r1/BB_main_1 2\n";
-	print FITC "fip_inst top_inst/main_inst_r1/BB_main_2 2\n";
-	print FITC "fip_inst top_inst/main_inst_r1/BB_main_CTRL 2\n";
-	print FITC "fip_inst top_inst/main_inst_r2/BB_main_1 2\n";
-	print FITC "fip_inst top_inst/main_inst_r2/BB_main_2 2\n";
-	print FITC "fip_inst top_inst/main_inst_r2/BB_main_CTRL 2\n";
-	print FITC "top_inst/main_inst_r0/BB_main_CTRL fip_inst 60\n";
-	print FITC "top_inst/main_inst_r1/BB_main_CTRL fip_inst 60\n";
-	print FITC "top_inst/main_inst_r2/BB_main_CTRL fip_inst 60\n";
+	#open(FITC, '>', "connections.txt") or die "cannot open '$cname/make.log' $!";
+	#print FITC "fip_inst top_inst/main_inst_r0/BB_main_1 2\n";
+	#print FITC "fip_inst top_inst/main_inst_r0/BB_main_2 2\n";
+	#print FITC "fip_inst top_inst/main_inst_r0/BB_main_CTRL 2\n";
+	#print FITC "fip_inst top_inst/main_inst_r1/BB_main_1 2\n";
+	#print FITC "fip_inst top_inst/main_inst_r1/BB_main_2 2\n";
+	#print FITC "fip_inst top_inst/main_inst_r1/BB_main_CTRL 2\n";
+	#print FITC "fip_inst top_inst/main_inst_r2/BB_main_1 2\n";
+	#print FITC "fip_inst top_inst/main_inst_r2/BB_main_2 2\n";
+	#print FITC "fip_inst top_inst/main_inst_r2/BB_main_CTRL 2\n";
+	#print FITC "top_inst/main_inst_r0/BB_main_CTRL fip_inst 60\n";
+	#print FITC "top_inst/main_inst_r1/BB_main_CTRL fip_inst 60\n";
+	#print FITC "top_inst/main_inst_r2/BB_main_CTRL fip_inst 60\n";
 
 	open(FGENH, '<', "make.log") or die "cannot open '$cname/make.log' $!";
+	#while(<FGENH>) {
+	#	chomp;
+	#	if(/^    Total number of sync voters of \[\d+\] = (\d+)$/) {
+	#		my $num = $1; $num = "-" if ($num eq "0");
+	#		push @verilog_number_of_sync_voters, $num;
+	#		$fv_count++;
+	#	} elsif(/^    Total number of part voters of \[\d+\] = (\d+)$/) {
+	#		my $num = $1; $num = "-" if ($num eq "0");
+	#		push @verilog_number_of_part_voters, $num;
+	#		$pv_count++;
+	#	#} elsif(/^INTERCONNECT ([\_\w]+) ([\_\w]+) (\d+)$/) {
+	#	#	if ($3 != 0) {
+	#	#		print FITC "top_inst/main_inst_r0/$1 top_inst/main_inst_r0/$2 $3\n";
+	#	#		print FITC "top_inst/main_inst_r1/$1 top_inst/main_inst_r0/$1 $3\n";
+	#	#		print FITC "top_inst/main_inst_r2/$1 top_inst/main_inst_r0/$1 $3\n";
+	#	#		print FITC "top_inst/main_inst_r1/$1 top_inst/main_inst_r1/$2 $3\n";
+	#	#		print FITC "top_inst/main_inst_r0/$1 top_inst/main_inst_r1/$1 $3\n";
+	#	#		print FITC "top_inst/main_inst_r2/$1 top_inst/main_inst_r1/$1 $3\n";
+	#	#		print FITC "top_inst/main_inst_r2/$1 top_inst/main_inst_r2/$2 $3\n";
+	#	#		print FITC "top_inst/main_inst_r0/$1 top_inst/main_inst_r2/$1 $3\n";
+	#	#		print FITC "top_inst/main_inst_r1/$1 top_inst/main_inst_r2/$1 $3\n";
+	#	#	}
+	#	#} elsif(/^# DEBUG_TMR=2 - Partition List \(n=(\d+)\)$/) {
+	#	#	$max_number_of_partitions = $1;
+	#	}
+	#}
 	while(<FGENH>) {
 		chomp;
-		if(/^    Total number of sync voters of \[\d+\] = (\d+)$/) {
-			my $num = $1; $num = "-" if ($num eq "0");
-			push @verilog_number_of_sync_voters, $num;
-			$fv_count++;
-		} elsif(/^    Total number of part voters of \[\d+\] = (\d+)$/) {
-			my $num = $1; $num = "-" if ($num eq "0");
-			push @verilog_number_of_part_voters, $num;
+		if(/^Total Ebits of \'[\_\w]+\' = (\d+)$/) {
+			push @verilog_number_of_part_voters, $1;
 			$pv_count++;
-		} elsif(/^INTERCONNECT ([\_\w]+) ([\_\w]+) (\d+)$/) {
-			if ($3 != 0) {
-				print FITC "top_inst/main_inst_r0/$1 top_inst/main_inst_r0/$2 $3\n";
-				print FITC "top_inst/main_inst_r1/$1 top_inst/main_inst_r0/$1 $3\n";
-				print FITC "top_inst/main_inst_r2/$1 top_inst/main_inst_r0/$1 $3\n";
-				print FITC "top_inst/main_inst_r1/$1 top_inst/main_inst_r1/$2 $3\n";
-				print FITC "top_inst/main_inst_r0/$1 top_inst/main_inst_r1/$1 $3\n";
-				print FITC "top_inst/main_inst_r2/$1 top_inst/main_inst_r1/$1 $3\n";
-				print FITC "top_inst/main_inst_r2/$1 top_inst/main_inst_r2/$2 $3\n";
-				print FITC "top_inst/main_inst_r0/$1 top_inst/main_inst_r2/$1 $3\n";
-				print FITC "top_inst/main_inst_r1/$1 top_inst/main_inst_r2/$1 $3\n";
-			}
-		#} elsif(/^# DEBUG_TMR=2 - Partition List \(n=(\d+)\)$/) {
-		#	$max_number_of_partitions = $1;
 		}
 	}
-	while($fv_count++<$max_number_of_partitions) {
-		push @verilog_number_of_sync_voters, "";
-	}
+
+	#while($fv_count++<$max_number_of_partitions) {
+	#	push @verilog_number_of_sync_voters, "";
+	#}
 	while($pv_count++<$max_number_of_partitions) {
 		push @verilog_number_of_part_voters, "";
 	}
@@ -399,7 +499,7 @@ sub parse_generate_log {
 }
 
 sub parse_vsim_log {
-	$cname = $_[0];
+	my ($cname, $fname) = @_;
 	open(FSIMH, '<', "vsim.log") or die "cannot open '$cname/vsim.log' $!";
 	while(<FSIMH>) {
 		chomp;
@@ -417,38 +517,62 @@ sub parse_vsim_log {
 }
 
 sub write_csv_file_vertical {
-	my $xilinx = $_[0];
 	my $csv_name = "$DEST/report.csv";
 	open(FCSV, '>', $csv_name) or die "cannot open '$csv_name' $!";
 	print FCSV ",Mode";
 
-	for (my $i=0; $i<$max_number_of_partitions; $i++) {
-		#print FCSV ",Number of Sync Voters of partition $i";
-		print FCSV ",SV$i";
-	}
+	#for (my $i=0; $i<$max_number_of_partitions; $i++) {
+	#	#print FCSV ",Number of Sync Voters of partition $i";
+	#	print FCSV ",SV$i";
+	#}
 	for (my $i=0; $i<$max_number_of_partitions; $i++) {
 		#print FCSV ",Number of Part Voters of partition $i";
 		print FCSV ",PV$i";
 	}
-	print FCSV ",REG,LUT";
-	print FCSV ",MEM,DSP,Fmax,Lat,ExTime";
+	print FCSV ",LUT,REG";
+	print FCSV ",DSP,MEM";
+	for (my $i=1; $i<$max_number_of_partitions+1; $i++) {
+		print FCSV ",LutP$i";
+	}
+	for (my $i=1; $i<$max_number_of_partitions+1; $i++) {
+		print FCSV ",RegP$i";
+	}
+	for (my $i=1; $i<$max_number_of_partitions+1; $i++) {
+		print FCSV ",DspP$i";
+	}
+	for (my $i=1; $i<$max_number_of_partitions+1; $i++) {
+		print FCSV ",BramP$i";
+	}
+	print FCSV ",Fmax,Lat,ExTime";
 	print FCSV "\n";
 
 	my $val;
 	while($val = shift(@name_list)) {
 		my @name = split(/_/, $val);
 		print FCSV "$name[0],$name[1]";
-		for (my $i=0; $i<$max_number_of_partitions; $i++) {
-			$val = shift(@verilog_number_of_sync_voters);  print FCSV ",$val";
-		}
-		for (my $i=0; $i<$max_number_of_partitions; $i++) {
+		#for (my $i=1; $i<$max_number_of_partitions+1; $i++) {
+		#	$val = shift(@verilog_number_of_sync_voters);  print FCSV ",$val";
+		#}
+		for (my $i=1; $i<$max_number_of_partitions+1; $i++) {
 			$val = shift(@verilog_number_of_part_voters);  print FCSV ",$val";
 		}
 
-		$val = shift(@number_of_slice_registers);  print FCSV ",$val";
 		$val = shift(@number_of_slice_luts);       print FCSV ",$val";
-		$val = shift(@number_of_rams);             print FCSV ",$val";
+		$val = shift(@number_of_slice_registers);  print FCSV ",$val";
 		$val = shift(@number_of_dsp48e1s);         print FCSV ",$val";
+		$val = shift(@number_of_rams);             print FCSV ",$val";
+		for (my $i=1; $i<$max_number_of_partitions+1; $i++) {
+			$val = shift(@hier_lut);                  print FCSV ",$val";
+		}
+		for (my $i=1; $i<$max_number_of_partitions+1; $i++) {
+			$val = shift(@hier_reg);                  print FCSV ",$val";
+		}
+		for (my $i=1; $i<$max_number_of_partitions+1; $i++) {
+			$val = shift(@hier_dsp);                  print FCSV ",$val";
+		}
+		for (my $i=1; $i<$max_number_of_partitions+1; $i++) {
+			$val = shift(@hier_bram);                 print FCSV ",$val";
+		}
 		$val = shift(@sim_max_freq_mhz);           print FCSV ",$val";
 		$val = shift(@sim_number_of_clock_cycles); print FCSV ",$val";
 		$val = shift(@sim_wall_clock_us);          print FCSV ",$val";

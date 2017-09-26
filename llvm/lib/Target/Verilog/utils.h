@@ -22,10 +22,15 @@
 #include "llvm/Support/FormattedStream.h"
 #include <string>
 #include <set>
+#include <list>
+#include <stack>
 
 using namespace llvm;
 
 namespace legup {
+
+#define INF 1000000000
+#define MAX_NODE 16384
 
 class State;
 class FiniteStateMachine;
@@ -171,6 +176,42 @@ void limitString(std::string &s, unsigned limit);
 raw_ostream &mc_debug();
 
 bool fileExists(const std::string &name);
+
+// TMR
+bool bfs(int n, int start, int target, int capacity[][MAX_NODE], int flow[][MAX_NODE], int pred[]);
+void dfs(int n, int capacity[][MAX_NODE], int flow[][MAX_NODE], int s, bool visited[]);
+int maxFlow(int n, int start, int target, int capacity[][MAX_NODE], int flow[][MAX_NODE]);
+bool findCycles(int v,
+                int s,
+                std::vector<std::vector<int> >& adjList,
+                std::vector<bool>& blocked,  
+                std::deque<int>& stackLike,  
+                std::vector<std::vector<int> >& B_Fruitless,
+                std::vector<std::vector<int> >& cycles);
+void unblock(int node, std::vector<bool>&blocked, std::vector<std::vector<int> > &B_Fruitless);
+
+class IntGraph {
+public:
+	int V; //No. of vertices
+	std::list<int> *adj; // An array of adjacency lists
+
+	//Fills Stack with vertices (in increasing oder of finishing time). 
+	//The top element of stack has the maximum finishing time.
+	void fillOrder(int v, bool visited[], std::stack<int> &Stack);
+
+	//A recursive function to print DFS starting from v
+	void getSCC(int v, bool visited[], std::vector<int> &scc);
+
+	IntGraph(int V) {
+		this->V = V;
+		adj = new std::list<int>[V];
+	}
+	void addEdge(int v, int w) { adj[v].push_back(w); }
+	int getSize() { return V; }
+
+	IntGraph getTranspose();
+	void getSCCs(std::vector<std::vector<int> > &sccs);
+};
 
 // this has to be declared in the header due to templates
 template <typename T> class dotGraph {

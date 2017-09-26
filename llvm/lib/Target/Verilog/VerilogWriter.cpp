@@ -36,7 +36,7 @@ namespace legup {
 bool VerilogWriter::isTmrSig(const RTLSignal *sig) {
 	std::string type = sig->getType();
 	if (LEGUP_CONFIG->getParameterInt("TMR") &&
-	            (type=="reg" || type=="wire" || isMemSig(sig) || isModuleOutputSig(sig))) {
+	            (type=="reg" || type=="wire" || isLocalMemSig(sig) || isModuleOutputSig(sig))) {
 		//assert(currReplica=="0" || currReplica=="1" || currReplica=="2");
 		return true;
 	}
@@ -4512,16 +4512,885 @@ void VerilogWriter::printSyncCtrlCoreInstances() {
     }
 }
 
+bool VerilogWriter::skipSig(const RTLSignal *signal) {
+	//if (isGlobalMemSig(signal))
+	//	return true;
+
+	//skip memory signal for the partitioining
+	//memory signals will be added at initBBModules() along with module
+	//instantiation
+    for (Allocation::ram_iterator i = alloc->ram_begin(),
+	                              e = alloc->ram_end(); i != e; ++i) {
+        RAM *R = *i;
+        std::string name = R->getName();
+
+		if (R->getScope()!=RAM::GLOBAL)
+			continue;
+        const char* portNames[2] = { "a", "b" };
+        std::vector<std::string> ports(portNames, portNames + 2);
+        for (std::vector<std::string>::iterator p = ports.begin(), pe =
+                ports.end(); p != pe; ++p) {
+            std::string port = *p;
+
+			const char* wireNames[6] = { "_address_",
+			                             "_enable_",
+			                             "_size_",
+			                             "_write_enable_",
+			                             "_in_",
+			                             "_out_" };
+        	std::vector<std::string> wires(wireNames, wireNames + 6);
+        	for (std::vector<std::string>::iterator w = wires.begin(), we =
+        	        wires.end(); w != we; ++w) {
+        	    std::string wire = name + *w + port;
+				if (wire == signal->getName())
+					return true;
+			}
+		}
+	}
+	return false;
+}
+
+unsigned VerilogWriter::initSigMap(RTLModule *rtl) {
+	unsigned n=0;
+
+	const RTLSignal *start = rtl->find("start");
+	sigs.push_back(start);
+	sigMap[start] = n;
+	sigMap_R[n] = start;
+	n += 3;
+
+	for (RTLModule::const_signal_iterator i = rtl->signals_begin();
+	                                      i != rtl->signals_end(); ++i) {
+		if (skipSig(*i))
+			continue;
+
+		sigs.push_back(*i);
+		sigMap[*i] = n;
+		sigMap_R[n] = *i;
+		n += 3;
+	}
+
+    if (!noSharedMemoryController() &&
+    		!(LEGUP_CONFIG->getParameterInt("LOCAL_RAMS") && alloc->isGlobalRams.empty())) {
+
+        std::string name = "memory_controller";
+        const char* portNames[2] = { "a", "b" };
+        std::vector<std::string> ports(portNames, portNames + 2);
+        for (std::vector<std::string>::iterator p = ports.begin(), pe =
+                ports.end(); p != pe; ++p) {
+            std::string port = *p;
+
+			const char* wireNames[6] = { "_address_",
+                                         "_enable_",
+                                         "_size_",
+			                             "_write_enable_",
+			                             "_in_",
+			                             "_out_" };
+        	std::vector<std::string> wires(wireNames, wireNames + 6);
+        	for (std::vector<std::string>::iterator w = wires.begin(), we =
+        	        wires.end(); w != we; ++w) {
+        	    std::string wire = name + *w + port;
+				if (rtl->exists(wire)) {
+					RTLSignal *sig = rtl->find(wire);
+					if (sig) {
+						sigs.push_back(sig);
+						sigMap[sig] = n;
+						sigMap_R[n] = sig;
+						n += 3;
+					}
+				}
+			}
+		}
+	}
+
+    for (RTLModule::const_signal_iterator i = rtl->port_begin(),
+                                          e = rtl->port_end();
+                                          i != e; ++i) {
+		if ((*i)->getType()=="output reg") {
+			sigs.push_back(*i);
+			sigMap[*i] = n;
+			sigMap_R[n] = *i;
+			n += 3;
+		}
+	}
+	n -= 2;
+
+	return n;
+}
+
+unsigned VerilogWriter::getFsmArea(const RTLSignal *signal) {
+	assert(signal->getName()=="cur_state");
+
+    unsigned sigWidth = signal->getWidth().numBits(rtl, alloc);
+	//FIXME
+	//need to trace conditions and drivers to get correct area
+	return sigWidth*16;
+}
+
+unsigned VerilogWriter::getRound(unsigned w) {
+	int r = (w<=8)? 8
+	      : (w<=16)? 16
+	      : (w<=32)? 32
+	      : 64;
+	return r;
+}
+
+std::string VerilogWriter::getOpName(const RTLOp *op, bool isSigned, unsigned w) {
+	RTLOp::Opcode opcode = op->getOpcode();
+	std::string prefix = isSigned? "signed_" : "unsigned_";
+	std::string opName = (opcode == RTLOp::Add)? prefix + "add"
+	                   : (opcode == RTLOp::Sub)? prefix + "subtract"
+	                   : (opcode == RTLOp::Mul)? prefix + "multiply"
+	                   : (opcode == RTLOp::Rem)? prefix + "modulus"
+	                   : (opcode == RTLOp::Div)? prefix + "divide"
+	                   : (opcode == RTLOp::And)? "bitwise_AND"
+	                   : (opcode == RTLOp::LAnd)? ""
+	                   : (opcode == RTLOp::Or)? "bitwise_OR"
+	                   : (opcode == RTLOp::Xor)? "bitwise_XOR"
+	                   : (opcode == RTLOp::Shl)? "shift_la"
+	                   : (opcode == RTLOp::Shr)? "shift_ra"
+	                   : (opcode == RTLOp::EQ)? prefix + "comp_eq"
+	                   : (opcode == RTLOp::NE)? prefix + "comp_ne"
+	                   : (opcode == RTLOp::LT)? prefix + "comp_lt"
+	                   : (opcode == RTLOp::LE)? prefix + "comp_lte"
+	                   : (opcode == RTLOp::GT)? prefix + "comp_gt"
+	                   : (opcode == RTLOp::GE)? prefix + "comp_gte"
+	                   : "";
+	if (!opName.empty()) {
+		if (isConst(op->getOperand(1)) && 
+				(opcode==RTLOp::Rem || opcode==RTLOp::Div))
+			opName += "_const";
+		opName += "_" + utostr(getRound(w));
+	}
+	return opName;
+}
+
+unsigned VerilogWriter::getOperatorArea(const RTLSignal *sig, unsigned w) {
+	const RTLOp *op = (const RTLOp *)sig;
+	assert(op);
+
+	std::string opName = "";
+	if (op->getOpcode() == RTLOp::Finish
+			|| op->getOpcode() == RTLOp::Write
+			|| op->getOpcode() == RTLOp::Display) {
+		opName = "";
+	} else {
+		switch (op->getNumOperands()) {
+		case 3:
+			assert(op->getOpcode() == RTLOp::Sel);
+			opName = "mux_2_" + utostr(getRound(w));
+			break;
+		case 2:
+			if (op->getOpcode() != RTLOp::Concat) {
+    			bool isSigned = sig->getWidth().getSigned();
+				opName = getOpName(op, isSigned, w);
+			}
+			break;
+		default:
+			opName = "";
+		}
+	}
+	if (opName.empty())
+		return 0;
+
+	Operation *refOp = LEGUP_CONFIG->getOperationRef(opName);
+	assert(refOp);
+
+	//divider area tuning
+	if (op->getOpcode() == RTLOp::Rem
+			|| op->getOpcode() == RTLOp::Div)
+		return refOp->getLUTs() * 2;
+
+	return refOp->getLUTs();
+}
+
+unsigned VerilogWriter::getValueArea(const RTLSignal *sig, unsigned w) {
+	assert(sig && "sig is NULL");
+	if (sig->isOp()) {
+		return getOperatorArea(sig, w);
+	}
+	return 0;
+}
+
+unsigned VerilogWriter::getIndividualConditionArea(const RTLSignal *signal, 
+                                                   int conditionNum) {
+
+    const RTLSignal *driver = signal->getDriver(conditionNum);
+    const RTLSignal *condition = signal->getCondition(conditionNum);
+    assert(driver);
+    unsigned sigWidth = signal->getWidth().numBits(rtl, alloc);
+
+    //bool reg = signal->isReg();
+    //const Instruction *I = signal->getInst(conditionNum);
+
+	// get area of condition
+	unsigned area = 0;
+	area += getValueArea(condition);
+	area += getValueArea(driver, sigWidth);
+
+	return area;
+}
+
+unsigned VerilogWriter::getInstructionAreaFromSignal(const RTLSignal *signal) {
+	Instruction *I = signal->getInst(0);
+	assert(I);
+   	std::string opName = LEGUP_CONFIG->getOpNameFromInst(I, alloc);
+
+	if (opName.empty())
+		return 0;
+
+	Operation *Op = LEGUP_CONFIG->getOperationRef(opName);
+	assert(Op);
+
+	return Op->getLUTs();
+}
+
+bool VerilogWriter::isDivOutputSignal(const RTLSignal *signal) {
+	Instruction *I = signal->getInst(0);
+	if (I == NULL)
+		return false;
+
+	if ((isDiv(I) || isRem(I)) && (!isa<ConstantInt>(I->getOperand(1)))) {
+		return true;
+	}
+	return false;
+}
+
+unsigned VerilogWriter::getSigArea(const RTLSignal *signal) {
+	unsigned sigArea = 0;
+
+	if (signal->getNumDrivers() == 0
+			|| signal == rtl->getUnsynthesizableSignal())
+		return 0;
+
+	if (signal->getName()=="cur_state") {
+		return getFsmArea(signal);
+	} else if (isDivOutputSignal(signal)) {
+		return getInstructionAreaFromSignal(signal);
+	} else {
+		for (unsigned i=0; i<signal->getNumConditions(); ++i) {
+			sigArea += getIndividualConditionArea(signal, i);
+		}
+	}
+
+	return sigArea;
+}
+
+unsigned VerilogWriter::getLimitAreaByPercentage(unsigned areaMarginPercentage) {
+	unsigned totalArea = 0;
+	for (RTLModule::const_signal_iterator i = rtl->signals_begin();
+	                                      i != rtl->signals_end(); ++i) {
+		totalArea += getSigArea(*i);
+	}
+
+	unsigned pMode = LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE");
+	unsigned nPart = LEGUP_CONFIG->getParameterInt("NUMBER_OF_PARTITIONS");
+	assert(nPart>0 || pMode==0);
+	//if (areaMarginPercentage == 0)
+	//	areaMarginPercentage = LEGUP_CONFIG->getParameterInt("PART_AREA_MARGIN_PERCENTAGE");
+	unsigned areaConstraint = totalArea/nPart;
+	unsigned areaMargin = areaConstraint*areaMarginPercentage/100;
+
+	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2) {
+		errs() << "\n\n# DEBUG_TMR=2 - Partition Area Information\n";
+		errs() << "Total Area = " << totalArea << "\n";
+		errs() << "Area Limit = " << areaConstraint + areaMargin << "\n";
+	}
+	return areaConstraint + areaMargin;
+}
+
+bool VerilogWriter::networkFlowPartitionSigs(RTLModule *rtl) {
+	unsigned k = LEGUP_CONFIG->getParameterInt("NUMBER_OF_PARTITIONS");
+	unsigned p = LEGUP_CONFIG->getParameterInt("PART_AREA_MARGIN_PERCENTAGE");
+
+	unsigned n = initSigMap(rtl);
+	if (k<2) {
+		SigPartitions.push_back(sigs);
+		return false;
+	}
+	unsigned inc = 10;
+	unsigned prev_min = 0;
+	unsigned prev_max = 400;
+	bool balancedPartition = false;
+	//unsigned itrCount = 0;
+	unsigned areaLimit = getLimitAreaByPercentage(p);
+
+	SigPartitions.clear();
+	for (VSIG::iterator i=sigs.begin(); i!=sigs.end(); ++i)
+		sigPartState[*i] = PART_UNKNOWN;
+
+	do {
+		setcArea(getLimitAreaByPercentage(p));
+		balancedPartition = networkFlowPartitionSigs(areaLimit, n);
+		if (!balancedPartition) {
+			prev_min = p;
+			p += inc;
+			errs() << " - WARNING: Cannot find balanced Partitions"
+			       << " / force to increase area limit to "<< p << "%\n";
+		} else if (SigPartitions.size()>k) {
+			prev_min = p;
+			p += inc;
+			errs() << " - WARNING: Number of Partitions: " << SigPartitions.size()
+			       << " (expected = " << k << ")"
+			       << " / force to increase area limit to "<< p << "%\n";
+		} else if (SigPartitions.size()<k) {
+			prev_max = p;
+			p -= inc;
+			errs() << " - WARNING: Number of Partitions: " << SigPartitions.size()
+			       << " (expected = " << k << ")"
+			       << " / force to decrease area limit to "<< p << "%\n";
+		}
+		// It may exceed 100 when voter area is relatively larger than module
+		// area
+		assert(p<=400);
+		//assert(itrCount++<100);
+		assert(prev_min < p && prev_max > p);
+	} while (SigPartitions.size()!=k || !balancedPartition);
+	return true;
+}
+
+bool VerilogWriter::networkFlowPartitionSigs(unsigned areaLimit, int n) {
+	int capacity[MAX_NODE][MAX_NODE];
+	int flow[MAX_NODE][MAX_NODE];
+
+	//SigPartitions.clear();
+	for (VSIG::iterator i=sigs.begin(); i!=sigs.end(); ++i) {
+		if (sigPartState[*i]==PART_S || sigPartState[*i]==PART_T)
+			sigPartState[*i] = PART_UNKNOWN;
+	}
+
+	VSIG p0;
+	VSIG p1;
+
+	int itrCount = 0;
+	const RTLSignal *boundarySig = NULL;
+	bool frontMerge;
+	unsigned v0 = 0;
+	unsigned v1 = 0;
+	do {
+		makeDFGSigGraph(capacity, n);
+		maxFlow(n, 0, n-1, capacity, flow);
+		boundarySig = getBoundarySig(n, capacity, flow, p0, p1, frontMerge, v0, v1, areaLimit);
+		if (boundarySig == NULL) {
+			errs() << "WARNING: not found boundarySig\n";
+			//assert(0);
+			return false;
+		}
+
+		if (isBalanced(p0, p1, v0, v1) /*|| boundarySig == NULL*/) {
+			pushNewSigPartition(p0, PART_S_FINISH);
+			pushNewSigPartition(p1, PART_T_FINISH);
+			break;
+		}
+
+		if (isOversized(p0, p1, v0, v1))
+			return false;
+
+		mergeNodes(frontMerge, boundarySig, p0, p1, v0, v1, areaLimit);
+	} while( itrCount++ < n );
+
+	return true;
+}
+
+void VerilogWriter::mergeNodes(bool frontMerge,
+			                   const RTLSignal *boundarySig, 
+                               VSIG p0, 
+                               VSIG p1,
+			                   unsigned v0, 
+                               unsigned v1,
+	                           unsigned areaLimit) {
+	unsigned cArea = getcArea();
+
+	// merge start and target nodes
+	if (getSigArea(p0,v0)-getSigArea(PART_S_FINISH) < cArea) {
+		//assert(frontMerge);
+		for (VSIG::iterator i=p0.begin(); i!=p0.end(); ++i)
+			if (sigPartState[*i] == PART_UNKNOWN)
+				sigPartState[*i] = PART_S;
+	}
+	if (getSigArea(p1,v1)-getSigArea(PART_T_FINISH) < cArea) {
+		//assert(!frontMerge);
+		for (VSIG::iterator i=p1.begin(); i!=p1.end(); ++i)
+			if (sigPartState[*i] == PART_UNKNOWN)
+				sigPartState[*i] = PART_T;
+	}
+
+	// boundary node merge
+	int bArea = getSigArea(boundarySig);
+	if (isMemOutputSig(boundarySig))
+		bArea += getSigArea(memorySignalPair[boundarySig]);
+	unsigned k = LEGUP_CONFIG->getParameterInt("NUMBER_OF_PARTITIONS");
+	bool check_partitions = (SigPartitions.size()+2<k);
+	if (frontMerge) {
+		if ((getSigArea(PART_S,v0)+bArea > areaLimit) && check_partitions)
+			pushNewSigPartition(PART_S);
+		sigPartState[boundarySig] = PART_S;
+	} else {
+		if ((getSigArea(PART_T,v1)+bArea > areaLimit) && check_partitions)
+			pushNewSigPartition(PART_T);
+		sigPartState[boundarySig] = PART_T;
+	}
+	if (isMemOutputSig(boundarySig))
+		sigPartState[memorySignalPair[boundarySig]] = frontMerge? PART_S : PART_T;
+}
+
+void VerilogWriter::pushNewSigPartition(VSIG v, PART_STATE s) {
+	VSIG pNodes;
+	errs() << "Push partitions " << (s==PART_S_FINISH? "p0" : "p1") << "\n";
+	for (VSIG::iterator i = v.begin(); i != v.end(); ++i) {
+		if (sigPartState[*i] != s) {
+			pNodes.push_back(*i);
+			errs() << "\t(" << getSigArea(*i) << ")" << (*i)->getName() << "\n";
+		}
+	}
+	SigPartitions.push_back(pNodes);
+}
+
+void VerilogWriter::pushNewSigPartition(PART_STATE s) {
+	VSIG pNodes;
+	errs() << "Push partitions " << (s==PART_S? "PART_S" : "PART_T") << "\n";
+	for (VSIG::iterator i = sigs.begin(); i != sigs.end(); ++i) {
+		if (sigPartState[*i] == s) {
+			pNodes.push_back(*i);
+			sigPartState[*i] = (s==PART_S)? PART_S_FINISH : PART_T_FINISH;
+			errs() << "\t(" << getSigArea(*i) << ")" << (*i)->getName() << "\n";
+		}
+	}
+	SigPartitions.push_back(pNodes);
+}
+
+bool VerilogWriter::isBalanced(VSIG p0, VSIG p1, unsigned v0, unsigned v1) {
+	unsigned k = LEGUP_CONFIG->getParameterInt("NUMBER_OF_PARTITIONS");
+	if (SigPartitions.size()+2<k)
+		return false;
+
+	if (getSigArea(p0, v0)-getSigArea(PART_S_FINISH) < getcArea()
+			&& getSigArea(p1, v1)-getSigArea(PART_T_FINISH) < getcArea())
+		return true;
+
+	return false;
+}
+
+bool VerilogWriter::isOversized(VSIG p0, VSIG p1, unsigned v0, unsigned v1) {
+	unsigned k = LEGUP_CONFIG->getParameterInt("NUMBER_OF_PARTITIONS");
+	if ((SigPartitions.size()+2==k)
+			&& getSigArea(p0, v0)-getSigArea(PART_S_FINISH) > getcArea()
+			&& getSigArea(p1, v1)-getSigArea(PART_T_FINISH) > getcArea())
+		return true;
+
+	return false;
+}
+
+unsigned VerilogWriter::getVoterArea(unsigned numberOfCuts) {
+	if (LEGUP_CONFIG->getParameterInt("NO_VOTER_AREA_ESTIMATE"))
+		return 0;
+
+	//FIXME - need to update with board characterization
+	//unsigned voterArea = (numberOfCuts<100)? 0
+	//	: (numberOfCuts<200)? numberOfCuts
+	//	: (numberOfCuts<1000)? numberOfCuts*5
+	//	: numberOfCuts*10;
+	//return voterArea;
+	return numberOfCuts*10;
+}
+
+unsigned VerilogWriter::getSigArea(VSIG slist, unsigned v) {
+	unsigned pArea = getVoterArea(v);
+	for(VSIG::iterator i=slist.begin(); i!=slist.end(); ++i)
+		pArea += getSigArea(*i);
+
+	return pArea;
+}
+
+unsigned VerilogWriter::getSigArea(PART_STATE s, unsigned v) {
+	unsigned area = getVoterArea(v);
+	for (VSIG::iterator i=sigs.begin(); i!=sigs.end(); ++i) {
+		if (sigPartState[*i] == s)
+			area += getSigArea(*i);
+	}
+	return area;
+}
+
+const RTLSignal* VerilogWriter::getBoundarySig(int n, 
+			                                   int capacity[][MAX_NODE], 
+                                               bool visited[],
+                                               bool &frontMerge,
+	                           	               unsigned areaLimit) {
+	unsigned cArea = getcArea();
+	for(int i=0; i<n; i+=3) {
+		//if (visited[i+1] && !visited[i+2]) {
+		//	for (int j=3; j<n-1; j+=3) {
+		//		if (capacity[j][i+1]) {
+		//			const RTLSignal *d = frontMerge? sigMap_R[j] : sigMap_R[i];
+		//			if (sigPartState[d]==PART_UNKNOWN && !isLocalMemSig(d) && !isGlobalMemSig(d)) {
+		//				boundarySig = d;
+		//				break;
+		//			}
+		//		}
+		//	}
+		//}
+		for (int j=0; j<n; j+=3) {
+			if (visited[i] && !visited[j] &&
+					(capacity[i+2][j] || capacity[j+2][i])) {
+				//errs() << sigMap_R[i]->getName() << "->" << sigMap_R[j]->getName() << "\n";
+				if (frontMerge && j!=n-1
+						&& sigPartState[sigMap_R[j]]==PART_UNKNOWN
+						/*&& !isGlobalMemSig(sigMap_R[j])*/) {
+					return sigMap_R[j];
+				} else if (!frontMerge && i!=0
+						&& sigPartState[sigMap_R[i]]==PART_UNKNOWN
+						/*&& !isGlobalMemSig(sigMap_R[i])*/) {
+					return sigMap_R[i];
+				} else if (i!=0 && getSigArea(PART_T)<cArea
+						&& sigPartState[sigMap_R[i]]==PART_UNKNOWN
+						/*&& !isGlobalMemSig(sigMap_R[i])*/) {
+					frontMerge = false;
+					return sigMap_R[i];
+				} else if (j!=n-1 && getSigArea(PART_S)<cArea
+						&& sigPartState[sigMap_R[j]]==PART_UNKNOWN
+						/*&& !isGlobalMemSig(sigMap_R[j])*/) {
+					frontMerge = true;
+					return sigMap_R[j];
+				}
+			}
+		}
+	}
+	return NULL;
+}
+
+const RTLSignal* VerilogWriter::getBoundarySig(int n, 
+			                                   int capacity[][MAX_NODE], 
+                                               int flow[][MAX_NODE],
+			                                   VSIG &p0, 
+                                               VSIG &p1, 
+                                               bool &frontMerge,
+			                                   unsigned &v0, 
+                                               unsigned &v1,
+	                           	               unsigned areaLimit) {
+
+	const RTLSignal* boundarySig = NULL;
+
+	bool visited[MAX_NODE];
+	for(int i=0; i<MAX_NODE; i++)
+		visited[i] = false;
+	dfs(n, capacity, flow, 0, visited);
+
+	//for (VSIG::iterator i = sigs.begin(); i != sigs.end(); ++i) {
+	//	int idx = sigMap[*i];
+	//	if (sigPartState[*i]==PART_S || sigPartState[*i]==PART_S_FINISH)
+	//		visited[idx] = true;
+	//	else if (sigPartState[*i]==PART_T || sigPartState[*i]==PART_T_FINISH)
+	//		visited[idx] = false;
+	//}
+		
+	p0.clear();
+	p1.clear();
+	for (VSIG::iterator i = sigs.begin(); i != sigs.end(); ++i) {
+		int idx = sigMap[*i];
+		if (visited[idx])
+			p0.push_back(*i);
+		else
+			p1.push_back(*i);
+	}
+	//for (VSIG::iterator i = p0.begin(); i != p0.end(); ++i)
+	//	errs() << "[0-" << sigPartState[*i] << "]" << (*i)->getName() << "\n";
+	//for (VSIG::iterator i = p1.begin(); i != p1.end(); ++i)
+	//	errs() << "[1-" << sigPartState[*i] << "]" << (*i)->getName() << "\n";
+
+	int minCut = 0;
+	v0 = 0;
+	v1 = 0;
+	for(int i=0; i<n; i+=3) {
+		if ((visited[i+1] && !visited[i+2]) /* && capacity[i+1][i+2]!=INF*/) {
+			minCut++;
+			//errs() << "cut(" << !visited[i] << ")" << sigMap_R[i]->getName() << "\n";
+			if (visited[i])
+				v0 += capacity[i+1][i+2];
+			else
+				v1 += capacity[i+1][i+2];
+		}
+	}
+	fprintf(stderr, "  %4d / %4d | %4d / %4d | %4d | %4d / %4d | mincut=%2d, v0=%2d, v1=%2d\n",
+			getSigArea(PART_S_FINISH), getSigArea(PART_T_FINISH),
+			getSigArea(PART_S), getSigArea(PART_T),
+			getSigArea(PART_UNKNOWN), 
+			getSigArea(p0), getSigArea(p1), minCut, v0, v1);
+
+	frontMerge = getSigArea(p0)-getSigArea(PART_S_FINISH) < getSigArea(p1)-getSigArea(PART_T_FINISH);
+	boundarySig = getBoundarySig(n, capacity, visited, frontMerge, areaLimit);
+	//if (boundarySig) {
+	//	errs() << "- " << boundarySig->getName() << "\n";
+	//}
+
+	//Select min-area boundaryBB from the out of min-cut list
+	if (boundarySig == NULL) {
+		const RTLSignal *pred = NULL;
+		const RTLSignal *succ = NULL;
+		//if (p0.size()>1) {
+		//	errs() << "-p0-------------------------------\n";
+		//	for(VSIG::iterator i = p0.begin(); i != p0.end(); ++i) {
+		//		errs() << "[0]" << (*i)->getName() << " / " << sigPartState[*i] << "\n";
+		//		if (sigPartState[*i] == PART_UNKNOWN && sigMap[*i]!=0) {
+		//			if (!isLocalMemOutputSig(*i) && !isGlobalMemSig(*i))
+		//				pred = *i;
+		//		}
+		//	}
+		//}
+		//if (p1.size()>1) {
+		//	errs() << "-p1-------------------------------\n";
+		//	for (VSIG::iterator i = p1.begin(); i != p1.end(); ++i) {
+		//		errs() << "[1]" << (*i)->getName() << " / " << sigPartState[*i] << "\n";
+		//		if (sigPartState[*i] == PART_UNKNOWN && sigMap[*i]!=n-1) {
+		//			if (!isLocalMemOutputSig(*i) && !isGlobalMemSig(*i))
+		//				succ = *i;
+		//		}
+		//	}
+		//}
+
+		if (frontMerge && succ!=NULL) {
+			boundarySig = succ;
+		} else if (!frontMerge && pred!=NULL) {
+			boundarySig = pred;
+		} else if (succ) {
+			frontMerge = true;
+			boundarySig = succ;
+		} else if (pred) {
+			frontMerge = false;
+			boundarySig = pred;
+		}
+		//if (boundarySig) {
+		//	errs() << "- " << boundarySig->getName() << "\n";
+		//	assert(0);
+		//}
+	}
+
+	return boundarySig;
+}
+
+void VerilogWriter::makeDFGSigGraph(int capacity[][MAX_NODE], int n) {
+	for(int i=0; i<n; i++)
+		for(int j=0; j<n; j++)
+			capacity[i][j] = 0;
+
+	// make INF path within merged nodes
+	for (VSIG::iterator i = sigs.begin(); i != sigs.end(); ++i) {
+		int sigIdx = sigMap[*i];
+		int state = sigPartState[*i];
+		if (state==PART_S || state==PART_S_FINISH /*|| isGlobalMemSig(*i)*/) {
+			capacity[0][sigIdx] = INF;
+			//capacity[sigIdx][0] = INF;
+		} else if (state==PART_T || state==PART_T_FINISH) {
+			capacity[sigIdx][n-1] = INF;
+			//capacity[n-1][sigIdx] = INF;
+		}
+	}
+
+	// connectSigs
+	for (VSIG::iterator i = sigs.begin(); i != sigs.end(); ++i) {
+		connectDFGSig(capacity, *i, n-1);
+	}
+
+	//errs() << "----------------------------------\n";
+	//for(int i=0; i<n; i+=3) {
+	//	for(int j=0; j<n; j+=3) {
+	//		if (capacity[i][j])
+	//			errs() << sigMap_R[i]->getName() << "->" << sigMap_R[j]->getName() << "\n";
+	//	}
+	//}
+
+	//dumpNF(capacity, n);
+	assert(n<MAX_NODE);
+}
+
+const RTLModule *VerilogWriter::getInstanceModuleFromOutputSignal(const RTLSignal *signal) {
+   	for (RTLModule::const_module_iterator m = rtl->instances_begin();
+   		                                  m != rtl->instances_end(); ++m) {
+   		for (RTLModule::const_signal_iterator p = (*m)->port_begin();
+   		                                      p != (*m)->port_end(); ++p) {
+			if ((*p)->getType()=="output" &&
+					(*p)->getDriver(0)->getName() == signal->getName()) {
+				return *m;
+			}
+		}
+	}
+	return NULL;
+}
+
+RAM *VerilogWriter::getRamFromOutputSignal(const RTLSignal *signal) {
+    for (Allocation::const_ram_iterator i = alloc->ram_begin(),
+                                        e = alloc->ram_end();
+                                        i != e; ++i) {
+        RAM *R = *i;
+		std::string name = (R->getScope()==RAM::GLOBAL)? "memory_controller" : R->getName();
+		std::string out_a = name + "_out_a";
+		std::string out_b = name + "_out_b";
+		if (signal->getName()==out_a || signal->getName()==out_b) {
+			return R;
+		}
+	}
+	return NULL;
+}
+
+void VerilogWriter::connectDFGSig(int capacity[][MAX_NODE], const RTLSignal *sig, int t) {
+	int idx = sigMap[sig];
+    unsigned sigWidth = !LEGUP_CONFIG->getParameterInt("PARTITION_WITH_DATA_WIDTH")? 1
+	                  : sig->getWidth().numBits(rtl, alloc);
+	capacity[idx+1][idx+2] = sigWidth;
+	capacity[idx][idx+1] = INF;
+	capacity[idx+2][idx] = INF;
+
+	VSIG V;
+	getSensitiveList(V, sig);
+	// Connect instance's (i.e. memory and divider) output port to input port
+	if (const RTLModule *m = getInstanceModuleFromOutputSignal(sig)) {
+		getSensitiveList(V, m);
+	}
+
+	//add sensitiveList for the memory instances
+	if (RAM *R = getRamFromOutputSignal(sig)) {
+		getSensitiveList(V, R);
+
+		RTLModule *mod = const_cast<RTLModule*>(rtl);
+		if (R->getScope()==RAM::GLOBAL) {
+        	const char* portNames[2] = { "a", "b" };
+        	std::vector<std::string> ports(portNames, portNames + 2);
+        	for (std::vector<std::string>::iterator p = ports.begin(), pe =
+        	        ports.end(); p != pe; ++p) {
+        	    std::string port = *p;
+
+				const char* wireNames[5] = { "_address_",
+        	                                 "_enable_",
+        	                                 "_size_",
+				                             "_write_enable_",
+				                             "_in_" };
+        		std::vector<std::string> wires(wireNames, wireNames + 5);
+        		for (std::vector<std::string>::iterator w = wires.begin(), we =
+        		        wires.end(); w != we; ++w) {
+        		    std::string wire = "memory_controller" + *w + port;
+					RTLSignal *sig_d = mod->find(wire);
+					if (sig_d) {
+						int d = sigMap[sig_d];
+						int idx = sigMap[sig];
+						capacity[d+2][idx] = INF;
+						capacity[idx][d+1] = INF;
+					}
+				}
+			}
+		} else {
+        	const char* portNames[2] = { "a", "b" };
+        	std::vector<std::string> ports(portNames, portNames + 2);
+        	for (std::vector<std::string>::iterator p = ports.begin(), pe =
+        	        ports.end(); p != pe; ++p) {
+        	    std::string port = *p;
+
+				const char* wireNames[3] = { "_address_",
+				                             "_write_enable_",
+				                             "_in_" };
+        		std::vector<std::string> wires(wireNames, wireNames + 3);
+        		for (std::vector<std::string>::iterator w = wires.begin(), we =
+        		        wires.end(); w != we; ++w) {
+        		    std::string wire = R->getName() + *w + port;
+					RTLSignal *sig_d = mod->find(wire);
+					if (sig_d) {
+						int d = sigMap[sig_d];
+						int idx = sigMap[sig];
+						capacity[d+2][idx] = INF;
+						capacity[idx][d+1] = INF;
+					}
+				}
+			}
+		}
+
+		//dual port output coupling
+		std::string name = (R->getScope()==RAM::GLOBAL)? "memory_controller" : R->getName();
+		std::string out_a = name + "_out_a";
+		std::string out_b = name + "_out_b";
+		const RTLSignal *sig_a = mod->find(out_a);
+		const RTLSignal *sig_b = mod->find(out_b);
+		//int idx_a = sigMap[sig_a];
+		//int idx_b = sigMap[sig_b];
+		//capacity[idx_a][idx_b] = INF;
+		//capacity[idx_b][idx_a] = INF;
+		memorySignalPair[sig_a] = sig_b;
+		memorySignalPair[sig_b] = sig_a;
+	}
+
+	for (VSIG::iterator i = V.begin(); i != V.end(); ++i) {
+		//skip FSM connections because "cur_state" reg is connected to all
+		//registers and it prevents to find true data dependency
+		if ((*i)->getName()=="cur_state")
+			continue;
+		int d = sigMap[*i];
+		capacity[d+2][idx] = INF;
+		capacity[idx][d+1] = INF;
+		//errs() << sig->getName() << "<-" << (*i)->getName() << "\n";
+	}
+}
+
+void VerilogWriter::makeBBModuleWithSigPartitions(RTLModule *rtl) {
+	if (SigPartitions.empty())
+		return;
+
+	int partNumber = 0;
+	for (std::vector<VSIG>::iterator p = SigPartitions.begin();
+	                                 p != SigPartitions.end(); ++p) {
+		std::string bbModuleName = "BB_" + rtl->getName()
+		                         + "_" + std::to_string(partNumber);
+		RTLBBModule *bbm = new RTLBBModule(bbModuleName, partNumber);
+       	for (VSIG::iterator i = (*p).begin(); i != (*p).end(); ++i) {
+			if ((*i)->getName()=="start")
+				continue;
+			bbm->add_signal(const_cast<RTLSignal*>(*i));
+		}
+		rtl->bbModules.push_back(bbm);
+		partNumber++;
+	}
+}
+
+void VerilogWriter::updatePartVoterSignals(RTLModule *rtl) {
+	MSIG sigPartId;
+	unsigned partId = 0;
+
+	//make partition ID
+	for (std::vector<VSIG>::iterator p = SigPartitions.begin();
+	                                 p != SigPartitions.end(); ++p) {
+       	for (VSIG::iterator i = (*p).begin(); i != (*p).end(); ++i) {
+			sigPartId[*i] = partId;
+		}
+		partId++;
+	}
+	unsigned k = LEGUP_CONFIG->getParameterInt("NUMBER_OF_PARTITIONS");
+	assert(partId==k);
+
+	//dependency check and setVoter()
+	for (VSIG::iterator s=sigs.begin(); s!=sigs.end(); ++s) {
+		VSIG V;
+		getSensitiveList(V, *s);
+		for (VSIG::iterator i = V.begin(); i != V.end(); ++i) {
+			RTLSignal *d = const_cast<RTLSignal*>(*i);
+			if (sigPartId[*s] != sigPartId[d])
+				d->setVoter(RTLSignal::PART_VOTER);
+		}
+	}
+}
+
 void VerilogWriter::printTop(const Function *F) {
 
+	RTLModule *rtlMain;
    	for (Allocation::const_rtl_iterator i = alloc->rtl_begin(),
    	                                    e = alloc->rtl_end();
    	                                    i != e; ++i) {
 		if ((*i)->getName()=="main") {
    			this->rtl = *i;
+			rtlMain = *i;
 			break;
 		}
    	}
+	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==6) {
+		networkFlowPartitionSigs(rtlMain);
+		updatePartVoterSignals(rtlMain);
+		makeBBModuleWithSigPartitions(rtlMain);
+	}
 	initBBModules();
 
     for (Allocation::const_define_iterator i = alloc->define_begin(),
@@ -6855,7 +7724,9 @@ bool VerilogWriter::isTmrVoterSignal(const RTLSignal* sig) {
 	if (!LEGUP_CONFIG->getParameterInt("SEQUENTIAL_PART_VOTER"))
 		isReg = !isReg;
 
- 	if (isMemOutputSig(sig))
+ 	if (isLocalMemOutputSig(sig))
+		return true;
+ 	if (isGlobalMemOutputSig(sig))
 		return true;
 	if (sig->getName()=="cur_state")
 		return true;
@@ -7043,7 +7914,7 @@ void VerilogWriter::printModuleHeader() {
 		//		name = "next_state";
 		//	if (isTmrVoterSignal(*i)) {
 		//		Out << "output ";
-		//		//if (!isMemOutputSig(*i))
+		//		//if (!isLocalMemOutputSig(*i))
 		//		if (name == "next_state")
 		//			Out << "reg ";
     	//		Out << (*i)->getWidth().str() << " ";
@@ -7078,12 +7949,12 @@ void VerilogWriter::printModuleHeader() {
 		if (moduleName=="main_tb") {
    	    	printDeclaration(*i, true);
    	   		Out << "\n";
-		} else if (isBBModuleSig(*i) || isTmrVoterSignal(*i) || !isMemInputSig(*i)) {
+		} else if (isBBModuleSig(*i) || isTmrVoterSignal(*i) || !isLocalMemInputSig(*i)) {
 			Out << "wire " << (*i)->getWidth().str() << " "
 			    << (*i)->getName() << ";\n";
 			//if (extractPV && (*i)->getName()=="cur_state")
 			//	Out << "wire " << (*i)->getWidth().str() << " next_state;\n";
-		//} else if (!isMemInputSig(*i)) {
+		//} else if (!isLocalMemInputSig(*i)) {
    	    //	printDeclaration(*i);
    	   	//	Out << "\n";
 		}
@@ -7093,64 +7964,64 @@ void VerilogWriter::printModuleHeader() {
    	//for (RTLModule::const_signal_iterator i = rtl->signals_begin(),
    	//   	                                  e = rtl->signals_end();
    	//                                      i != e; ++i) {
-	//	if (!isBBModuleSig(*i) && !isTmrVoterSignal(*i) && !isMemInputSig(*i)) {
+	//	if (!isBBModuleSig(*i) && !isTmrVoterSignal(*i) && !isLocalMemInputSig(*i)) {
    	//    	printSignal(*i);
 	//	}
 	//}
 	Out << "\n";
 }
 
-bool VerilogWriter::isLocalMemSignal(const RTLSignal *signal, bool checkOutSig) {
-	//FIXME
-    //for (unsigned i = 0; i < signal->getNumConditions(); ++i) {
-    //    const Instruction *I = signal->getInst(i);
-	//	if(checkOutSig) {
-	//		if (isa<LoadInst>(I)) {
-	//			RAM *R = alloc->getLocalRamFromInst(I);
-	//			if (R && R->getScope()==RAM::LOCAL) {
-	//				std::string outNameA = R->getName() + "_out_a";
-	//				std::string outNameB = R->getName() + "_out_b";
-	//				std::string sigName = signal->getName();
-	//				if (sigName == outNameA || sigName == outNameB)
-	//					return true;
-	//			}
-	//		}
-	//	} else {
-	//		if (isa<StoreInst>(I)) {
-	//			RAM *R = alloc->getLocalRamFromInst(I);
-	//			if (R && R->getScope()==RAM::LOCAL)
-	//				return true;
-	//		}
-	//	}
-    //}
-	for (Allocation::const_ram_iterator i = alloc->ram_begin();
-	        i != alloc->ram_end(); ++i) {
-		const RAM *R = *i;
-		if (R->getScope() == RAM::GLOBAL)
-			continue;
-
-		//if (!R->getDependence())
-		//	continue;
-
-		const char* portInNames[6] = { "_address_a", "_address_b",
-		                             "_write_enable_a", "_write_enable_b",
-		                             "_in_a", "_in_b" };
-		const char* portOutNames[2] = { "_out_a", "_out_b" };
-        std::vector<std::string> portsIn(portInNames, portInNames+6);
-        std::vector<std::string> portsOut(portOutNames, portOutNames+2);
-
-		std::vector<std::string> *ports = (checkOutSig)? &portsOut : &portsIn;
-        for (std::vector<std::string>::iterator p = ports->begin(), pe =
-                ports->end(); p != pe; ++p) {
-            std::string strPort = *p;
-			std::string name = R->getName() + strPort;
-			if (signal->getName() == name)
-				return true;
-		}
-	}
-
-	return false;
-}
+//bool VerilogWriter::isLocalMemSignal(const RTLSignal *signal, bool checkOutSig) {
+//	//FIXME
+//    //for (unsigned i = 0; i < signal->getNumConditions(); ++i) {
+//    //    const Instruction *I = signal->getInst(i);
+//	//	if(checkOutSig) {
+//	//		if (isa<LoadInst>(I)) {
+//	//			RAM *R = alloc->getLocalRamFromInst(I);
+//	//			if (R && R->getScope()==RAM::LOCAL) {
+//	//				std::string outNameA = R->getName() + "_out_a";
+//	//				std::string outNameB = R->getName() + "_out_b";
+//	//				std::string sigName = signal->getName();
+//	//				if (sigName == outNameA || sigName == outNameB)
+//	//					return true;
+//	//			}
+//	//		}
+//	//	} else {
+//	//		if (isa<StoreInst>(I)) {
+//	//			RAM *R = alloc->getLocalRamFromInst(I);
+//	//			if (R && R->getScope()==RAM::LOCAL)
+//	//				return true;
+//	//		}
+//	//	}
+//    //}
+//	for (Allocation::const_ram_iterator i = alloc->ram_begin();
+//	        i != alloc->ram_end(); ++i) {
+//		const RAM *R = *i;
+//		if (R->getScope() == RAM::GLOBAL)
+//			continue;
+//
+//		//if (!R->getDependence())
+//		//	continue;
+//
+//		const char* portInNames[6] = { "_address_a", "_address_b",
+//		                             "_write_enable_a", "_write_enable_b",
+//		                             "_in_a", "_in_b" };
+//		const char* portOutNames[2] = { "_out_a", "_out_b" };
+//        std::vector<std::string> portsIn(portInNames, portInNames+6);
+//        std::vector<std::string> portsOut(portOutNames, portOutNames+2);
+//
+//		std::vector<std::string> *ports = (checkOutSig)? &portsOut : &portsIn;
+//        for (std::vector<std::string>::iterator p = ports->begin(), pe =
+//                ports->end(); p != pe; ++p) {
+//            std::string strPort = *p;
+//			std::string name = R->getName() + strPort;
+//			if (signal->getName() == name)
+//				return true;
+//		}
+//	}
+//
+//	return false;
+//}
 
 bool VerilogWriter::needSyncVoter(const RTLSignal *signal) {
 	bool isReg = signal->isReg();
@@ -7239,19 +8110,24 @@ void VerilogWriter::printDeclaration(const RTLSignal *signal, bool testBench) {
 	}
 
     if (!type.empty()) {
-		if (isBBModuleSig(signal) && !isTmrVoterSignal(signal) && !isMemInputSig(signal)) {
-			//if (isGlobalMemInputSig(signal))
-				Out << "reg ";
-			//else
-			//	Out << "wire ";
+		//if (isBBModuleSig(signal) && !isTmrVoterSignal(signal) && !isLocalMemInputSig(signal)) {
+		//	//if (isGlobalMemSig(signal))
+		//		Out << "reg ";
+		//	//else
+		//	//	Out << "wire ";
+		if (!isTmr && isGlobalMemSig(signal)) {
+			Out << "reg ";
         } else if (type == "wire" &&
             (signal->getNumConditions() != 0 ||
 			 signal->getNumDrivers() != 0 ||
-		     (isTmr && !noVoter && isMemSig(signal))) ) {
+		     (isTmr && !noVoter && isLocalMemSig(signal))) ) {
             Out << "reg ";
         } else if (type == "output" && (signal->getNumConditions() != 0 ||
                                         signal->getNumDrivers() != 0)) {
-            Out << "output reg ";
+			if (isTmr && !noVoter && isGlobalMemSig(signal))
+				Out << "reg ";
+			else
+            	Out << "output reg ";
         } else {
             Out << type << " ";
         }
@@ -7261,7 +8137,7 @@ void VerilogWriter::printDeclaration(const RTLSignal *signal, bool testBench) {
 	if (LEGUP_CONFIG->getParameterInt("TMR") && !noVoter
 			&& (name.find("memory_controller_out_")!=std::string::npos)) {
 		//	&& (type=="output" || type=="input" || type=="output reg")) {
-		//if (isMemSig(signal)) {
+		//if (isLocalMemSig(signal)) {
     		Out << name << "_r0, ";
     		Out << name << "_r1, ";
     		Out << name << "_r2";
@@ -7412,26 +8288,51 @@ bool VerilogWriter::isModuleOutputSig(const RTLSignal *sig) {
 }
 
 bool VerilogWriter::isMemSig(const RTLSignal *sig) {
-	if (isMemInputSig(sig) || isMemOutputSig(sig))
-		return true;
+	return (isLocalMemSig(sig) || isGlobalMemSig(sig));
+}
+
+bool VerilogWriter::isMemOutputSig(const RTLSignal *sig) {
+	return (isLocalMemOutputSig(sig) || isGlobalMemOutputSig(sig));
+}
+
+bool VerilogWriter::isMemInputSig(const RTLSignal *sig) {
+	return (isLocalMemInputSig(sig) || isGlobalMemInputSig(sig));
+}
+
+bool VerilogWriter::isLocalMemSig(const RTLSignal *sig) {
+	return (isLocalMemInputSig(sig) || isLocalMemOutputSig(sig));
+}
+
+bool VerilogWriter::isGlobalMemSig(const RTLSignal *sig) {
+	return (isGlobalMemOutputSig(sig) || isGlobalMemInputSig(sig));
+}
+
+bool VerilogWriter::isGlobalMemOutputSig(const RTLSignal *sig) {
+	if (sig->getName()=="memory_controller_out_a") return true;
+	if (sig->getName()=="memory_controller_out_b") return true;
 	return false;
 }
 
 bool VerilogWriter::isGlobalMemInputSig(const RTLSignal *sig) {
-	if (sig->getName().find("memory_controller_") != std::string::npos)
-		return true;
+	std::string name = sig->getName();
+	std::string rName = "memory_controller";
+	if (name.find(rName+"_enable_") != std::string::npos) return true;
+	if (name.find(rName+"_size_") != std::string::npos) return true;
+	if (name.find(rName+"_address_") != std::string::npos) return true;
+	if (name.find(rName+"_write_enable_") != std::string::npos) return true;
+	if (name.find(rName+"_in_") != std::string::npos) return true;
 	return false;
 }
 
-bool VerilogWriter::isMemInputSig(const RTLSignal *sig) {
+bool VerilogWriter::isLocalMemInputSig(const RTLSignal *sig) {
 	std::string name = sig->getName();
 	for (RTLModule::const_ram_iterator i = rtl->local_ram_begin(),
 	                                   e = rtl->local_ram_end();
 	                                   i != e; ++i) {
 	    RAM *R = *i;
 		std::string rName = R->getName();
-		if (name.find(rName+"_enable_") != std::string::npos) return true;
-		if (name.find(rName+"_size_") != std::string::npos) return true;
+		//if (name.find(rName+"_enable_") != std::string::npos) return true;
+		//if (name.find(rName+"_size_") != std::string::npos) return true;
 		if (name.find(rName+"_address_") != std::string::npos) return true;
 		if (name.find(rName+"_write_enable_") != std::string::npos) return true;
 		if (name.find(rName+"_in_") != std::string::npos) return true;
@@ -7439,7 +8340,7 @@ bool VerilogWriter::isMemInputSig(const RTLSignal *sig) {
 	return false;
 }
 
-bool VerilogWriter::isMemOutputSig(const RTLSignal *sig) {
+bool VerilogWriter::isLocalMemOutputSig(const RTLSignal *sig) {
 	std::string name = sig->getName();
 	for (RTLModule::const_ram_iterator i = rtl->local_ram_begin(),
 	                                   e = rtl->local_ram_end();
@@ -7479,7 +8380,7 @@ bool VerilogWriter::isBBModuleSig(const RTLSignal *sig) {
 	}
 	return false;
 	//if (sig->getName()=="cur_state"
-	//		|| isMemInputSig(sig))
+	//		|| isLocalMemInputSig(sig))
 	//	return false;
 	//return true;
 }
@@ -7488,32 +8389,32 @@ bool VerilogWriter::isTopModuleSig(const RTLSignal *sig) {
     for (RTLModule::const_signal_iterator i = rtl->port_begin(),
                                           e = rtl->port_end();
                                           i != e; ++i) {
-        if ((*i)->getName() == sig->getName() && !isMemSig(sig))
+        if ((*i)->getName() == sig->getName() && !isLocalMemSig(sig))
 			return true;
 	}
 	return false;
 }
 
-bool VerilogWriter::isLocalMemOutputSig(const RTLSignal *sig) {
-	std::string name = sig->getName();
-	bool isDepRam = true;//false;
-    //for (unsigned i = 0; i < sig->getNumConditions(); ++i) {
-	//	const Instruction *I = sig->getInst(i);
-	//	if (!I) continue;
-	//	if (isa<LoadInst>(I) || isa<StoreInst>(I)) {
-	//		RAM *R = alloc->getLocalRamFromInst(const_cast<Instruction*>(I));
-	//		if (R && R->getDependence())
-	//			isDepRam = true;
-	//	}
-	//}
-
-	if (name.find("_out_") != std::string::npos
-			&& name.find("memory_controller") == std::string::npos
-			&& isDepRam)
-		return true;
-
-	return false;
-}
+//bool VerilogWriter::isLocalMemOutputSig(const RTLSignal *sig) {
+//	std::string name = sig->getName();
+//	bool isDepRam = true;//false;
+//    //for (unsigned i = 0; i < sig->getNumConditions(); ++i) {
+//	//	const Instruction *I = sig->getInst(i);
+//	//	if (!I) continue;
+//	//	if (isa<LoadInst>(I) || isa<StoreInst>(I)) {
+//	//		RAM *R = alloc->getLocalRamFromInst(const_cast<Instruction*>(I));
+//	//		if (R && R->getDependence())
+//	//			isDepRam = true;
+//	//	}
+//	//}
+//
+//	if (name.find("_out_") != std::string::npos
+//			&& name.find("memory_controller") == std::string::npos
+//			&& isDepRam)
+//		return true;
+//
+//	return false;
+//}
 
 bool VerilogWriter::isPartVoter(const RTLSignal* sig) {
 	bool isReg = false;
@@ -7596,9 +8497,13 @@ void VerilogWriter::printBBModuleInstance(RTLBBModule *bbm) {
 	Out << ",\n\t.memory_controller_waitrequest( memory_controller_waitrequest )";
 	//Out << "\t.start( start ),\n";
 	
+	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")!=6) {
 	std::string bbCtrl = getParameterInt("SEPERATE_BB_CTRL")? 
 	                   "BB_" + rtl->getName() + "_CTRL" : "BB_" + rtl->getName() + "_0";
-    if (!noSharedMemoryController() && name==bbCtrl && isTmr) {
+	bool printMemCtrl = (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==6)?
+	                    getMemoryControllerPartID() == bbm->getPartID()
+	                  : bbm->getName()==bbCtrl;
+    if (!noSharedMemoryController() && printMemCtrl && isTmr) {
 		Out << ",\n\t.memory_controller_out_a( memory_controller_out_a )";
 		Out << ",\n\t.memory_controller_out_b( memory_controller_out_b )";
 		if (!noVoter) {
@@ -7612,6 +8517,7 @@ void VerilogWriter::printBBModuleInstance(RTLBBModule *bbm) {
 			Out << ",\n\t.memory_controller_out_b_r2( memory_controller_out_b_r2 )";
 		}
     }
+	}
 	//for (Allocation::const_ram_iterator i = alloc->ram_begin(), e =
 	//        alloc->ram_end(); i != e; ++i) {
 
@@ -7659,7 +8565,7 @@ void VerilogWriter::printBBModuleInstance(RTLBBModule *bbm) {
 	//for (RTLModule::const_signal_iterator i = rtl->signals_begin(),
 	//                                      e = rtl->signals_end();
 	//                                      i != e; ++i) {
-	//	if (isBBModuleSig(*i) || isMemInputSig(*i))
+	//	if (isBBModuleSig(*i) || isLocalMemInputSig(*i))
 	//		continue;
 
 	//	std::string name = (*i)->getName();
@@ -7758,6 +8664,18 @@ void VerilogWriter::printPVoterModuleBody(RTLBBModule *bbm) {
 	Out << "endmodule\n\n";
 }
 
+unsigned VerilogWriter::getMemoryControllerPartID() {
+	for (Allocation::ram_iterator i = alloc->ram_begin(),
+	                              e = alloc->ram_end(); i != e; ++i) {
+	    RAM *R = *i;
+		if (R->getScope() == RAM::GLOBAL) {
+			return R->getPartID();
+		}
+	}
+	return 0;
+}
+	
+
 void VerilogWriter::printBBModuleBody(RTLBBModule *bbm) {
 	if (bbm->empty())
 		return;
@@ -7780,7 +8698,12 @@ void VerilogWriter::printBBModuleBody(RTLBBModule *bbm) {
 	Out << ",\n\tinput reset";
 	Out << ",\n\tinput memory_controller_waitrequest";
 	//Out << "\tinput start,\n";
-    if (!noSharedMemoryController() && bbName==bbCtrl && isTmr) {
+
+	bool printMemCtrl = (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==6)?
+	                    getMemoryControllerPartID() == bbm->getPartID()
+	                  : bbName==bbCtrl;
+    if (!noSharedMemoryController() && printMemCtrl && isTmr
+			&& LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")!=6) {
 		if (!noVoter) {
 			Out << ",\n\tinput [`MEMORY_CONTROLLER_DATA_SIZE-1:0] memory_controller_out_a_r0";
 			Out << ",\n\tinput [`MEMORY_CONTROLLER_DATA_SIZE-1:0] memory_controller_out_a_r1";
@@ -7832,7 +8755,7 @@ void VerilogWriter::printBBModuleBody(RTLBBModule *bbm) {
 	//for (RTLModule::const_signal_iterator i = rtl->signals_begin(),
 	//                                      e = rtl->signals_end();
 	//     i != e; ++i) {
-	//	if (isBBModuleSig(*i) || isMemInputSig(*i))
+	//	if (isBBModuleSig(*i) || isLocalMemInputSig(*i))
 	//		continue;
 
 	//	std::string name = (*i)->getName();
@@ -7899,7 +8822,7 @@ void VerilogWriter::printBBModuleBody(RTLBBModule *bbm) {
 	for (RTLBBModule::signal_iterator i = bbm->signals_begin(),
 	                                  e = bbm->signals_end();
 	                                  i != e; ++i) {
-		if (isMemInputSig(*i) || isGlobalMemInputSig(*i) || 
+		if (/*isLocalMemInputSig(*i) || isGlobalMemSig(*i) || */
 				(!isTmrVoterSignal(*i) && !isPortSig(*i))) {
 	    	printDeclaration(*i);
 	    	Out << "\n";
@@ -7910,7 +8833,7 @@ void VerilogWriter::printBBModuleBody(RTLBBModule *bbm) {
 	}
 	Out << "\n";
 
-    if (!noSharedMemoryController() && bbm->getName()==bbCtrl) {
+    if (!noSharedMemoryController() && printMemCtrl) {
 		if (isTmr) {
 			printTmrVoter("memory_controller_out_a", "0", "`MEMORY_CONTROLLER_DATA_SIZE-1", 0, 0);
 			printTmrVoter("memory_controller_out_b", "0", "`MEMORY_CONTROLLER_DATA_SIZE-1", 0, 0);
@@ -8041,6 +8964,8 @@ void VerilogWriter::printPipelinedVoterStatusSignal(RTLBBModule *bbm) {
 				Out << "\n\t\t| ";
 			Out << name;
 		}
+		if (partVoters.size()==0)
+			Out << "0";
 		Out << ";\n";
 		Out << "end\n\n";
 	//} else if (LEGUP_CONFIG->getParameterInt("EBIT_MODE")==1) {
@@ -8056,6 +8981,8 @@ void VerilogWriter::printPipelinedVoterStatusSignal(RTLBBModule *bbm) {
 				Out << "\n\t\t\t| ";
 			Out << name << "[i]";
 		}
+		if (partVoters.size()==0)
+			Out << "0";
 		Out << ";\n";
 		Out << "\tend\n";
 		Out << "end\n\n";
@@ -8224,15 +9151,15 @@ void VerilogWriter::printControlModuleInstance(const RTLModule *mod,
        			Out << ",\n\t." << name << "_r0(" << name << "_r0)";
        			Out << ",\n\t." << name << "_r1(" << name << "_r1)";
        			Out << ",\n\t." << name << "_r2(" << name << "_r2)";
- 				//if (isMemOutputSig(*i) || name=="next_state")
+ 				//if (isLocalMemOutputSig(*i) || name=="next_state")
  				if (name=="next_state")
        				Out << ",\n\t." << name << "_v(" << name << "_v)";
 			}
-		//} else if (!isMemInputSig(*i)) {
+		//} else if (!isLocalMemInputSig(*i)) {
 		//} else if (isBBModuleSig(*i)) {
 		} else if (findList(sensitiveList, *i)) {
 			Out << ",\n\t." << name << "(" << name << ")";
-		} else if (!isBBModuleSig(*i) && !isMemInputSig(*i)) {
+		} else if (!isBBModuleSig(*i) && !isLocalMemInputSig(*i)) {
 			Out << ",\n\t." << name << "(" << name << ")";
 		}
     }
@@ -8288,13 +9215,13 @@ void VerilogWriter::printControlModuleBody(const RTLModule *mod,
        			Out << ",\n\t" << "input" << width << name << "_r0";
        			Out << ",\n\t" << "input" << width << name << "_r1";
        			Out << ",\n\t" << "input" << width << name << "_r2";
- 				//if (isMemOutputSig(*i)) {
+ 				//if (isLocalMemOutputSig(*i)) {
        			//	Out << ",\n\t" << "output" << width << name << "_v";
 				if (name==" next_state") {
        				Out << ",\n\t" << "output reg" << width << name << "_v";
 				}
 			}
-		} else if (!isBBModuleSig(*i) && !isMemInputSig(*i)) {
+		} else if (!isBBModuleSig(*i) && !isLocalMemInputSig(*i)) {
 			if ((*i)->getNumConditions()!=0 || (*i)->getNumDrivers()!=0)
        			Out << ",\n\t" << "output reg" << width << name;
 			else
@@ -8323,7 +9250,7 @@ void VerilogWriter::printControlModuleBody(const RTLModule *mod,
     for (RTLModule::const_signal_iterator i = mod->signals_begin(),
                                           e = mod->signals_end();
                                           i != e; ++i) {
-		//if (isMemInputSig(*i)) {
+		//if (isLocalMemInputSig(*i)) {
 		//	printDeclaration(*i);
 		//	Out << "\n";
 		if ((*i)->getName()=="cur_state") {
@@ -8394,7 +9321,7 @@ void VerilogWriter::printControlModuleBody(const RTLModule *mod,
 		//	useReplicaNumberForAllVariables = false;
 		//} else
         //	printSignal(*i);
-        //if ((*i)->getName()=="cur_state" || isMemInputSig(*i))
+        //if ((*i)->getName()=="cur_state" || isLocalMemInputSig(*i))
         if (!isBBModuleSig(*i))
 			printSignal(*i);
     }
@@ -8407,7 +9334,7 @@ void VerilogWriter::printControlModuleBody(const RTLModule *mod,
     //	for (RTLModule::const_signal_iterator i = mod->signals_begin(),
     //	                                      e = mod->signals_end();
     //	     i != e; ++i) {
-	//		if (isTmrSig(*i) && !isMemSig(*i))// && !isBBModuleSig(*i))
+	//		if (isTmrSig(*i) && !isLocalMemSig(*i))// && !isBBModuleSig(*i))
 	//			printVoter(*i);
 	//	}
 	//}
@@ -8425,19 +9352,19 @@ void VerilogWriter::printControlModuleBody(const RTLModule *mod,
 	Out << "endmodule\n\n";
 }
 
-void VerilogWriter::addOpToInput(std::vector<const RTLSignal*> &V, RTLOp *op) {
+void VerilogWriter::addOpToInput(std::vector<const RTLSignal*> &V, const RTLOp *op) {
 	for (unsigned j=0; j<op->getNumOperands(); ++j) {
-		RTLSignal *operand = op->getOperand(j);
+		const RTLSignal *operand = op->getOperand(j);
 		addSensitiveListToInput(V, operand);
 	}
 }
 
-void VerilogWriter::addSensitiveListToInput(std::vector<const RTLSignal*> &V, RTLSignal *sig) {
+void VerilogWriter::addSensitiveListToInput(std::vector<const RTLSignal*> &V, const RTLSignal *sig) {
 	if (sig->getName()=="reset" || sig->getName()=="memory_controller_waitrequest")
 		return;
 
 	if (sig->isOp()) {
-		addOpToInput(V, (RTLOp*)sig);
+		addOpToInput(V, (const RTLOp*)sig);
 	} else {
 		if (sig->getValue().empty()) {
 			if (std::find(V.begin(), V.end(), sig)==V.end())
@@ -8446,22 +9373,81 @@ void VerilogWriter::addSensitiveListToInput(std::vector<const RTLSignal*> &V, RT
 	}
 }
 
-void VerilogWriter::getSensitiveList(std::vector<const RTLSignal*> &V, RTLSignal *sig) {
+void VerilogWriter::getSensitiveList(std::vector<const RTLSignal*> &V, RAM *R) {
+	RTLModule *mod = const_cast<RTLModule*>(rtl);
+	std::string name = (R->getScope()==RAM::GLOBAL)? "memory_controller" : R->getName();
+
+	const char* portNames[2] = { "a", "b" };
+	std::vector<std::string> ports(portNames, portNames + 2);
+	for (std::vector<std::string>::iterator p = ports.begin(), pe =
+	        ports.end(); p != pe; ++p) {
+	    std::string port = *p;
+	
+		const char* wireNames[3] = { "_address_",
+		                             "_write_enable_",
+		                             "_in_" };
+		std::vector<std::string> wires(wireNames, wireNames + 3);
+		for (std::vector<std::string>::iterator w = wires.begin(), we =
+		        wires.end(); w != we; ++w) {
+		    std::string wire = name + *w + port;
+			if (mod->exists(wire)) {
+				RTLSignal *sig = mod->find(wire);
+				if (sig) {
+					addSensitiveListToInput(V, sig);
+				}
+			}
+		}
+
+		if (R->getScope()==RAM::LOCAL)
+			continue;
+		const char* wireNamesGlobal[2] = { "_enable_",
+		                                   "_size_" };
+		std::vector<std::string> wiresGlobal(wireNamesGlobal, wireNamesGlobal + 2);
+		for (std::vector<std::string>::iterator w = wiresGlobal.begin(), we =
+		        wiresGlobal.end(); w != we; ++w) {
+		    std::string wire = name + *w + port;
+			if (mod->exists(wire)) {
+				RTLSignal *sig = mod->find(wire);
+				if (sig) {
+					addSensitiveListToInput(V, sig);
+				}
+			}
+		}
+	}
+}
+
+void VerilogWriter::getSensitiveList(std::vector<const RTLSignal*> &V, const RTLModule *mod) {
+	for (RTLModule::const_signal_iterator i = mod->port_begin();
+	                                      i != mod->port_end(); ++i) {
+		if ((*i)->getDriver(0)->getName()=="clk")
+			continue;
+		if ((*i)->getType()=="input")
+			addSensitiveListToInput(V, (*i)->getDriver(0));
+	}
+}
+
+void VerilogWriter::getSensitiveList(std::vector<const RTLSignal*> &V, const RTLSignal *sig) {
 	unsigned numConditions = sig->getNumConditions();
-	//errs() << sig->getName() << "/";
-	//errs() << "cond= " << sig->getNumConditions() << "/";
+	//errs() << sig->getName() << " / ";
+	//errs() << "cond= " << sig->getNumConditions() << " / ";
 	//errs() << "driver= " << sig->getNumDrivers() << "\n";
+
+	//const RTLSignal *defaultDriver = sig->getDefaultDriver();
+	//if (defaultDriver) {
+	//	addSensitiveListToInput(V, defaultDriver);
+	//}
+
 	if (numConditions == 0) { //single driver
 		if (sig->getNumDrivers()==0)
 			return;
-		RTLSignal *driver = sig->getDriver(0);
+		const RTLSignal *driver = sig->getDriver(0);
 		addSensitiveListToInput(V, driver);
 	} else {
 		for (unsigned i=0; i<numConditions; ++i) {
-			RTLSignal *driver = sig->getDriver(i);
+			const RTLSignal *driver = sig->getDriver(i);
 			addSensitiveListToInput(V, driver);
 	
-			RTLSignal *condition = sig->getCondition(i);
+			const RTLSignal *condition = sig->getCondition(i);
 			addSensitiveListToInput(V, condition);
 		}
 	}
@@ -8476,7 +9462,7 @@ void VerilogWriter::getSensitiveList(std::vector<const RTLSignal*> &V) {
    	for (RTLModule::const_signal_iterator i = rtl->signals_begin(),
                                           e = rtl->signals_end();
                                           i != e; ++i) {
-		//if (isMemInputSig(*i) || (*i)->getName()=="cur_state")
+		//if (isLocalMemInputSig(*i) || (*i)->getName()=="cur_state")
 		if (!isBBModuleSig(*i))
 			getSensitiveList(V, *i);
 	}
@@ -8609,8 +9595,9 @@ RTLBBModule* VerilogWriter::findFirstUseBBModule(RAM *R) {
 			LEGUP_CONFIG->getParameterInt("PARTITION_SHARED_RESOURCES")==0)
 		return rtl->bbModules.front();
 
-	std::string token_a = R->getName() + "_out_a";
-	std::string token_b = R->getName() + "_out_b";
+	std::string name = (R->getScope()==RAM::GLOBAL)? "memory_controller" : R->getName();
+	std::string token_a = name + "_out_a";
+	std::string token_b = name + "_out_b";
 
 	std::vector<RTLBBModule *> bbms;
 	for (std::vector<RTLBBModule *>::const_iterator bbm = rtl->bbModules.begin(),
@@ -8620,9 +9607,6 @@ RTLBBModule* VerilogWriter::findFirstUseBBModule(RAM *R) {
 		for (RTLBBModule::const_signal_iterator i = (*bbm)->signals_begin(),
 	                                            e = (*bbm)->signals_end();
 	                                            i != e; ++i) {
-			getSensitiveList(V, *i);
-		}
-		for (std::vector<const RTLSignal*>::iterator i = V.begin(); i != V.end(); ++i) {
 			if ((*i)->getName() == token_a || (*i)->getName() == token_b) {
 				bbms.push_back(*bbm);
 			}
@@ -8645,40 +9629,142 @@ RTLBBModule* VerilogWriter::findFirstUseBBModule(RAM *R) {
 	return rtl->bbModules.front();
 }
 
-void VerilogWriter::initBBModules() {
+void VerilogWriter::getSensitiveList(std::vector<const RTLSignal*> &V, RTLBBModule *bbm) {
 	RTLModule *mod = const_cast<RTLModule*>(rtl);
+	for (RTLBBModule::const_signal_iterator i = bbm->signals_begin(),
+	                                        e = bbm->signals_end();
+	                                        i != e; ++i) {
+		getSensitiveList(V, *i);
+	}
+	for (RTLBBModule::module_iterator m = bbm->modules_begin();
+	                                  m != bbm->modules_end(); ++m) {
+		for (RTLModule::signal_iterator i = (*m)->port_begin(),
+		                                e = (*m)->port_end();
+		                                i != e; ++i) {
+			RTLSignal *d = (*i)->getDriver(0);
+			if (!d->isConst() && d->getName()!="clk"
+					&& d->getName().find("_unused") == std::string::npos) {
+				addSensitiveListToInput(V, d);
+			}
+		}
+	}
+	for (RTLModule::const_ram_iterator i = mod->local_ram_begin(),
+	                                    e = mod->local_ram_end(); i != e; ++i) {
+	    RAM *R = *i;
+		if (R->getPartID() != bbm->getPartID())
+			continue;
+	    std::string name = R->getName();
+	
+	    const char* portNames[2] = { "a", "b" };
+	    std::vector<std::string> ports(portNames, portNames + 2);
+	    for (std::vector<std::string>::iterator p = ports.begin(), pe =
+	            ports.end(); p != pe; ++p) {
+	        std::string port = *p;
+	
+			const char* wireNames[4] = { "_address_",
+			                             "_write_enable_",
+			                             "_in_",
+			                             "_out_" };
+	    	std::vector<std::string> wires(wireNames, wireNames + 4);
+	    	for (std::vector<std::string>::iterator w = wires.begin(), we =
+	    	        wires.end(); w != we; ++w) {
+	    	    std::string wire = name + *w + port;
+				if (mod->exists(wire)) {
+					RTLSignal *sig = mod->find(wire);
+					if (sig) {
+						addSensitiveListToInput(V, sig);
+					}
+				}
+			}
+		}
+	}
+	if (getMemoryControllerPartID()==bbm->getPartID()) {
+	    std::string name = "memory_controller";
+	
+	    const char* portNames[2] = { "a", "b" };
+	    std::vector<std::string> ports(portNames, portNames + 2);
+	    for (std::vector<std::string>::iterator p = ports.begin(), pe =
+	            ports.end(); p != pe; ++p) {
+	        std::string port = *p;
+	
+			const char* wireNames[6] = { "_address_",
+			                             "_write_enable_",
+			                             "_enable_",
+			                             "_size_",
+			                             "_in_",
+			                             "_out_" };
+	    	std::vector<std::string> wires(wireNames, wireNames + 6);
+	    	for (std::vector<std::string>::iterator w = wires.begin(), we =
+	    	        wires.end(); w != we; ++w) {
+	    	    std::string wire = name + *w + port;
+				if (mod->exists(wire)) {
+					RTLSignal *sig = mod->find(wire);
+					if (sig) {
+						addSensitiveListToInput(V, sig);
+					}
+				}
+			}
+		}
+	}
+}
 
-	// insert memory signal to the related partitions
+RTLBBModule *VerilogWriter::getBBModule(const Instruction *instr) {
+	if (rtl->bbModules.size()==0)
+		return NULL;
+
+	for (std::vector<RTLBBModule *>::const_iterator bbm = rtl->bbModules.begin(),
+	                                                bbme = rtl->bbModules.end();
+	                                                bbm != bbme; ++bbm) {
+		for (RTLBBModule::const_instr_iterator i = (*bbm)->instructions_begin();
+		                                       i != (*bbm)->instructions_end(); ++i) {
+			if (*i == instr)
+				return *bbm;
+		}
+	}
+	//assert(0 && "bbm not found");
+	return NULL;//rtl->bbModules.front();
+}
+
+void VerilogWriter::initBBModules() {
+	//RTLModule *mod = const_cast<RTLModule*>(rtl);
+
+	int pMode = LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE");
+
+	if (pMode<=5) {
+		// memory signal to the related partitions
+		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+			errs() <<  "\n\n# DEBUG_TMR=2 - Memory signal grouping\n";
+   		for (RTLModule::const_signal_iterator i = rtl->signals_begin(),
+    	  	                                  e = rtl->signals_end();
+    	                                      i != e; ++i) {
+			if (isLocalMemSig(*i)) {
+				RTLBBModule *bbm = ((*i)->getNumConditions() && pMode!=0)?
+				                   getBBModule((*i)->getInst(0))
+					             : findFirstUseBBModule(*i);
+				bbm->add_signal(*i);
+			}
+		}
+	}
+
+	// add memory
 	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
 		errs() <<  "\n\n# DEBUG_TMR=2 - Memory grouping\n";
     for (Allocation::ram_iterator i = alloc->ram_begin(),
 	                              e = alloc->ram_end(); i != e; ++i) {
         RAM *R = *i;
-        std::string name = R->getName();
+        //std::string name = R->getName();
 		RTLBBModule *bbm = findFirstUseBBModule(R);
 		R->setPartID( bbm->getPartID() );
+	}
 
-        const char* portNames[2] = { "a", "b" };
-        std::vector<std::string> ports(portNames, portNames + 2);
-        for (std::vector<std::string>::iterator p = ports.begin(), pe =
-                ports.end(); p != pe; ++p) {
-            std::string port = *p;
-
-			const char* wireNames[4] = { "_address_",
-			                             "_write_enable_",
-			                             "_in_",
-			                             "_out_" };
-        	std::vector<std::string> wires(wireNames, wireNames + 4);
-        	for (std::vector<std::string>::iterator w = wires.begin(), we =
-        	        wires.end(); w != we; ++w) {
-        	    std::string wire = name + *w + port;
-				if (mod->exists(wire)) {
-					RTLSignal *sig = mod->find(wire);
-					if (sig) {
-						bbm->add_signal(sig);
-					}
-				}
-			}
+	// add instances
+	if (pMode>=6 || pMode==0) {
+		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+			errs() <<  "\n\n# DEBUG_TMR=2 - Module grouping\n";
+   		for (RTLModule::const_module_iterator i = rtl->instances_begin();
+   			                                  i != rtl->instances_end(); ++i) {
+			RTLBBModule *bbm = findFirstUseBBModule(*i);
+			bbm->add_module(*i);
 		}
 	}
 
@@ -8688,36 +9774,33 @@ void VerilogWriter::initBBModules() {
    	for (RTLModule::const_signal_iterator i = rtl->signals_begin(),
       	                                  e = rtl->signals_end();
                                           i != e; ++i) {
-		if (!isBBModuleSig(*i) && !isMemInputSig(*i)) {
+		if (skipSig(*i))
+			continue;
+		if (!isBBModuleSig(*i) && !isLocalMemInputSig(*i)) {
 			RTLBBModule *bbm = findFirstUseBBModule(*i);
 			bbm->add_signal(*i);
 		}
 	}
 
 	// add port drive signals
-	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
-		errs() <<  "\n\n# DEBUG_TMR=2 - Port signal grouping\n";
-    for (RTLModule::const_signal_iterator i = rtl->port_begin(),
-                                          e = rtl->port_end();
-                                          i != e; ++i) {
-		if ((*i)->getNumDrivers()) {
-			RTLBBModule *bbm = findFirstUseBBModule(*i);
-			bbm->add_signal(*i);
-		}
-    }
+	if (pMode<=5) {
+		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+			errs() <<  "\n\n# DEBUG_TMR=2 - Port signal grouping\n";
+    	for (RTLModule::const_signal_iterator i = rtl->port_begin(),
+    	                                      e = rtl->port_end();
+    	                                      i != e; ++i) {
+			if ((*i)->getNumDrivers()) {
+				RTLBBModule *bbm = findFirstUseBBModule(*i);
+				bbm->add_signal(*i);
+			}
+    	}
+	}
 
     // add unsynthesizable statements ($display, $finish, etc)
     RTLSignal *unsynth = const_cast<RTLSignal*>(rtl->getUnsynthesizableSignal());
     rtl->bbModules.front()->add_signal(unsynth);
 
-	// add instances
-	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
-		errs() <<  "\n\n# DEBUG_TMR=2 - Module grouping\n";
-   	for (RTLModule::const_module_iterator i = rtl->instances_begin();
-   		                                  i != rtl->instances_end(); ++i) {
-		RTLBBModule *bbm = findFirstUseBBModule(*i);
-		bbm->add_module(*i);
-	}
+
 
 	//////////////////////////////////////////////////////////
 	// BB module sensitivi list
@@ -8728,23 +9811,7 @@ void VerilogWriter::initBBModules() {
 	                                                bbm != bbme; ++bbm) {
 		//errs() << "bbm: " << (*bbm)->getName() << "\n";
 		std::vector<const RTLSignal*> V;
-		for (RTLBBModule::const_signal_iterator i = (*bbm)->signals_begin(),
-	                                            e = (*bbm)->signals_end();
-	                                            i != e; ++i) {
-			getSensitiveList(V, *i);
-		}
-		for (RTLBBModule::module_iterator m = (*bbm)->modules_begin();
-		                                  m != (*bbm)->modules_end(); ++m) {
-    		for (RTLModule::signal_iterator i = (*m)->port_begin(),
-    		                                e = (*m)->port_end();
-    		                                i != e; ++i) {
-        		RTLSignal *d = (*i)->getDriver(0);
-				if (!d->isConst() && d->getName()!="clk"
-        				&& d->getName().find("_unused") == std::string::npos) {
-					addSensitiveListToInput(V, d);
-				}
-			}
-		}
+		getSensitiveList(V, *bbm);
 		for (std::vector<const RTLSignal*>::iterator i = V.begin(); i != V.end(); ++i) {
 			//errs() << "    " << (*i)->getName() << "\n";
 			bool isOutputSig = (std::find((*bbm)->signals_begin(), (*bbm)->signals_end(), *i)
@@ -8759,32 +9826,26 @@ void VerilogWriter::initBBModules() {
 	}
 
 	// add input signals from the sensitive list
+	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
+		errs() <<  "\n\n# DEBUG_TMR=2 - Interconnect bits between modules\n";
 	for (std::vector<RTLBBModule *>::const_iterator bbm = rtl->bbModules.begin(),
 	                                                bbme = rtl->bbModules.end();
 	                                                bbm != bbme; ++bbm) {
 		//errs() << "bbm: " << (*bbm)->getName() << "\n";
 		std::vector<const RTLSignal*> V;
+		getSensitiveList(V, *bbm);
+
+		// add output for bbModule
 		for (RTLBBModule::const_signal_iterator i = (*bbm)->signals_begin(),
 	                                            e = (*bbm)->signals_end();
 	                                            i != e; ++i) {
-			if ((!isMemInputSig(*i) && !isGlobalMemInputSig(*i))
-					&& (isTmrVoterSignal(*i) || isPortSig(*i))) {
+			if (/*(!isLocalMemInputSig(*i) && !isGlobalMemSig(*i))
+					&& */(isTmrVoterSignal(*i) || isPortSig(*i))) {
 				(*bbm)->add_output(*i);
 			}
-			getSensitiveList(V, *i);
 		}
-		for (RTLBBModule::module_iterator m = (*bbm)->modules_begin();
-		                                  m != (*bbm)->modules_end(); ++m) {
-    		for (RTLModule::signal_iterator i = (*m)->port_begin(),
-    		                                e = (*m)->port_end();
-    		                                i != e; ++i) {
-        		RTLSignal *d = (*i)->getDriver(0);
-				if (!d->isConst() && d->getName()!="clk"
-        				&& d->getName().find("_unused") == std::string::npos) {
-					addSensitiveListToInput(V, d);
-				}
-			}
-		}
+
+		// add input for bbModule
 		for (std::vector<const RTLSignal*>::iterator i = V.begin(); i != V.end(); ++i) {
 			//errs() << "    " << (*i)->getName() << "\n";
 			bool partMode = (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")!=0
@@ -8797,15 +9858,13 @@ void VerilogWriter::initBBModules() {
 					(*bbm)->add_input(s);
 				}
 			}
-			//if (isFeedbackSig(*i, *bbm))
-			//	(*bbm)->add_finput(const_cast<RTLSignal*>(*i));
 		}
 		findInterconnection(*bbm);
 	}
 }
 
 bool VerilogWriter::isBBModuleOutputSig(RTLBBModule *bbm, RTLSignal *sig) {
-	bool isTmr = LEGUP_CONFIG->getParameterInt("TMR")!=0;
+	//bool isTmr = LEGUP_CONFIG->getParameterInt("TMR")!=0;
 	//bool extractPV = (LEGUP_CONFIG->getParameterInt("EXTRACT_PART_VOTERS")!=0);
 	//if (extractPV && isPartVoter(sig))
 	//	return false;
@@ -8825,10 +9884,10 @@ bool VerilogWriter::isBBModuleOutputSig(RTLBBModule *bbm, RTLSignal *sig) {
 		if (sig == *i)
 			return true;
 	}
-    if (bbm==findFirstUseBBModule() && isTmr) {
-		if (sig->getName().find("memory_controller_out")!=std::string::npos)
-			return true;
-	}
+    //if (bbm==findFirstUseBBModule() && isTmr) {
+	//	if (sig->getName().find("memory_controller_out")!=std::string::npos)
+	//		return true;
+	//}
 
 	return false;
 }
@@ -8887,6 +9946,9 @@ RTLBBModule* VerilogWriter::getBBSource(RTLSignal *sig) {
 }
 
 bool VerilogWriter::isPortSig(const RTLSignal *sig) {
+	std::string name = sig->getName();
+	if (name.find("memory_controller_")!=std::string::npos)
+		return false;
     for (RTLModule::const_signal_iterator i = rtl->port_begin(),
                                           e = rtl->port_end();
                                           i != e; ++i) {
@@ -9003,7 +10065,7 @@ void VerilogWriter::printModuleInstance(std::stringstream &Out,
 		std::string postfix = isModuleOutputSig(s)? "_v" :  "_r";
 
 		if (LEGUP_CONFIG->getParameterInt("TMR") &&
-				(isMemSig(s) || isModuleOutputSig(s))) {
+				(isLocalMemSig(s) || isModuleOutputSig(s))) {
         	Out << "\t." << s->getName() << postfix << "0 (";
         	printValue(d, sigWidth, true);
         	Out << "_r0" << bitsForSignalAndModuleName(d, mod->getName());
@@ -9645,7 +10707,7 @@ void VerilogWriter::printTmrVoter(const RTLSignal *sig) {
 	std::string hi = sig->getWidth().getHi();
 	std::string lo = sig->getWidth().getLo();
 
-	bool isRegVoter = isMemOutputSig(sig);
+	bool isRegVoter = isLocalMemOutputSig(sig);
 	bool isModuleBoundary = false;
 
 	//if (isPartVoter(sig)) {
@@ -9862,7 +10924,7 @@ std::string VerilogWriter::getTMRPostfix(const RTLSignal *sig) {
 	} else if (useReplicaNumberForAllVariables && isTmrSig(sig)) {
 		if (sig->driveFromVoter()
 				|| isSubModuleOutputSig(sig)
-				|| isLocalMemSignal(sig, true))
+				|| isLocalMemOutputSig(sig))
 			postfix = "_v" + currReplica;
 		else
 			postfix = "_r" + currReplica;

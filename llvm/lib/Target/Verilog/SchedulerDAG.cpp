@@ -516,7 +516,7 @@ void SchedulerDAG::addSCC(VINST scc, const Instruction* use) {
 	//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
 	//	errs() << "     Find!!\n";
 	for(VINST::const_iterator i = std::find(scc.begin(), scc.end(), use),
-	                                                    e = scc.end(); i!=e; ++i) {
+	                          e = scc.end(); i!=e; ++i) {
 		found_scc.push_back(*i);
 		//if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2)
 		//	errs() << "         - " << getValueStr(*i) << "\n";
@@ -675,7 +675,7 @@ void SchedulerDAG::findSCC(const BasicBlock* succ, bool findWithinBB) {
 	}
 }
 
-void SchedulerDAG::syncVoterScc(Function &F) {
+void SchedulerDAG::syncVoterSccBB(Function &F) {
 	// add voter with SCC decomposition algorithm
 	for (scc_iterator<Function *> I = scc_begin(&F); !I.isAtEnd(); ++I) {
 		const std::vector<BasicBlock*> &SCCBBs = *I;
@@ -786,6 +786,113 @@ void SchedulerDAG::clearInstMap() {
 	}
 }
 
+IntGraph SchedulerDAG::makeDFG(Function &F) {
+	int n = 0;
+	instMap.clear();
+	for (Function::iterator b = F.begin(); b!= F.end(); ++b) {
+		for (BasicBlock::const_iterator i = (*b).begin(); i != (*b).end(); ++i) {
+			if (skipInst(i))
+				continue;
+
+			instMap[i] = n++;
+		}
+	}
+
+	IntGraph graph(n);
+	for (MINST::iterator i = instMap.begin(); i != instMap.end(); ++i) {
+		const Instruction *I = i->first;
+		int idx = i->second;
+		for (User::const_op_iterator op = I->op_begin(), e = I->op_end(); op != e; ++op) {
+	    	const Instruction *dep = dyn_cast<Instruction>(*op);
+	    	if (!dep)
+	    	    continue;
+
+			int d = instMap[dep];
+			graph.addEdge(d, idx);
+		}
+	}
+
+	return graph;
+}
+
+void SchedulerDAG::setAdjData(std::vector<VINT> &alist,
+                              VINT scc,
+                              IntGraph graph,
+                              std::map<int, int> &intMap,
+                              std::map<int, int> &intMap_R) {
+
+	int idx=0;
+	for (VINT::iterator v=scc.begin(); v!=scc.end(); ++v) {
+		intMap_R[idx] = *v;
+		intMap[*v] = idx++;
+	}
+
+	for (VINT::iterator v=scc.begin(); v!=scc.end(); ++v) {
+		VINT currentAdjList;
+		for (std::list<int>::iterator i = graph.adj[*v].begin(); i != graph.adj[*v].end(); ++i) {
+			if (std::find(scc.begin(), scc.end(), *i)!=scc.end())
+				currentAdjList.push_back(intMap[*i]);
+		}
+		alist.push_back(currentAdjList);
+	}
+}
+
+void SchedulerDAG::syncVoterScc(Function &F) {
+	IntGraph graph = makeDFG(F);
+	std::vector<std::vector<int> > isccs;
+	graph.getSCCs(isccs);
+
+	for (std::vector<VINT>::iterator s=isccs.begin(); s!=isccs.end(); ++s) {
+		if ((*s).size()<=1)
+			continue;
+		vector<VINT> adjList;
+		std::map<int, int> intMap, intMap_R;
+		setAdjData(adjList, *s, graph, intMap, intMap_R);
+		//for (unsigned i=0; i<adjList.size(); ++i) {
+		//	cout << intMap_R[i] << ": ";
+		//	for (VINT::iterator j=adjList[i].begin(); j!=adjList[i].end(); ++j)
+		//		cout << intMap_R[*j] << " ";
+		//	cout << "\n";
+		//}
+
+		std::vector<bool> blocked (adjList.size(), false);
+		std::deque<int> stackLike;
+		std::vector<VINT> cycles;
+
+		std::vector<VINT> B_Fruitless;
+		//B_Fruitless is the book keeping needed to aovid fruitless searches. It is
+		//referred to as B in Johnson's original algorithm
+
+		//Initialize
+		for (unsigned i=0; i<adjList.size(); i++) {
+			VINT *k = new VINT;
+			B_Fruitless.push_back(*k);
+		}
+
+		// loop to start new search from each node i
+		for (unsigned i=0; i<adjList.size(); i++) {
+			//clear all book keeping
+			for (unsigned j=0; j<adjList.size(); j++) {
+				blocked[j] = false;
+				B_Fruitless[j].clear();
+			}
+			findCycles(i, i, adjList, blocked, stackLike, B_Fruitless, cycles);
+		}
+		//cout << "Cycles:\n";
+		for (unsigned i=0; i<cycles.size(); ++i) {
+			//cout << intMap_R[i] << ": ";
+			VINST scc;
+			for (VINT::iterator j=cycles[i].begin(); j!=cycles[i].end(); ++j) {
+				//cout << intMap_R[*j] << " ";
+				const Instruction *I = getInstNode(intMap_R[*j]);
+				scc.push_back(I);
+			}
+			//cout << "\n";
+			SCCs.push_back(scc);
+		}
+	}
+}
+
 void SchedulerDAG::insertSyncVoter(Function &F) {
 	instMap.clear();
 	for (Function::iterator b = F.begin(); b != F.end(); ++b) {
@@ -796,6 +903,8 @@ void SchedulerDAG::insertSyncVoter(Function &F) {
 
 	int syncMode = LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE");
 	if (syncMode==8 || syncMode==7 || syncMode==6 || syncMode==5) {
+		syncVoterSccBB(F);
+	} else if (syncMode==9) {
 		syncVoterScc(F);
 	} else { //syncMode==4,3,2,1
 		// add voter to the instruction which has backward edges
@@ -904,66 +1013,57 @@ bool SchedulerDAG::isBackwardEdge(std::pair<const BasicBlock*, const BasicBlock*
 	return false;
 }
 
-void SchedulerDAG::dfs(int n, int capacity[][MAX_NODE], int flow[][MAX_NODE], int s, bool visited[]) {
-	visited[s] = true;
-	for (int i=0; i<n; i++) {
-		if (capacity[s][i]-flow[s][i]>0 && !visited[i])
-			dfs(n, capacity, flow, i, visited);
-	}
-}
+unsigned SchedulerDAG::getBitWidth(Instruction *I) {
+	bool cInst = (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==5
+			&& (isa<BranchInst>(I) || isa<SwitchInst>(I)));
 
-bool SchedulerDAG::bfs(int n, int start, int target,
-			int capacity[][MAX_NODE], int flow[][MAX_NODE], int pred[]) {
-	bool visited[MAX_NODE];
-	for(int i=0; i<MAX_NODE; i++)
-		visited[i] = false;
-	std::queue<int> que;
+	unsigned width = cInst? 8
+		: isa<AllocaInst>(I)? INF
+		: isa<GetElementPtrInst>(I)? INF//alloc->getDataLayout()->getPointerSize() * 8
+		: isa<ReturnInst>(I)? 32
+		: isa<StoreInst>(I)? INF//I->getOperand(0)->getType()->getPrimitiveSizeInBits()
+		: isa<LoadInst>(I)? INF
+		: I->getType()->getPrimitiveSizeInBits();
 
-	que.push(start);
-	visited[start] = true;
-	pred[start] = -1;
-	while (!que.empty()) {
-		int u = que.front();
-		que.pop();
-		for (int v=0; v<n; v++) {
-			if(!visited[v] && capacity[u][v]-flow[u][v]>0) {
-				que.push(v);
-				visited[v] = true;
-				pred[v] = u;
-			}
-		}
+	if (width==0) {
+		//errs() << getValueStr(I) << "(" << I->getType()->getPrimitiveSizeInBits();
+		//for (unsigned i=0; i<I->getNumOperands(); ++i)
+		//	errs() << ", " << I->getOperand(i)->getType()->getPrimitiveSizeInBits();
+		//errs() << ")\n";
+		width = alloc->getDataLayout()->getPointerSize()*8;
 	}
-	//fprintf(stderr, "---------------------------------------\n");
-	//fprintf(stderr, "         ");
-	//for(int i=start; i<=target; i++)
-	//	fprintf(stderr, "%4d", i);
-	//fprintf(stderr, "\n");
-	//fprintf(stderr, "visited: ");
-	//for(int i=start; i<=target; i++)
-	//	fprintf(stderr, "%4d", visited[i]);
-	//fprintf(stderr, "\n");
-	//fprintf(stderr, "pred   : ");
-	//for(int i=start; i<=target; i++)
-	//	fprintf(stderr, "%4d", pred[i]);
-	//fprintf(stderr, "\n");
-	return (visited[target]==true);
+
+	return width;
 }
 
 void SchedulerDAG::connectDFGInst(int capacity[][MAX_NODE], Instruction *I, int t) {
-	bool cInst = (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==5
-			&& (isa<BranchInst>(I) || isa<SwitchInst>(I)));
+	//bool cInst = (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==5
+	//		&& (isa<BranchInst>(I) || isa<SwitchInst>(I)));
 	int idx = instMap[I];
-	//int bitWidth = I->getType()->getPrimitiveSizeInBits();
-	capacity[idx+1][idx+2] = 1;//(cInst || bitWidth==0)? 1 : bitWidth;
+	capacity[idx+1][idx+2] = getBitWidth(I);
 	capacity[idx][idx+1] = INF;
 	capacity[idx+2][idx] = INF;
 
-	BasicBlock *B = I->getParent();
-	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==5
-			&& !isa<BranchInst>(I) && !isa<SwitchInst>(I)) {
-		int bbIdx = bbMap[B];
-		capacity[bbIdx][idx] = INF;
-	}
+	//BasicBlock *B = I->getParent();
+	//if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==5
+	//		&& !isa<BranchInst>(I) && !isa<SwitchInst>(I)) {
+	//	int bbIdx = bbMap[B];
+	//	capacity[bbIdx][idx] = INF;
+	//}
+
+	//if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==5)
+	//if (const PHINode *PN = dyn_cast<PHINode>(I)) {
+	//	for (unsigned op = 0; op < PN->getNumIncomingValues(); ++op) {
+	//		//BasicBlock *bb = PN->getIncomingBlock(op);
+	//		TerminatorInst *tInst = PN->getIncomingBlock(op)->getTerminator();
+	//		Instruction *dep = dyn_cast<Instruction>(tInst);
+	//		//Value *IV = PN->getIncomingValueForBlock(bb);
+	//		//errs() << getValueStr(I) << "<- [" << getValueStr(IV) << ", " << getLabel(bb) << "]\n";
+	//		int d = instMap[dep];
+	//		capacity[d+2][idx] = INF;
+	//		capacity[idx][d+1] = INF;
+	//	}
+	//}
 
 	for (User::op_iterator op = I->op_begin(), e = I->op_end(); op != e; ++op) {
 	    // we only care about operands that are created by other instructions
@@ -975,7 +1075,7 @@ void SchedulerDAG::connectDFGInst(int capacity[][MAX_NODE], Instruction *I, int 
 
 		//if (instMap[dep]!=0 || instMap[I]!=t) {
 			int d = instMap[dep];
-			capacity[d+2][d] = INF;
+			capacity[d+2][idx] = INF;
 			capacity[idx][d+1] = INF;
 			//errs() << getValueStr(I) << "<-" << getValueStr(dep) << "\n";
 			//errs() << instMap[I] << "<-" << instMap[dep] << "\n";
@@ -984,20 +1084,20 @@ void SchedulerDAG::connectDFGInst(int capacity[][MAX_NODE], Instruction *I, int 
 		//update dependent edge weight to be connected tightly
 		//these dependent edges are getelementptr calculation that they must be attached
 		//to the load/store instructions
-		if (isa<LoadInst>(I) || isa<StoreInst>(I)) {
-			capacity[d+1][d+2] = INF;
-		}
+		//if (isa<LoadInst>(I) || isa<StoreInst>(I)) {
+		//	capacity[d+1][d+2] = INF;
+		//}
 	}
 
-	if (cInst) {
-		const TerminatorInst *tInst = I->getParent()->getTerminator();
-		for (unsigned i=0, nSucc=tInst->getNumSuccessors(); i<nSucc; ++i) {
-			BasicBlock *succ = tInst->getSuccessor(i);
-			int bbIdx = bbMap[succ];
-			capacity[idx+2][idx] = INF;
-			capacity[bbIdx][idx+1] = INF;
-		}
-	}
+	//if (cInst) {
+	//	const TerminatorInst *tInst = I->getParent()->getTerminator();
+	//	for (unsigned i=0, nSucc=tInst->getNumSuccessors(); i<nSucc; ++i) {
+	//		BasicBlock *succ = tInst->getSuccessor(i);
+	//		int bbIdx = bbMap[succ];
+	//		capacity[idx+2][idx] = INF;
+	//		capacity[bbIdx][idx+1] = INF;
+	//	}
+	//}
 
 	//if (isa<LoadInst>(I)) {
 	//	for (VINST::iterator d = storeInsts.begin();
@@ -1063,7 +1163,6 @@ bool SchedulerDAG::skipInst(const Instruction *I) {
 	//	return true;
 	if (isaDummyCall(I))
 		return true;
-
 	if (isa<ReturnInst>(I) || isa<StoreInst>(I))
 		return false;
 
@@ -1087,10 +1186,13 @@ void SchedulerDAG::makeDFGInstGraph(int capacity[][MAX_NODE], int n) {
 	for (VINST::iterator i = insts.begin(); i != insts.end(); ++i) {
 		int instIdx = instMap[*i];
 		int state = instPartState[*i];
-		if (state==PART_S || state==PART_S_FINISH)
+		if (state==PART_S || state==PART_S_FINISH) {
 			capacity[0][instIdx] = INF;
-		else if (state==PART_T || state==PART_T_FINISH)
+			capacity[instIdx][0] = INF;
+		} else if (state==PART_T || state==PART_T_FINISH) {
 			capacity[instIdx][n-1] = INF;
+			capacity[n-1][instIdx] = INF;
+		}
 	}
 
 	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==5) {
@@ -1100,6 +1202,7 @@ void SchedulerDAG::makeDFGInstGraph(int capacity[][MAX_NODE], int n) {
 				int sidx = instMap[*i];
 				int tidx = instMap[*j];
 				capacity[sidx][tidx] = INF;
+				capacity[tidx][sidx] = INF;
 			}
 		}
 	}
@@ -1217,7 +1320,7 @@ void SchedulerDAG::dumpFlow(int flow[][MAX_NODE], int s, int t, int max_flow) {
 
 		while (!q.empty()) {
 			int k = q.front();
-			const BasicBlock *b = isBBNode(k);
+			const BasicBlock *b = getBBNode(k);
 			if (b) {
 				errs() << " - [" << bbMap[b] << "] " << getLabel(b) << "\n";
 			}
@@ -1286,8 +1389,8 @@ int SchedulerDAG::initBBArea(Function &F) {
 	return totalArea;
 }
 
-int SchedulerDAG::getInstArea(VINST ilist) {
-	int pArea = 0;
+int SchedulerDAG::getInstArea(VINST ilist, unsigned v) {
+	int pArea = getVoterArea(v);
 	for(VINST::iterator i=ilist.begin(); i!=ilist.end(); ++i)
 		pArea += getInstructionArea(const_cast<Instruction*>(*i));
 
@@ -1302,9 +1405,22 @@ int SchedulerDAG::getBBArea(VBB blist) {
 	return pArea;
 }
 
-bool SchedulerDAG::isBalanced(VINST p0, VINST p1) {
-	if (getInstArea(p0)-getInstArea(PART_S_FINISH) < getcArea()
-			&& getInstArea(p1)-getInstArea(PART_T_FINISH) < getcArea())
+unsigned SchedulerDAG::getVoterArea(unsigned numberOfCuts) {
+	if (LEGUP_CONFIG->getParameterInt("NO_VOTER_AREA_ESTIMATE"))
+		return 0;
+
+	//FIXME - need to update with board characterization
+	//unsigned voterArea = (numberOfCuts<100)? 0
+	//	: (numberOfCuts<200)? numberOfCuts
+	//	: (numberOfCuts<1000)? numberOfCuts*5
+	//	: numberOfCuts*10;
+	//return voterArea;
+	return numberOfCuts*2;
+}
+
+bool SchedulerDAG::isBalanced(VINST p0, VINST p1, unsigned v0, unsigned v1) {
+	if (getInstArea(p0, v0)-getInstArea(PART_S_FINISH) < getcArea()
+			&& getInstArea(p1, v1)-getInstArea(PART_T_FINISH) < getcArea())
 		return true;
 
 	return false;
@@ -1347,12 +1463,12 @@ const BasicBlock *SchedulerDAG::getBoundaryBB(int boundaryEdge,
 	if (boundaryEdge==-1 || n==0)
 		return NULL;
 
-	const Instruction *inst = isInstNode(boundaryEdge);
+	const Instruction *inst = getInstNode(boundaryEdge);
 
 	const BasicBlock *succ = NULL;
 	for(int j=s; j<n; j++) {
 		if(flow[boundaryEdge+1][j]>0) {
-			succ = isBBNode(j);
+			succ = getBBNode(j);
 			if (bbPartState[succ]==PART_UNKNOWN) {
 				break;
 			}
@@ -1397,10 +1513,10 @@ int SchedulerDAG::initInstMap(Function &F) {
         if (isEmptyFirstBB(b))
 			continue;
 
-		if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==5) {
-			bbMap[b] = n++;
-			bbs.push_back(b);
-		}
+		//if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==5) {
+		//	bbMap[b] = n++;
+		//	bbs.push_back(b);
+		//}
 
 		for (BasicBlock::iterator i = (*b).begin(); i != (*b).end(); ++i) {
    			//std::string opName = LEGUP_CONFIG->getOpNameFromInst(i, alloc);
@@ -1463,8 +1579,8 @@ int SchedulerDAG::initMap(Function &F) {
 	return n;
 }
 
-int SchedulerDAG::getInstArea(PART_STATE s) {
-	int area = 0;
+int SchedulerDAG::getInstArea(PART_STATE s, unsigned v) {
+	int area = getVoterArea(v);
 	for (VINST::iterator i=insts.begin(); i!=insts.end(); ++i) {
 		if (instPartState[*i] == s)
 			area += getInstructionArea(const_cast<Instruction*>(*i));
@@ -1482,16 +1598,17 @@ int SchedulerDAG::getBBArea(PART_STATE s) {
 }
 
 void SchedulerDAG::mergeNodes(bool frontMerge,
-			const Instruction *boundaryInst, VINST p0, VINST p1) {
+			const Instruction *boundaryInst, VINST p0, VINST p1,
+			unsigned v0, unsigned v1) {
 	int cArea = getcArea();
 
 	// merge start and target nodes
-	if (getInstArea(p0)-getInstArea(PART_S_FINISH) < cArea) {
+	if (getInstArea(p0, v0)-getInstArea(PART_S_FINISH) < cArea) {
 		for (VINST::iterator i=p0.begin(); i!=p0.end(); ++i)
 			if (instPartState[*i] == PART_UNKNOWN)
 				instPartState[*i] = PART_S;
 	}
-	if (getInstArea(p1)-getInstArea(PART_T_FINISH) < cArea) {
+	if (getInstArea(p1, v1)-getInstArea(PART_T_FINISH) < cArea) {
 		for (VINST::iterator i=p1.begin(); i!=p1.end(); ++i)
 			if (instPartState[*i] == PART_UNKNOWN)
 				instPartState[*i] = PART_T;
@@ -1500,11 +1617,11 @@ void SchedulerDAG::mergeNodes(bool frontMerge,
 	// boundary node merge
 	int bArea = getInstructionArea(const_cast<Instruction*>(boundaryInst));
 	if (frontMerge) {
-		if (getInstArea(PART_S)+bArea > cArea)
+		if (getInstArea(PART_S, v0)+bArea > cArea)
 			pushNewInstPartition(PART_S);
 		instPartState[boundaryInst] = PART_S;
 	} else {
-		if (getInstArea(PART_T)+bArea > cArea)
+		if (getInstArea(PART_T, v1)+bArea > cArea)
 			pushNewInstPartition(PART_T);
 		instPartState[boundaryInst] = PART_T;
 	}
@@ -1578,17 +1695,19 @@ void SchedulerDAG::networkFlowPartitionInsts(Function &F) {
 		unsigned areaLimit = getLimitAreaByPercentage(F, p);
 		networkFlowPartitionInsts(F, areaLimit, n);
 		if (InstPartitions.size()>k) {
-			p += 5;
+			p += 10;
 			errs() << " - WARNING: Number of Partitions: " << InstPartitions.size()
 			       << " (expected = " << k << ")"
 			       << " / forced to increase area limit by 5%\n";
 		} else if (InstPartitions.size()<k) {
-			p -= 5;
+			p -= 10;
 			errs() << " - WARNING: Number of Partitions: " << InstPartitions.size()
 			       << " (expected = " << k << ")"
 			       << " / forced to decrease area limit by 5%\n";
 		}
-		assert(p<=100);
+		// It may exceed 100 when voter area is relatively larger than module
+		// area
+		assert(p<=120);
 	} while (InstPartitions.size()!=k);
 }
 
@@ -1605,8 +1724,8 @@ void SchedulerDAG::networkFlowPartitionInsts(Function &F, unsigned areaLimit, in
 	//storeInsts.clear();
 
 	setcArea(areaLimit);
-	//instPartState[isInstNode(0)] = PART_S_FINISH;
-	//instPartState[isInstNode(n-2)] = PART_T_FINISH;
+	//instPartState[getInstNode(0)] = PART_S_FINISH;
+	//instPartState[getInstNode(n-2)] = PART_T_FINISH;
 
 	VINST p0;
 	VINST p1;
@@ -1614,20 +1733,22 @@ void SchedulerDAG::networkFlowPartitionInsts(Function &F, unsigned areaLimit, in
 	int itrCount = 0;
 	const Instruction *boundaryInst = NULL;
 	bool frontMerge;
+	unsigned v0 = 0;
+	unsigned v1 = 0;
 	do {
 		makeDFGInstGraph(capacity, n);
 		maxFlow(n, 0, n-1, capacity, flow);
-		boundaryInst = getBoundaryInst(n, capacity, flow, p0, p1, frontMerge);
+		boundaryInst = getBoundaryInst(n, capacity, flow, p0, p1, frontMerge, v0, v1);
 		if (boundaryInst == NULL)
 			errs() << "WARNING: not found boundaryInst\n";
 
-		if (isBalanced(p0, p1) || boundaryInst == NULL) {
+		if (isBalanced(p0, p1, v0, v1) || boundaryInst == NULL) {
 			pushNewInstPartition(p0, PART_S_FINISH);
 			pushNewInstPartition(p1, PART_T_FINISH);
 			break;
 		}
 
-		mergeNodes(frontMerge, boundaryInst, p0, p1);
+		mergeNodes(frontMerge, boundaryInst, p0, p1, v0, v1);
 	} while( itrCount++ < n );
 }
 
@@ -1780,7 +1901,8 @@ void SchedulerDAG::pushPlist(VBB &plist, VBB pNodes) {
 
 const Instruction* SchedulerDAG::getBoundaryInst(int n, 
 			int capacity[][MAX_NODE], int flow[][MAX_NODE],
-			VINST &p0, VINST &p1, bool &frontMerge) {
+			VINST &p0, VINST &p1, bool &frontMerge,
+			unsigned &v0, unsigned &v1) {
 	const Instruction* boundaryInst = NULL;
 
 	bool visited[MAX_NODE];
@@ -1804,36 +1926,51 @@ const Instruction* SchedulerDAG::getBoundaryInst(int n,
 	//	errs() << "[1] " << getValueStr(*i) << "\n";
 
 	int minCut = 0;
+	v0 = 0;
+	v1 = 0;
 	//VINST cutList;
 	for(int i=0; i<n; i+=3) {
 		if ((visited[i+1] && !visited[i+2]) && capacity[i+1][i+2]!=INF) {
 			minCut++;
-			//cutList.push_back(isInstNode(i));
+			//cutList.push_back(getInstNode(i));
+			if (visited[i] == visited[i+1])
+				v0 += capacity[i+1][i+2];
+			else
+				v1 += capacity[i+1][i+2];
 		}
 	}
-	fprintf(stderr, "  %4d / %4d | %4d / %4d | %4d | %4d / %4d | minCut= %2d\n",
+	fprintf(stderr, "  %4d / %4d | %4d / %4d | %4d | %4d / %4d | mincut=%2d, v0=%2d, v1=%2d\n",
 			getInstArea(PART_S_FINISH), getInstArea(PART_T_FINISH),
 			getInstArea(PART_S), getInstArea(PART_T),
 			getInstArea(PART_UNKNOWN), 
-			getInstArea(p0), getInstArea(p1), minCut);
+			getInstArea(p0), getInstArea(p1), minCut, v0, v1);
 	//for (VINST::iterator i = cutList.begin(); i != cutList.end(); ++i)
 	//	errs() << "  -" << getValueStr(*i) << "\n";
 
 	//VINST blist;
-	frontMerge = getInstArea(p0) < getInstArea(p1);
+	frontMerge = getInstArea(p0, v0) < getInstArea(p1, v1);
 	for(int i=0; i<n; i+=3) {
-		if ((visited[i+1] && !visited[i+2]) && capacity[i+1][i+2]!=INF) {
-			for (int j=3; j<n-1; j++) {
-				int f = frontMerge? flow[i+2][j] : flow[j][i];
-				if (f>0) {
-					const Instruction *d = isInstNode(j);
+		if (visited[i+1] && !visited[i+2]) {
+			for (int j=3; j<n-1; j+=3) {
+				if (capacity[j][i+1]) {
+					const Instruction *d = frontMerge? getInstNode(j) : getInstNode(i);
 					if (instPartState[d]==PART_UNKNOWN) {
-						//blist.push_back(d);
 						boundaryInst = d;
 						break;
 					}
 				}
 			}
+			//for (int j=3; j<n-1; j++) {
+			//	int f = frontMerge? flow[i+2][j] : flow[j][i];
+			//	if (f>0) {
+			//		const Instruction *d = getInstNode(j);
+			//		if (instPartState[d]==PART_UNKNOWN) {
+			//			//blist.push_back(d);
+			//			boundaryInst = d;
+			//			break;
+			//		}
+			//	}
+			//}
 		}
 	}
 	//unsigned minBit = INF;
@@ -1878,54 +2015,8 @@ const Instruction* SchedulerDAG::getBoundaryInst(int n,
 	}
 
 	//if (boundaryInst)
-	//	errs() << getValueStr(boundaryInst) << "\n";
+	//	errs() << getValueStr(boundaryInst) << "\n\n";
 	return boundaryInst;
-}
-
-int SchedulerDAG::maxFlow(int n, int start, int target,
-			int capacity[][MAX_NODE], int flow[][MAX_NODE]) {
-	int pred[MAX_NODE];
-
-	int max_flow = 0;
-	for(int i=0; i<n; i++)
-		for(int j=0; j<n; j++)
-			flow[i][j] = 0;
-	while (bfs(n, start, target, capacity, flow, pred)) {
-		//Determin the amount by which we can increment the flow
-		int increment = INF;
-		for(int u=target; pred[u]>=0; u=pred[u]) {
-			int f = capacity[pred[u]][u] - flow[pred[u]][u];
-			if (increment > f) {
-				increment = f;
-			}
-		}
-		//Now increment the flow
-		for(int u=target; pred[u]>=0; u=pred[u]) {
-			flow[pred[u]][u] += increment;
-			flow[u][pred[u]] -= increment;
-		}
-		max_flow += increment;
-	}
-	//No aumenting path anymore. We are done.
-
-	//dumpbbPartState("bb states");
-	//fprintf(stderr, "\n# flow(%d->%d) (maxflow=%d)\n", start, target, max_flow);
-	//dumpFlow(flow, start, target, max_flow);
-	//fprintf(stderr, "     ");
-	//for(int i=0; i<n; i++)
-	//	fprintf(stderr, "%d ", i%10);
-	//fprintf(stderr, "\n");
-	//for(int i=0; i<n; i++) {
-	//	fprintf(stderr, "[%2d] ", i);
-	//	for(int j=0; j<n; j++) {
-	//		if(flow[i][j]<=0) fprintf(stderr, "  ");
-	//		else if(flow[i][j]==INF) fprintf(stderr, "x ");
-	//		else fprintf(stderr, "%d ", flow[i][j]);
-	//	}
-	//	fprintf(stderr, "\n");
-	//}
-
-	return max_flow;
 }
 
 const BasicBlock* SchedulerDAG::getBoundaryBB(int n, int start, int target, 
@@ -1980,13 +2071,13 @@ const BasicBlock* SchedulerDAG::getBoundaryBB(int n, int start, int target,
 
 	frontMerge = getBBArea(p0) < getBBArea(p1);
 	for(int i=0; i<start; i+=2) {
-		//const Instruction *I = isInstNode(i);
+		//const Instruction *I = getInstNode(i);
 		//if (I!=NULL && isa<StoreInst>(I))
 		//	continue;
 		if ((visited[i] && !visited[i+1]) && capacity[i][i+1]==1 /*&& (i!=start || j!=target)*/) {
 			boundaryBB = getBoundaryBB(i, flow, frontMerge, start, n);
 			if (boundaryBB) {
-				//const Instruction *I = isInstNode(i);
+				//const Instruction *I = getInstNode(i);
 				//errs() << "cand_boundaryBB= " << getLabel(boundaryBB) << getValueStr(I) << "\n";
 				//if ((frontMerge && bbMap[boundaryBB]!=n-1) ||
 				//		(!frontMerge && bbMap[boundaryBB]!=start))
@@ -2022,7 +2113,7 @@ const BasicBlock* SchedulerDAG::getBoundaryBB(int n, int start, int target,
 	}
 
 	//for(int i=1; i<n; i++) {
-	//	const Instruction* inst = isInstNode(i);
+	//	const Instruction* inst = getInstNode(i);
 	//	if(!inst)
 	//		continue;
 
@@ -2040,7 +2131,7 @@ const BasicBlock* SchedulerDAG::getBoundaryBB(int n, int start, int target,
 	return boundaryBB;
 }
 
-const Instruction* SchedulerDAG::isInstNode(int idx) {
+const Instruction* SchedulerDAG::getInstNode(int idx) {
 	for (MINST::iterator i = instMap.begin();
 			i != instMap.end(); ++i) {
 		if (i->second==idx)
@@ -2049,7 +2140,7 @@ const Instruction* SchedulerDAG::isInstNode(int idx) {
 	return NULL;
 }
 
-const BasicBlock* SchedulerDAG::isBBNode(int i) {
+const BasicBlock* SchedulerDAG::getBBNode(int i) {
 	for (MBB::iterator b = bbMap.begin(); b != bbMap.end(); ++b) {
 		if (b->second==i)
 			return b->first;

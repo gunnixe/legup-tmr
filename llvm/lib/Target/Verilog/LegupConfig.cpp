@@ -23,7 +23,7 @@ static LegupConfig LegupConfigObj;
 
 LegupConfig *LEGUP_CONFIG = &LegupConfigObj;
 
-#define NUM_PARAMETERS 145
+#define NUM_PARAMETERS 147
 const std::string validParameters[NUM_PARAMETERS] = {
     "ALIAS_ANALYSIS", "CLOCK_PERIOD", "DEBUG_MODULO_DEPENDENT",
     "DEBUG_MODULO_TABLE", "DEBUG_PERTURBATION", "DEBUG_VERIFY_INCR_SDC",
@@ -66,6 +66,7 @@ const std::string validParameters[NUM_PARAMETERS] = {
 	"MERGE_PVOTER_WITH_SVOTER", "SEPERATE_BB_CTRL",
 	"VOTER_BEFORE_FSM", "USE_REG_VOTER_FOR_LOCAL_RAMS",
 	"PARTITION_SHARED_RESOURCES", "EBIT_PIPELINED",
+	"NO_VOTER_AREA_ESTIMATE", "PARTITION_WITH_DATA_WIDTH",
 
 	// DEBUG
     "INSPECT_DEBUG",                   // Inspect debugger: Populate database.
@@ -189,8 +190,15 @@ bool LegupConfig::isSecondOperandConstant(Instruction *instr) {
 }
 
 int LegupConfig::maxBitWidth(int width0, int width1, int width2) {
-    return (width0 >= width1) ? (width0 >= width2) ? width0 : width2
+    int width = (width0 >= width1) ? (width0 >= width2) ? width0 : width2
                               : (width1 >= width2) ? width1 : width2;
+	//added to get rounded bitwidth for the TMR partitioning purpose
+	if (width<=8+4) width = 8;
+	else if (width<=16+8) width = 16;
+	else if (width<=32+16) width = 32;
+	else width = 64;
+	//
+	return width;
 }
 
 bool LegupConfig::isSupportedBitwidth(int width) {
@@ -304,6 +312,16 @@ bool LegupConfig::populateStringsForBinaryOperator(Instruction *instr,
     default:
         errs() << "Invalid operator type!\n";
     }
+
+    switch (instr->getOpcode()) {
+    case Instruction::SRem:
+    case Instruction::SDiv:
+    case Instruction::URem:
+    case Instruction::UDiv:
+        if (isSecondOperandConstant(instr))
+        	params[2] = "const";
+		break;
+	}
 
     return !isBinaryOperatorNoOp(instr);
 }

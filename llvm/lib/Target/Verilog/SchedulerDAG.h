@@ -16,12 +16,14 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/AliasAnalysis.h"
+#include <deque>
 
 using namespace llvm;
 
 namespace legup {
 class FiniteStateMachine;
 class LegupConfig;
+class IntGraph;
 
 class BasicBlockNode {
 public:
@@ -209,11 +211,9 @@ class SchedulerDAG {
 public:
 	typedef std::vector<const BasicBlock*> VBB;
 	typedef std::vector<const Instruction*> VINST;
+	typedef std::vector<int> VINT;
 	typedef DenseMap<const BasicBlock*, int> MBB;
 	typedef DenseMap<const Instruction*, int> MINST;
-
-	#define INF 1000000000
-	#define MAX_NODE 16384
 
 	enum PART_STATE { PART_UNKNOWN=0, PART_S, PART_T,
 			PART_S_FINISH, PART_T_FINISH };
@@ -236,6 +236,7 @@ public:
 
 	// voter
 	void syncVoterScc(Function &F);
+	void syncVoterSccBB(Function &F);
 	void addSCC(VINST scc);
 	void addSCC(VINST scc, const Instruction *use);
 	bool isSCCInst(const Instruction *def);
@@ -268,21 +269,20 @@ public:
 	void networkFlowPartitionBBs(Function &F);
 	void networkFlowPartitionInsts(Function &F);
 	void networkFlowPartitionInsts(Function &F, unsigned areaLimit, int n);
-	bool bfs(int n, int start, int target, int capacity[][MAX_NODE], int flow[][MAX_NODE], int pred[]);
-	void dfs(int n, int capacity[][MAX_NODE], int flow[][MAX_NODE], int s, bool visited[]);
-	const BasicBlock* isBBNode(int idx);
-	const Instruction* isInstNode(int idx);
+	const BasicBlock* getBBNode(int idx);
+	const Instruction* getInstNode(int idx);
 	int makeDFGBBGraph(int capacity[][MAX_NODE], int entryBB);
 	void makeDFGInstGraph(int capacity[][MAX_NODE], int n);
-	int maxFlow(int n, int s, int t, int capacity[][MAX_NODE], int flow[][MAX_NODE]);
 	int initBBArea(Function &F);
 	int getBBArea(VBB blist);
 	int getBBArea(PART_STATE s);
-	int getInstArea(VINST ilist);
-	int getInstArea(PART_STATE s);
+	int getInstArea(VINST ilist, unsigned v=0);
+	int getInstArea(PART_STATE s, unsigned v=0);
 	int getMinGraphSize(Function &F);
+	unsigned getBitWidth(Instruction *I);
+	unsigned getVoterArea(unsigned numberOfCuts);
 	bool isBalanced(int totalArea, VBB p0, VBB p1);
-	bool isBalanced(VINST p0, VINST p1);
+	bool isBalanced(VINST p0, VINST p1, unsigned v0, unsigned v1);
 	const BasicBlock *getBoundaryBB(int boundaryEdge, int flow[][MAX_NODE],
 				bool &frontMerge, int s, int n);
 	const BasicBlock* getBoundaryBB(int n, int start, int target, 
@@ -290,7 +290,8 @@ public:
 				VBB &p0, VBB &p1, bool &frontMerge);
 	const Instruction* getBoundaryInst(int n, 
 			int capacity[][MAX_NODE], int flow[][MAX_NODE],
-			VINST &p0, VINST &p1, bool &frontMerge);
+			VINST &p0, VINST &p1, bool &frontMerge,
+			unsigned &fminCut, unsigned &bminCut);
 	void setPartitions(const BasicBlock *boundaryBB, bool frontMerge);
 	void connectDFGBB(int capacity[][MAX_NODE], const Instruction *I, int s, int t);
 	int initMap(Function &F);
@@ -312,11 +313,18 @@ public:
 	void dumpFlow(int flow[][MAX_NODE], int s, int t, int max_flow);
 	int initInstMap(Function &F);
 	void clearInstMap();
-	void mergeNodes(bool frontMerge, const Instruction *boundaryInst, VINST p0, VINST p1);
+	void mergeNodes(bool frontMerge, const Instruction *boundaryInst,
+			VINST p0, VINST p1, unsigned v0, unsigned v1);
 	void connectDFGInst(int capacity[][MAX_NODE], Instruction *I, int t);
 
 	int getcArea() { return cArea; }
 	void setcArea(int a) { cArea = a; }
+	IntGraph makeDFG(Function &F);
+	void setAdjData(std::vector<VINT> &alist,
+                    VINT scc,
+                    IntGraph graph,
+                    std::map<int, int> &intMap,
+                    std::map<int, int> &intMap_R);
 
 	// TMR
 	SmallVector<std::pair<const BasicBlock*, const BasicBlock*>, 32> BackEdges;

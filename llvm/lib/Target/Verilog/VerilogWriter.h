@@ -14,6 +14,7 @@
 
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/ADT/DenseMap.h"
 #include "RTL.h"
 #include <set>
 
@@ -32,6 +33,16 @@ class RAM;
 /// @brief VerilogWriter Class
 class VerilogWriter {
 public:
+	typedef std::vector<const RTLSignal*> VSIG;
+	typedef DenseMap<const RTLSignal*, int> MSIG;
+	typedef DenseMap<int, const RTLSignal*> MSIG_R;
+
+	#define INF 1000000000
+	#define MAX_NODE 16384
+
+	enum PART_STATE { PART_UNKNOWN=0, PART_S, PART_T,
+			PART_S_FINISH, PART_T_FINISH };
+
     //NC changes...
     VerilogWriter(raw_ostream &StreamOut, Allocation *alloc, std::set<const
 		  Function*> AcceleratedFcts) : StreamOut(StreamOut), alloc(alloc),
@@ -62,8 +73,6 @@ public:
 	void printTmrVoter(const std::string sigName, const std::string lo, const std::string hi,
 	        bool isRegVoter=false, bool isModuleBoundary=false);
 	void printTmrVoter(const RTLSignal *sig);
-	bool isLocalMemSignal(const RTLSignal *signal, bool checkOutSig=false);
-	bool isLocalMemOutputSig(const RTLSignal *signal);
 	bool isPartSig(const RTLSignal *sig);
 	bool needSyncVoter(const RTLSignal *signal);
 	bool needPartVoter(const RTLSignal *signal);
@@ -244,24 +253,35 @@ private:
 	bool isTmrSig(const RTLSignal *sig);
 	bool isStateSig(const RTLSignal *sig);
 	bool alwaysVoteMode(const RTLSignal *sig);
-	bool isMemSig(const RTLSignal *sig);
 	bool isModuleOutputSig(const RTLSignal *sig);
 	bool isSubModuleOutputSig(const RTLSignal *sig);
+
+	bool isMemSig(const RTLSignal *sig);
 	bool isMemInputSig(const RTLSignal *sig);
-	bool isGlobalMemInputSig(const RTLSignal *sig);
 	bool isMemOutputSig(const RTLSignal *sig);
+	bool isGlobalMemSig(const RTLSignal *sig);
+	bool isGlobalMemInputSig(const RTLSignal *sig);
+	bool isGlobalMemOutputSig(const RTLSignal *sig);
+	//bool isLocalMemSignal(const RTLSignal *signal, bool checkOutSig=false);
+	bool isLocalMemSig(const RTLSignal *signal);
+	bool isLocalMemOutputSig(const RTLSignal *signal);
+	bool isLocalMemInputSig(const RTLSignal *signal);
+
 	bool isBBModuleSig(const RTLSignal *sig);
 	bool isBBModuleOutputSig(RTLBBModule *bbm, RTLSignal *sig);
 	std::string getTMRPostfix(const RTLSignal *sig);
 	bool isTopModuleSig(const RTLSignal *sig);
 	bool isSameBBFeedbackSig(const RTLSignal *sig);
-	bool findList(std::vector<const RTLSignal *> V, const RTLSignal *sig) {
+	bool findList(VSIG V, const RTLSignal *sig) {
 		return (std::find(V.begin(), V.end(), sig)!=V.end());
 	}
-	void addOpToInput(std::vector<const RTLSignal*> &V, RTLOp *op);
-	void addSensitiveListToInput(std::vector<const RTLSignal*> &V, RTLSignal *sig);
-	void getSensitiveList(std::vector<const RTLSignal*> &V);
-	void getSensitiveList(std::vector<const RTLSignal*> &V, RTLSignal *sig);
+	void addOpToInput(VSIG &V, const RTLOp *op);
+	void addSensitiveListToInput(VSIG &V, const RTLSignal *sig);
+	void getSensitiveList(VSIG &V);
+	void getSensitiveList(VSIG &V, const RTLSignal *sig);
+	void getSensitiveList(VSIG &V, const RTLModule *mod);
+	void getSensitiveList(VSIG &V, RAM *R);
+	void getSensitiveList(VSIG &V, RTLBBModule *bbm);
 	bool isFeedbackSig(const RTLSignal *sig, RTLBBModule *bbm);
 	void initBBModules();
 	RTLBBModule* findFirstUseBBModule();
@@ -277,12 +297,76 @@ private:
 	void findInterconnection(const RTLBBModule *dst);
 	RTLBBModule* getBBSource(RTLSignal *sig);
 
+	// Partition Members start
+	bool networkFlowPartitionSigs(RTLModule *rtl);
+	bool networkFlowPartitionSigs(unsigned areaLimit, int n);
+	void makeBBModuleWithSigPartitions(RTLModule *rtl);
+	void updatePartVoterSignals(RTLModule *rtl);
+	unsigned initSigMap(RTLModule *rtl);
+	unsigned getLimitAreaByPercentage(unsigned areaMarginPercentage);
+	void makeDFGSigGraph(int capacity[][MAX_NODE], int n);
+	void connectDFGSig(int capacity[][MAX_NODE], const RTLSignal *sig, int t);
+	const RTLSignal* getBoundarySig(int n, 
+			                        int capacity[][MAX_NODE], 
+                                    bool visited[],
+                                    bool &frontMerge,
+                                    unsigned areaLimit);
+	const RTLSignal* getBoundarySig(int n, 
+			                        int capacity[][MAX_NODE], 
+                                    int flow[][MAX_NODE],
+			                        VSIG &p0, 
+                                    VSIG &p1, 
+                                    bool &frontMerge,
+			                        unsigned &v0, 
+                                    unsigned &v1,
+                                    unsigned areaLimit);
+	bool isBalanced(VSIG p0, VSIG p1, unsigned v0, unsigned v1);
+	bool isOversized(VSIG p0, VSIG p1, unsigned v0, unsigned v1);
+	void pushNewSigPartition(VSIG v, PART_STATE s);
+	void pushNewSigPartition(PART_STATE s);
+	void mergeNodes(bool frontMerge,
+			        const RTLSignal *boundarySig, 
+                    VSIG p0, 
+                    VSIG p1,
+			        unsigned v0, 
+                    unsigned v1,
+                    unsigned areaLimit);
+	unsigned getSigArea(const RTLSignal *signal);
+	unsigned getSigArea(PART_STATE s, unsigned v=0);
+	unsigned getSigArea(VSIG slist, unsigned v=0);
+	unsigned getFsmArea(const RTLSignal *signal);
+	unsigned getVoterArea(unsigned numberOfCuts);
+	unsigned getInstructionAreaFromSignal(const RTLSignal *signal);
+	unsigned getRound(unsigned w);
+	std::string getOpName(const RTLOp *op, bool isSigned, unsigned w);
+	unsigned getOperatorArea(const RTLSignal *sig, unsigned w=0);
+	unsigned getValueArea(const RTLSignal *sig, unsigned w=0);
+	unsigned getIndividualConditionArea(const RTLSignal *signal, 
+                                        int conditionNum);
+	bool skipSig(const RTLSignal *signal);
+	bool isDivOutputSignal(const RTLSignal *signal);
+	const RTLModule *getInstanceModuleFromOutputSignal(const RTLSignal *signal);
+	RAM *getRamFromOutputSignal(const RTLSignal *signal);
+	unsigned getMemoryControllerPartID();
+	RTLBBModule *getBBModule(const Instruction *instr);
+
+	MSIG sigMap;
+	MSIG_R sigMap_R;
+	VSIG sigs;
+	MSIG sigPartState;
+	std::vector<VSIG> SigPartitions;
+	DenseMap<const RTLSignal*, const RTLSignal*> memorySignalPair;
+	unsigned cArea;
+	
+	unsigned getcArea() { return cArea; }
+	void setcArea(unsigned a) { cArea = a; }
+	// Partition Members end
+
 	// FIXME - use as global variables
 	std::string currReplica;
 	bool useReplicaNumberForAllVariables;
 	RTLBBModule *curBBModule;
 	bool useFeedbackPostfixForBBModules;
-	
 };
 
 } // End legup namespace

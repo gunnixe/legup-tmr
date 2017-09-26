@@ -639,11 +639,16 @@ RTLSignal *GenerateRTL::createDivFU(Instruction *instr, RTLSignal *op0, RTLSigna
   Out << "/* " << getValueStr(instr) << "*/";
   d->setBody(Out.str());
 
+  // find the BBModule from the instruction
+  RTLBBModule *bbm = getBBModule(instr);
+
   RTLSignal *FU = rtl->addWire("lpm_divide_" + verilogName(instr) + "_temp_out",
 			       RTLWidth(instr->getType()));
+  if(bbm) bbm->add_signal(FU);
 
   RTLSignal *unused = rtl->addWire(verilogName(instr) + "_unused",
 				   RTLWidth(instr->getType()));
+  if(bbm) bbm->add_signal(unused);
   
   if (isDiv(instr)) {
     d->addOut(nm["quotient"])->connect(FU);
@@ -655,6 +660,7 @@ RTLSignal *GenerateRTL::createDivFU(Instruction *instr, RTLSignal *op0, RTLSigna
   }
 
   RTLSignal *en = rtl->addWire(getEnableName(instr));
+  if(bbm) bbm->add_signal(en);
 
   d->addIn(nm["clock"])->connect(rtl->find("clk"));
   if (LEGUP_CONFIG->getParameter("DIVIDER_MODULE") == "altera")
@@ -745,7 +751,11 @@ RTLSignal *GenerateRTL::createDivFU(Instruction *instr, RTLSignal *op0, RTLSigna
   RTLWidth w = getOutSizeShared(instr);
   
   RTLSignal *FUout = rtl->addWire("lpm_divide_" + verilogName(instr) + "_out",w);
+  if(bbm) bbm->add_signal(FUout);
   FUout->connect(FU);
+
+  //add Div module into RTLBBModule list
+  if(bbm) bbm->add_module(d);
   return FUout;
 }  
 
@@ -959,6 +969,9 @@ RTLSignal *GenerateRTL::createFU(Instruction *instr, RTLSignal *op0,
 		return createMulFU(instr, op0, op1);
 	}
 
+	//FIXME
+	//Currently TLegUp doesnot support FP instructions for the BB instantiation
+
 	//If the instruction is one of the floating point operation, call FP create module
 	//with opCode (unsigned) as additional parameter
 	unsigned opCode = instr->getOpcode();
@@ -1056,7 +1069,7 @@ RTLSignal *GenerateRTL::createFU(Instruction *instr, RTLSignal *op0,
 
 		RTLSignal *en = rtl->addWire(getEnableName(instr));
 		RTLBBModule *bbm = getBBModule(instr);
-		bbm->add_signal(en);
+		if(bbm) bbm->add_signal(en);
 
 		RTLOp *enCond = rtl->addOp(RTLOp::EQ);
 		enCond->setOperand(0, en);
@@ -1075,7 +1088,7 @@ RTLSignal *GenerateRTL::createFU(Instruction *instr, RTLSignal *op0,
 				// first register is driven by FU wire
 				driver = FUoutput;
 			}
-			bbm->add_signal(stage_reg);
+			if(bbm) bbm->add_signal(stage_reg);
 
 			stage_reg->addCondition(enCond, driver, instr);
 
@@ -1088,24 +1101,20 @@ RTLSignal *GenerateRTL::createFU(Instruction *instr, RTLSignal *op0,
 	return FUoutput;
 }
 
-RTLBBModule *GenerateRTL::getBBModule(Instruction *inst) {
-	std::string wire = verilogName(*inst);
-	std::string reg = wire + "_reg";
-	const RTLSignal *sig = rtl->find(wire);
-	const RTLSignal *sig_reg = rtl->find(reg);
+RTLBBModule *GenerateRTL::getBBModule(const Instruction* instr) {
+	if (rtl->bbModules.size()==0)
+		return NULL;
 
 	for (std::vector<RTLBBModule *>::const_iterator bbm = rtl->bbModules.begin(),
 	                                                bbme = rtl->bbModules.end();
 	                                                bbm != bbme; ++bbm) {
-		std::vector<const RTLSignal*> V;
-		for (RTLBBModule::const_signal_iterator i = (*bbm)->signals_begin(),
-	                                            e = (*bbm)->signals_end();
-	                                            i != e; ++i) {
-			if (sig == *i || sig_reg == *i)
+		for (RTLBBModule::const_instr_iterator i = (*bbm)->instructions_begin();
+		                                       i != (*bbm)->instructions_end(); ++i) {
+			if (*i == instr)
 				return *bbm;
 		}
 	}
-	return rtl->bbModules.front();
+	return NULL;
 }
 
 void GenerateRTL::visitReturnInst(ReturnInst &I) {
@@ -3135,11 +3144,13 @@ void GenerateRTL::findAllPipelineStageRegisters(BasicBlock *BB) {
 				if (stageSeen.find(stage) == stageSeen.end()) {
 					// create a new pipeline stage register
 					stageSeen.insert(stage);
-					setPipelineSignal(I, i,
-							rtl->addReg(
+					RTLSignal *s = rtl->addReg(
 									verilogName(I) + "_reg_stage"
 											+ utostr(stage),
-									RTLWidth(I->getType())));
+									RTLWidth(I->getType()));
+					setPipelineSignal(I, i, s);
+					RTLBBModule *bbm = getBBModule(I);
+					if (bbm) bbm->add_signal(s);
 
 					RTLSignal *ii_state = rtl->find(label + "_ii_state");
 
@@ -6053,10 +6064,10 @@ void GenerateRTL::createRTLSignalsForInstructions() {
 		makeBBModuleWithFunction();
 	else if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")<=2)
 		makeBBModuleWithBBPartitions();
-	else
+	else if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")<=5)
 		makeBBModuleWithInstPartitions();
 
-	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")!=5) {
+	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")<5) {
 		//FSM to BB_0 (or BB_CTRL)
 		RTLBBModule *bbfront = rtl->bbModules.front();
 		RTLSignal *sig = rtl->find("cur_state");
@@ -6118,6 +6129,7 @@ void GenerateRTL::makeBBModuleWithInstPartitions() {
 					}
 				}
 			} else {
+				bbm->add_instruction(*instr);
 				std::string wire = verilogName(*instr);
 				std::string reg = verilogName(*instr) + "_reg";
 				if (rtl->exists(wire)) {
@@ -6183,16 +6195,14 @@ void GenerateRTL::createRTLSignalsForLocalRams() {
             const RAM *R = *i;
             std::string name = R->getName();
             RTLSignal *s;
-            s = rtl->addWire(name + "_address_" + port,
-                    RTLWidth(R->getAddrWidth()));
+
+            s = rtl->addWire(name + "_address_" + port, RTLWidth(R->getAddrWidth()));
             s->setDefaultDriver(ZERO);
             s = rtl->addWire(name + "_write_enable_" + port);
             s->setDefaultDriver(ZERO);
-            s = rtl->addWire(name + "_in_" + port,
-                    RTLWidth(R->getDataWidth()));
+            s = rtl->addWire(name + "_in_" + port, RTLWidth(R->getDataWidth()));
             s->setDefaultDriver(ZERO);
-            rtl->addWire(name + "_out_" + port,
-                    RTLWidth(R->getDataWidth()));
+            rtl->addWire(name + "_out_" + port, RTLWidth(R->getDataWidth()));
         }
     }
 }
@@ -6660,7 +6670,8 @@ RTLModule* GenerateRTL::generateRTL(MinimizeBitwidth *_MBW) {
 	}
 
 	// add voter tag
-	if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==6) {
+	if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==6
+			|| LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==9) {
 		updateSyncVoterWithLatency(dag);
 	} else if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==7) {
 		insertSyncVoterOnMaxFanIn(dag);
@@ -6860,7 +6871,6 @@ void GenerateRTL::insertSyncVoterOnMaxFanOut(SchedulerDAG *dag) {
 }
 
 void GenerateRTL::updateSyncVoterWithLatency(SchedulerDAG *dag) {
-
 	VINST FSMSensitiveList;
 	makeFSMSensitiveList(dag, FSMSensitiveList);
 
@@ -6894,10 +6904,11 @@ void GenerateRTL::updateSyncVoterWithLatency(SchedulerDAG *dag) {
 			float nodeDelay = iNode->getDelay();
 
 			// If there is a partitioning voter in scc, we don't need to insert a sync voter.
-			if (iNode->getPartition() 
-					&& LEGUP_CONFIG->getParameterInt("MERGE_PVOTER_WITH_SVOTER")) {
-				minInst = instr;
-				break;
+			if (LEGUP_CONFIG->getParameterInt("MERGE_PVOTER_WITH_SVOTER")) {
+				if (iNode->getPartition() || iNode->getBackward()) {
+					minInst = instr;
+					break;
+				}
 			}
 
 			// Make max delay for the signal comes from FSM state since the FSM

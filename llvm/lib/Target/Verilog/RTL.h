@@ -349,6 +349,8 @@ public:
     typedef std::vector<RTLSignal*>::const_iterator const_signal_iterator;
     typedef std::vector<RTLModule*>::iterator module_iterator;
     typedef std::vector<RTLModule*>::const_iterator const_module_iterator;
+    typedef std::vector<const Instruction*>::iterator instr_iterator;
+    typedef std::vector<const Instruction*>::const_iterator const_instr_iterator;
 
     module_iterator       modules_begin()       { return modules.begin(); }
     const_module_iterator modules_begin() const { return modules.begin(); }
@@ -375,6 +377,11 @@ public:
     signal_iterator       outputs_end()         { return outputs.end(); }
     const_signal_iterator outputs_end()   const { return outputs.end(); }
 
+    instr_iterator        instructions_begin()       { return instructions.begin(); }
+    const_instr_iterator  instructions_begin() const { return instructions.begin(); }
+    instr_iterator        instructions_end()         { return instructions.end(); }
+    const_instr_iterator  instructions_end()   const { return instructions.end(); }
+
 	void add_input(RTLSignal *in) {
 		if ((std::find(inputs.begin(), inputs.end(), in) == inputs.end()))
 				//&& (std::find(signals.begin(), signals.end(), in) == signals.end()))
@@ -387,6 +394,7 @@ public:
 			signals.push_back(sig);
 	}
 	void add_module(RTLModule *mod) { modules.push_back(mod); }
+	void add_instruction(const Instruction *instr) { instructions.push_back(instr); }
 
 	bool empty() { return signals.empty(); }
 
@@ -404,6 +412,7 @@ private:
 	std::vector<RTLSignal *> inputs;
 	std::vector<RTLSignal *> finputs;
 	std::vector<RTLSignal *> outputs;
+	std::vector<const Instruction *> instructions;
 };
 
 /// RTLModule - Represents an RTL module.

@@ -169,7 +169,7 @@ public:
 	void insertSyncVoterOnMaxFanOut(SchedulerDAG *dag);
 	void insertSyncVoterOnMaxFanIn(SchedulerDAG *dag);
 	void relocatePrimitiveModules(RTLBBModule *bbm, Instruction *I);
-	RTLBBModule *getBBModule(Instruction *inst);
+	RTLBBModule *getBBModule(const Instruction *I);
 
     void scheduleOperations();
 
