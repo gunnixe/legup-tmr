@@ -3,7 +3,8 @@ source ../../config.tcl
 #set_parameter CLOCK_PERIOD 5
 
 #set_parameter LOCAL_RAMS 1
-#loop_pipeline "loop"
+#loop_pipeline "loop1"
+loop_pipeline "loop2"
 
 #set_parameter PARTITION_AREA_LIMIT 300
 set_parameter MB_MINIMIZE_HW 1

@@ -1,5 +1,7 @@
 source ../../config.tcl
 
+set_resource_constraint mem_dual_port 1
+
 #set_parameter CLOCK_PERIOD 5
 set_parameter GROUP_RAMS 1
 set_parameter GROUP_RAMS_SIMPLE_OFFSET 1
@@ -20,6 +22,6 @@ set_parameter GROUP_RAMS_SIMPLE_OFFSET 1
 set_parameter TMR 1
 set_parameter SYNC_VOTER_MODE 2
 set_parameter PART_VOTER_MODE 0
-set_parameter LOCAL_RAMS 1
-set_parameter USE_REG_VOTER_FOR_LOCAL_RAMS 1
-set_parameter PIPELINE_ALL 1
+#set_parameter LOCAL_RAMS 1
+#set_parameter USE_REG_VOTER_FOR_LOCAL_RAMS 1
+#set_parameter PIPELINE_ALL 1

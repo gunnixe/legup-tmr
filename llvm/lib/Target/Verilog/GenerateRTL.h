@@ -66,10 +66,9 @@ class DebugType;
 /// @brief Legup Hardware Module Representation
 class GenerateRTL : public InstVisitor<GenerateRTL> {
 public:
-	typedef std::vector<const BasicBlock*> VBB;
 	typedef std::vector<const Instruction*> VINST;
-	typedef DenseMap<const BasicBlock*, int> MBB;
 	typedef DenseMap<const Instruction*, int> MINST;
+	typedef std::vector<int> VINT;
 
     GenerateRTL(Allocation *alloc, Function* F) :
         sched(0), binding(0), fsm(0), bindingFSM(0),  alloc(alloc), Fp(F),
@@ -98,6 +97,7 @@ public:
     }
     
     // TODO: had to change this for LLVM 3.4 update. TerminatorInst??
+    //void visitUnwindInst(UnwindInst &I) {
     void visitUnwindInst(TerminatorInst &I) {
       llvm_unreachable("Lowerinvoke pass didn't work!");
     }
@@ -155,22 +155,6 @@ public:
       llvm_unreachable(0);
     }
 
-	// voter
-	void caseConditions(const RTLSignal *condition, std::vector<const Instruction *> &fsmSens);
-	void makeFSMSensitiveList(SchedulerDAG *dag, std::vector<const Instruction*> &fsmSens);
-	bool isFsmRelatedSignal(std::vector<const Instruction*> list, const Instruction* inst);
-	void updateSyncVoterWithLatency(SchedulerDAG *dag);
-	void updateVoterSignal(SchedulerDAG *dag);
-	void printDebugSignal(std::string chr);
-	void addOpToInput(RTLBBModule *bbm, RTLOp *op);
-	void addSensitiveListToInput(RTLBBModule *bbm, RTLSignal *sig);
-	void updateBBModuleInputs(SchedulerDAG *dag);
-	void updateBBfinput(Instruction *I);
-	void insertSyncVoterOnMaxFanOut(SchedulerDAG *dag);
-	void insertSyncVoterOnMaxFanIn(SchedulerDAG *dag);
-	void relocatePrimitiveModules(RTLBBModule *bbm, Instruction *I);
-	RTLBBModule *getBBModule(const Instruction *I);
-
     void scheduleOperations();
 
     /// updateOperationUsage - updates the global OperationUsage map
@@ -221,6 +205,13 @@ public:
     DebugVariableLocal *dbgGetVariable(MDNode *metaNode);
     void generateInstances(int parentInst);
     void addDebugRtl();
+
+	//TMR
+	void makeFSMSensitiveList(SchedulerDAG *dag, RTLModule *rtl, VINST &fsmSens);
+	void setSyncVoterFlagWithLatency(SchedulerDAG *dag, RTLModule *rtl);
+	void caseConditions(const RTLSignal *condition, std::vector<const Instruction*> &V);
+	RTLPartModule *getPartModule(const Instruction* instr);
+	void updateVoterSignal(SchedulerDAG *dag);
 
   private:
     // get the RTLSignal that holds the expected value of cur_state
@@ -730,11 +721,7 @@ public:
     std::vector<RTLModuleInstance *> instances;
 
 	// TMR
-	RTLSignal *getWire(RTLSignal *sig);
-	RTLSignal *getReg(RTLSignal *sig);
-	void makeBBModuleWithInstPartitions();
-	void makeBBModuleWithBBPartitions();
-	void makeBBModuleWithFunction();
+	void makePartModuleWithInstPartitions();
 };
 
 } // End legup namespace

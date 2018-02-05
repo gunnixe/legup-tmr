@@ -16,7 +16,6 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/AliasAnalysis.h"
-#include <deque>
 
 using namespace llvm;
 
@@ -24,50 +23,6 @@ namespace legup {
 class FiniteStateMachine;
 class LegupConfig;
 class IntGraph;
-
-class BasicBlockNode {
-public:
-	BasicBlockNode (BasicBlock *B) : bb(B) {}
-
-	typedef std::vector<Instruction *>::iterator iterator; 
-	typedef std::vector<Instruction *>::const_iterator const_iterator; 
-
-	iterator       finput_begin()       { return finput.begin(); }
-	const_iterator finput_begin() const { return finput.begin(); }
-	iterator       finput_end()         { return finput.end(); }
-	const_iterator finput_end()   const { return finput.end(); }
-	iterator       input_begin()        { return input.begin(); }
-	const_iterator input_begin()  const { return input.begin(); }
-	iterator       input_end()          { return input.end(); }
-	const_iterator input_end()    const { return input.end(); }
-	iterator       output_begin()       { return output.begin(); }
-	const_iterator output_begin() const { return output.begin(); }
-	iterator       output_end()         { return output.end(); }
-	const_iterator output_end()   const { return output.end(); }
-
-	bool addInput(Instruction *I) {
-		if (std::find(input.begin(), input.end(), I) == input.end()) {
-			input.push_back(I);
-			return true;
-		}
-		return false;
-	}
-	bool addFeedbackInput(Instruction *I) {
-		if (std::find(finput.begin(), finput.end(), I) == finput.end()) {
-			finput.push_back(I);
-			return true;
-		}
-		return false;
-	}
-	void addOutput(Instruction *I) { output.push_back(I); }
-	BasicBlock* getBasicBlock() { return bb; }
-
-private:
-	BasicBlock *bb;
-	std::vector<Instruction *> input;
-	std::vector<Instruction *> finput;
-	std::vector<Instruction *> output;
-};
 
 /// InstructionNode - Container for Instructions to contain schedule-specific
 /// information. Contains memory dependencies.
@@ -96,10 +51,6 @@ public:
     const_iterator dep_begin() const { return depInsts.begin(); }
     iterator       dep_end()         { return depInsts.end(); }
     const_iterator dep_end() const   { return depInsts.end(); }
-    iterator       back_dep_begin()       { return backDepInsts.begin(); }
-    const_iterator back_dep_begin() const { return backDepInsts.begin(); }
-    iterator       back_dep_end()         { return backDepInsts.end(); }
-    const_iterator back_dep_end() const   { return backDepInsts.end(); }
 
     // in the example above:
     // %2 and %3 are used by %1
@@ -108,10 +59,6 @@ public:
     const_iterator use_begin() const { return useInsts.begin(); }
     iterator       use_end()         { return useInsts.end(); }
     const_iterator use_end() const   { return useInsts.end(); }
-    iterator       back_use_begin()       { return backUseInsts.begin(); }
-    const_iterator back_use_begin() const { return backUseInsts.begin(); }
-    iterator       back_use_end()         { return backUseInsts.end(); }
-    const_iterator back_use_end() const   { return backUseInsts.end(); }
 
     // dependencies due to alias analysis
     // these could be RAW, WAR, or WAR dependencies, for example:
@@ -149,8 +96,6 @@ public:
     iterator       mem_use_end()         { return bbMemUseInsts.end(); }
     const_iterator mem_use_end() const   { return bbMemUseInsts.end(); }
 
-    void addBackDepInst(InstructionNode* in) { backDepInsts.push_back(in); }
-    void addBackUseInst(InstructionNode* in) { backUseInsts.push_back(in); }
     void addDepInst(InstructionNode* in) { depInsts.push_back(in); }
     void addUseInst(InstructionNode* in) { useInsts.push_back(in); }
     void addMemDepInst(InstructionNode* in) { bbMemDepInsts.push_back(in); }
@@ -176,15 +121,13 @@ public:
 
     Instruction* getInst() { return inst; }
 
-	// voter
+	//TMR
 	void setBackward(bool val) { backwardEdge = val; }
 	bool getBackward() { return backwardEdge; }
 	void setPartition(bool val) { partitionEdge = val; }
 	bool getPartition() { return partitionEdge; }
 
 private:
-    depType backDepInsts;
-    depType backUseInsts;
     depType depInsts;
     depType useInsts;
     depType bbMemUseInsts;
@@ -199,7 +142,7 @@ private:
     // intrinsic delay, calculated by constructor
     float delay;
 
-	// voter
+	//TMR
 	bool backwardEdge;
 	bool partitionEdge;
 };
@@ -209,10 +152,8 @@ private:
 /// @brief Legup Scheduler Memory Dependency Pass
 class SchedulerDAG {
 public:
-	typedef std::vector<const BasicBlock*> VBB;
 	typedef std::vector<const Instruction*> VINST;
 	typedef std::vector<int> VINT;
-	typedef DenseMap<const BasicBlock*, int> MBB;
 	typedef DenseMap<const Instruction*, int> MINST;
 
 	enum PART_STATE { PART_UNKNOWN=0, PART_S, PART_T,
@@ -226,93 +167,31 @@ public:
         assert (nodeLookup.find(inst) != nodeLookup.end());
         return nodeLookup[inst];
     }
-	BasicBlockNode* getBasicBlockNode(BasicBlock *bb) {
-		assert (bbNodeLookup.find(bb) != bbNodeLookup.end());
-		return bbNodeLookup[bb];
-	}
 
     // print a .dot file for the dependency DFG of basic block BB
     void printDFGDot(formatted_raw_ostream &out, BasicBlock *BB);
 
-	// voter
-	void syncVoterScc(Function &F);
-	void syncVoterSccBB(Function &F);
-	void addSCC(VINST scc);
-	void addSCC(VINST scc, const Instruction *use);
-	bool isSCCInst(const Instruction *def);
-	void findSCC(const BasicBlock* succ, bool findWithinBB = false);
-	bool findSCC(VINST scc, const Instruction *i2, bool findWithinBB = false);
-	void insertSyncVoterWithSCC();
-	void insertSyncVoterOnMaxFanIn();
-	void insertSyncVoterOnMaxFanOut(Function &F);
-	void insertSyncVoter(Function &F);
-	void insertSyncVoter(const BasicBlock* pred, const BasicBlock* succ);
-	bool foundBackwardDependency(const Instruction *use, const Instruction *def,
-               const BasicBlock* predBB, const BasicBlock* succBB,
-               unsigned siIdx, unsigned piIdx);
-	void findSCCBBs(Function &F);
-	void findTopologicalBBList(Function &F);
-	unsigned getInstructionArea(Instruction *instr);
-	void findAllPaths(Function &F);
-	void findAllPaths(std::vector<const BasicBlock *> path, const BasicBlock *current);
-	bool isBackwardEdge(std::pair<const BasicBlock*, const BasicBlock*> edge);
-	void insertPartitionVoter(Function &F);
-	void runToposort(const Function &F);
-	bool recursiveDFSToposort(const BasicBlock *BB, MBB &colorMap,
-               std::vector<const BasicBlock *> &sortedBBs);
-	bool isPredPartition(std::vector<const BasicBlock *> path, const BasicBlock *useBB);
-	void bfsPartitionBBs(Function &F);
-	void bfsPartitionInsts(Function &F);
-	void bfsPartitionInsts(Function &F, unsigned areaLimit);
-
-	// NetworkFlow Partitioning
-	void networkFlowPartitionBBs(Function &F);
+	//TMR
 	void networkFlowPartitionInsts(Function &F);
 	void networkFlowPartitionInsts(Function &F, unsigned areaLimit, int n);
-	const BasicBlock* getBBNode(int idx);
 	const Instruction* getInstNode(int idx);
-	int makeDFGBBGraph(int capacity[][MAX_NODE], int entryBB);
 	void makeDFGInstGraph(int capacity[][MAX_NODE], int n);
-	int initBBArea(Function &F);
-	int getBBArea(VBB blist);
-	int getBBArea(PART_STATE s);
+	unsigned getInstructionArea(Instruction *instr);
 	int getInstArea(VINST ilist, unsigned v=0);
 	int getInstArea(PART_STATE s, unsigned v=0);
-	int getMinGraphSize(Function &F);
 	unsigned getBitWidth(Instruction *I);
 	unsigned getVoterArea(unsigned numberOfCuts);
-	bool isBalanced(int totalArea, VBB p0, VBB p1);
 	bool isBalanced(VINST p0, VINST p1, unsigned v0, unsigned v1);
-	const BasicBlock *getBoundaryBB(int boundaryEdge, int flow[][MAX_NODE],
-				bool &frontMerge, int s, int n);
-	const BasicBlock* getBoundaryBB(int n, int start, int target, 
-				int capacity[][MAX_NODE], int flow[][MAX_NODE],
-				VBB &p0, VBB &p1, bool &frontMerge);
 	const Instruction* getBoundaryInst(int n, 
 			int capacity[][MAX_NODE], int flow[][MAX_NODE],
 			VINST &p0, VINST &p1, bool &frontMerge,
 			unsigned &fminCut, unsigned &bminCut);
-	void setPartitions(const BasicBlock *boundaryBB, bool frontMerge);
-	void connectDFGBB(int capacity[][MAX_NODE], const Instruction *I, int s, int t);
 	int initMap(Function &F);
 	bool skipInst(const Instruction *I);
 	int getLimitAreaByPercentage(Function &F, unsigned areaMarginPercentage=0);
-	void findPartitionSignals();
-	void findInstPartitionSignals();
-	bool isEmptyCand();
-	void revisitPartitions();
-	bool checkAreaConstraint(bool frontMerge, const BasicBlock *boundaryBB,
-				VBB p0, VBB p1);
-	void pushPlist(VBB &plist, VBB pNodes);
-	void pushNewPartition(PART_STATE s);
 	void pushNewInstPartition(PART_STATE s);
 	void pushNewInstPartition(VINST v, PART_STATE s);
-	void dumpNF(int capacity[][MAX_NODE], int n);
-	void dumpVBB(VBB blist, std::string str);
-	void dumpbbPartState(std::string str);
-	void dumpFlow(int flow[][MAX_NODE], int s, int t, int max_flow);
 	int initInstMap(Function &F);
-	void clearInstMap();
 	void mergeNodes(bool frontMerge, const Instruction *boundaryInst,
 			VINST p0, VINST p1, unsigned v0, unsigned v1);
 	void connectDFGInst(int capacity[][MAX_NODE], Instruction *I, int t);
@@ -325,14 +204,17 @@ public:
                     IntGraph graph,
                     std::map<int, int> &intMap,
                     std::map<int, int> &intMap_R);
+	void insertSyncVoter(Function &F);
+	void insertSyncVoterDFS(Function &F);
+	void addSCC(VINST scc, const Instruction* use);
+	void addSCC(VINST scc);
+	bool findSCC(VINST scc, const Instruction *def, bool findWithinBB=false);
+	void findSCC(const BasicBlock* succ, bool findWithinBB=false);
+	void clearInstMap();
 
-	// TMR
-	SmallVector<std::pair<const BasicBlock*, const BasicBlock*>, 32> BackEdges;
-	std::queue<VBB> DAGPaths;
-	std::vector<VBB> Partitions;
+	//TMR
+	std::vector<VINST> InstCycles;
 	std::vector<VINST> InstPartitions;
-	Allocation *getAlloc() { return alloc; }
-	std::vector<VINST> SCCs;
 
 private:
     void regDataDeps(InstructionNode *iNode);
@@ -345,21 +227,13 @@ private:
     AliasAnalysis            *AliasA;
 
     DenseMap<Instruction *, InstructionNode*> nodeLookup;
-    DenseMap<BasicBlock *, BasicBlockNode*> bbNodeLookup;
     Allocation *alloc;
 
-	// TMR
-	MBB bbArea;
-	MBB bbMap;
+	//TMR
 	MINST instMap;
 	VINST storeInsts;
 	VINST branchInsts;
 
-	MBB bbPartState;
-	VBB bbs;
-
-	//VBB startNodes;
-	//VBB targetNodes;
 	int cArea;
 
 	MINST instPartState;

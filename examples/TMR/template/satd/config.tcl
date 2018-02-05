@@ -19,6 +19,6 @@ set_parameter MB_MINIMIZE_HW 0
 set_parameter TMR 1
 set_parameter SYNC_VOTER_MODE 2
 set_parameter PART_VOTER_MODE 0
-set_parameter LOCAL_RAMS 1
-set_parameter USE_REG_VOTER_FOR_LOCAL_RAMS 1
-set_parameter PIPELINE_ALL 1
+#set_parameter LOCAL_RAMS 1
+#set_parameter USE_REG_VOTER_FOR_LOCAL_RAMS 1
+#set_parameter PIPELINE_ALL 1

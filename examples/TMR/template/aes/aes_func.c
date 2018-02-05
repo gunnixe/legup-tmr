@@ -369,7 +369,7 @@ MixColumn_AddRoundKey (int statemt[32], int nb, int n)
   int ret[8 * 4], j;
   register int x;
 
-  for (j = 0; j < nb; ++j)
+  loop1: for (j = 0; j < nb; ++j)
     {
       ret[j * 4] = (statemt[j * 4] << 1);
       if ((ret[j * 4] >> 8) == 1)
@@ -419,7 +419,7 @@ MixColumn_AddRoundKey (int statemt[32], int nb, int n)
       ret[3 + j * 4] ^=
 	statemt[1 + j * 4] ^ statemt[2 + j * 4] ^ word[3][j + nb * n];
     }
-  for (j = 0; j < nb; ++j)
+  loop2: for (j = 0; j < nb; ++j)
     {
       statemt[j * 4] = ret[j * 4];
       statemt[1 + j * 4] = ret[1 + j * 4];
@@ -436,14 +436,14 @@ AddRoundKey_InversMixColumn (int statemt[32], int nb, int n)
   int ret[8 * 4], i, j;
   register int x;
 
-  for (j = 0; j < nb; ++j)
+  loop3: for (j = 0; j < nb; ++j)
     {
       statemt[j * 4] ^= word[0][j + nb * n];
       statemt[1 + j * 4] ^= word[1][j + nb * n];
       statemt[2 + j * 4] ^= word[2][j + nb * n];
       statemt[3 + j * 4] ^= word[3][j + nb * n];
     }
-  for (j = 0; j < nb; ++j)
+  loop4: for (j = 0; j < nb; ++j)
     for (i = 0; i < 4; ++i)
       {
 	x = (statemt[i + j * 4] << 1);
@@ -497,7 +497,7 @@ AddRoundKey_InversMixColumn (int statemt[32], int nb, int n)
 	x ^= statemt[(i + 3) % 4 + j * 4];
 	ret[i + j * 4] ^= x;
       }
-  for (i = 0; i < nb; ++i)
+  loop5: for (i = 0; i < nb; ++i)
     {
       statemt[i * 4] = ret[i * 4];
       statemt[1 + i * 4] = ret[1 + i * 4];
@@ -531,7 +531,7 @@ AddRoundKey (int statemt[32], int type, int n)
       nb = 8;
       break;
     }
-  for (j = 0; j < nb; ++j)
+  loop6: for (j = 0; j < nb; ++j)
     {
       statemt[j * 4] ^= word[0][j + nb * n];
       statemt[1 + j * 4] ^= word[1][j + nb * n];

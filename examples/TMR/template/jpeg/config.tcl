@@ -4,7 +4,7 @@ source ../../config.tcl
 # negative offsets which are not handled properly
 # by the OR gate
 
-set_parameter LOCAL_RAMS 1
+#set_parameter LOCAL_RAMS 1
 set_parameter GROUP_RAMS 1
 set_parameter GROUP_RAMS_SIMPLE_OFFSET 0
 set_parameter CASE_FSM 1

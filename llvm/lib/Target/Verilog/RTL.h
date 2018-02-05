@@ -41,7 +41,7 @@ class Allocation;
 class RTLOp;
 class RTLModule;
 class RAM;
-class RTLBBModule;
+class RTLPartModule;
 
 /// RTLWidth - Represents the bitwidth of a RTLSignal i.e. [5:2]
 /// @brief RTLWidth
@@ -120,11 +120,11 @@ private:
 /// @brief RTL wire/reg always block
 class RTLSignal {
 public:
+	enum { NONE=0, SYNC_VOTER, PART_VOTER, PIPE_VOTER, PART_VOTER_WIRE };
+
     RTLSignal();
     RTLSignal(std::string name, std::string value, RTLWidth bitwidth=RTLWidth());
     virtual ~RTLSignal() {}
-
-	enum { NONE=0, SYNC_VOTER, PART_VOTER, PIPE_VOTER, PART_VOTER_WIRE };
 
     std::string getValue() const { return value; }
     std::string getName() const { return name; }
@@ -202,11 +202,9 @@ public:
     bool getCheckXs() const { return checkXs; }
     void setCheckXs(bool check) { checkXs = check; }
 
-	//TMR
-	bool isPhi() const;
-	unsigned getVoter() const { return voterInsertionMode; }
-	void setVoter(unsigned v) { voterInsertionMode = v; }
-	bool driveFromVoter() const;
+	// TMR
+	unsigned getVoter() const { return voterType; }
+	void setVoter(unsigned v) { voterType = v; }
 
 private:
     std::string name;
@@ -221,7 +219,7 @@ private:
     std::vector<Instruction*> instrs;
 
 	//TMR
-	unsigned voterInsertionMode;
+	unsigned voterType;
 
     void init();
 };
@@ -335,10 +333,10 @@ public:
     }
 };
 
-class RTLBBModule {
+class RTLPartModule {
 public:
-	RTLBBModule(std::string name, unsigned partID) : name(name), partID(partID) {};
-	~RTLBBModule();
+	RTLPartModule(std::string name, unsigned partID) : name(name), partID(partID) {};
+	~RTLPartModule();
 
 	std::string getName() const { return name; }
 	void setName(std::string _name) { name = _name; }
@@ -351,6 +349,8 @@ public:
     typedef std::vector<RTLModule*>::const_iterator const_module_iterator;
     typedef std::vector<const Instruction*>::iterator instr_iterator;
     typedef std::vector<const Instruction*>::const_iterator const_instr_iterator;
+    typedef std::set<int>::iterator funcID_iterator;
+    typedef std::set<int>::const_iterator const_funcID_iterator;
 
     module_iterator       modules_begin()       { return modules.begin(); }
     const_module_iterator modules_begin() const { return modules.begin(); }
@@ -367,11 +367,6 @@ public:
     signal_iterator       inputs_end()         { return inputs.end(); }
     const_signal_iterator inputs_end()   const { return inputs.end(); }
 
-    signal_iterator       finputs_begin()       { return finputs.begin(); }
-    const_signal_iterator finputs_begin() const { return finputs.begin(); }
-    signal_iterator       finputs_end()         { return finputs.end(); }
-    const_signal_iterator finputs_end()   const { return finputs.end(); }
-
     signal_iterator       outputs_begin()       { return outputs.begin(); }
     const_signal_iterator outputs_begin() const { return outputs.begin(); }
     signal_iterator       outputs_end()         { return outputs.end(); }
@@ -382,27 +377,27 @@ public:
     instr_iterator        instructions_end()         { return instructions.end(); }
     const_instr_iterator  instructions_end()   const { return instructions.end(); }
 
+    funcID_iterator       funcID_begin()       { return functionIDs->begin(); }
+    const_funcID_iterator funcID_begin() const { return functionIDs->begin(); }
+    funcID_iterator       funcID_end()         { return functionIDs->end(); }
+    const_funcID_iterator funcID_end()   const { return functionIDs->end(); }
+
 	void add_input(RTLSignal *in) {
 		if ((std::find(inputs.begin(), inputs.end(), in) == inputs.end()))
 				//&& (std::find(signals.begin(), signals.end(), in) == signals.end()))
 			inputs.push_back(in);
 	}
-	void add_finput(RTLSignal *in) { finputs.push_back(in); }
 	void add_output(RTLSignal *out) { outputs.push_back(out); }
 	void add_signal(RTLSignal *sig) { 
-		if ((std::find(signals.begin(), signals.end(), sig) == signals.end()))
+		if ((std::find(signals.begin(), signals.end(), sig) == signals.end())) {
 			signals.push_back(sig);
+		}
 	}
 	void add_module(RTLModule *mod) { modules.push_back(mod); }
 	void add_instruction(const Instruction *instr) { instructions.push_back(instr); }
 
 	bool empty() { return signals.empty(); }
-
-	void remove_input(std::string name);
-	void remove_finput(std::string name);
-	void remove_output(std::string name);
-	void remove_signal(std::string name);
-	void remove_module(std::string name);
+	void setList(std::set<int> *p) { functionIDs = p; }
 
 private:
 	std::string name;
@@ -410,9 +405,9 @@ private:
 	std::vector<RTLModule *> modules;
 	std::vector<RTLSignal *> signals;
 	std::vector<RTLSignal *> inputs;
-	std::vector<RTLSignal *> finputs;
 	std::vector<RTLSignal *> outputs;
 	std::vector<const Instruction *> instructions;
+	std::set<int> *functionIDs;
 };
 
 /// RTLModule - Represents an RTL module.
@@ -525,6 +520,8 @@ public:
     /// add constant
     RTLConst *addConst(std::string value, RTLWidth width=RTLWidth());
 
+	bool relocateSignalToPort(RTLSignal *sig);
+
     /// add an operation (add, sub, etc)
     RTLOp *addOp(RTLOp::Opcode op);
     RTLOp *addOp(Instruction *instr);
@@ -533,7 +530,6 @@ public:
 
     /// add an instantiated module
     RTLModule *addModule(std::string name, std::string instName);
-    void removeModule(std::string name);
 
     /// remove a signal
     void remove(std::string name);
@@ -597,17 +593,6 @@ public:
     void printPipelineDot(formatted_raw_ostream &out);
     RamListType localRamList;
 
-	RTLBBModule* getRTLBBModule(std::string name) {
-		for (std::vector<RTLBBModule *>::iterator bbm = bbModules.begin(),
-		                                          bbme = bbModules.end();
-		                                          bbm != bbme; ++bbm) {
-			RTLBBModule *bbModule = *bbm;
-			if (bbModule->getName() == name)
-				return *bbm;
-		}
-		return NULL;
-	}
-
     // Debug
     void dbgAddInstanceMapping(int parentInst, int thisInst);
     const std::map<int, int>* dbgGetInstanceMapping() const { return &dbgInstanceMapping; }
@@ -615,10 +600,15 @@ public:
 //    void dbgCollectDescendentTraceSignals(std::vector<RTLSignal*>*collection);
 
 	//TMR
-	// Basic block modulerarization for DPR
-	std::vector<RTLBBModule*> bbModules;
-	const RTLSignal *getCurStateSignal() const;
-	void removeSignalInBBModule(std::string name);
+	RTLPartModule* getRTLPartModule(std::string name) {
+		for (std::vector<RTLPartModule *>::iterator pm=partModules.begin();
+		                                            pm!=partModules.end(); ++pm) {
+			if ((*pm)->getName() == name)
+				return *pm;
+		}
+		return NULL;
+	}
+	std::vector<RTLPartModule*> partModules;
 
 private:
     std::map<const RTLSignal*, Cell*> mapSignalCell;
@@ -643,7 +633,53 @@ private:
 };
 
 
+class RTLModuleEdge {
+public:
+	RTLModuleEdge(RTLModule *_s, RTLModule *_t)
+		: s(_s), t(_t) {};
+	~RTLModuleEdge();
 
+private:
+	RTLModule *s;
+	RTLModule *t;
+};
+
+class RTLInstance {
+public:
+	RTLInstance(std::string name) : name(name) {};
+	~RTLInstance();
+
+	std::string getName() const { return name; }
+	void setName(std::string _name) { name = _name; }
+	unsigned getPartID() const { return partID; }
+	void setPartID(unsigned _partID) { partID = _partID; }
+
+	void setModule(RTLModule *mod) { inst = mod; }
+	RTLModule* getModule() { return inst; }
+
+	typedef std::set<RTLSignal*>::iterator signal_iterator;
+    typedef std::set<RTLSignal*>::const_iterator const_signal_iterator;
+
+    signal_iterator       caller_begin()       { return caller.begin(); }
+    const_signal_iterator caller_begin() const { return caller.begin(); }
+    signal_iterator       caller_end()         { return caller.end(); }
+    const_signal_iterator caller_end()   const { return caller.end(); }
+
+    signal_iterator       callee_begin()       { return callee.begin(); }
+    const_signal_iterator callee_begin() const { return callee.begin(); }
+    signal_iterator       callee_end()         { return callee.end(); }
+    const_signal_iterator callee_end()   const { return callee.end(); }
+
+	void add_caller(RTLSignal *sig) { caller.insert(sig); }
+	void add_callee(RTLSignal *sig) { callee.insert(sig); }
+
+private:
+	std::string name;
+	unsigned partID;
+	std::set<RTLSignal *> caller;
+	std::set<RTLSignal *> callee;
+	RTLModule *inst;
+};
 
 
 }

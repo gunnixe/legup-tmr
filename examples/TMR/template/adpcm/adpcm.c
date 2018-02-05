@@ -259,7 +259,7 @@ encode (int xin1, int xin2)
   xa = (long) (*tqmf_ptr++) * (*h_ptr++);
   xb = (long) (*tqmf_ptr++) * (*h_ptr++);
 /* main multiply accumulate loop for samples and coefficients */
-  for (i = 0; i < 10; i++)
+  loop1: for (i = 0; i < 10; i++)
     {
       xa += (long) (*tqmf_ptr++) * (*h_ptr++);
       xb += (long) (*tqmf_ptr++) * (*h_ptr++);
@@ -270,7 +270,7 @@ encode (int xin1, int xin2)
 
 /* update delay line tqmf */
   tqmf_ptr1 = tqmf_ptr - 2;
-  for (i = 0; i < 22; i++)
+  loop2: for (i = 0; i < 22; i++)
     *tqmf_ptr-- = *tqmf_ptr1--;
   *tqmf_ptr-- = xin1;
   *tqmf_ptr = xin2;
@@ -509,7 +509,7 @@ decode (int input)
   xa1 = (long) xd *(*h_ptr++);
   xa2 = (long) xs *(*h_ptr++);
 /* main multiply accumulate loop for samples and coefficients */
-  for (i = 0; i < 10; i++)
+  loop3: for (i = 0; i < 10; i++)
     {
       xa1 += (long) (*ac_ptr++) * (*h_ptr++);
       xa2 += (long) (*ad_ptr++) * (*h_ptr++);
@@ -525,7 +525,7 @@ decode (int input)
 /* update delay lines */
   ac_ptr1 = ac_ptr - 1;
   ad_ptr1 = ad_ptr - 1;
-  for (i = 0; i < 10; i++)
+  loop4: for (i = 0; i < 10; i++)
     {
       *ac_ptr-- = *ac_ptr1--;
       *ad_ptr-- = *ad_ptr1--;
@@ -583,7 +583,7 @@ filtez (int *bpl, int *dlt)
   int i;
   long int zl;
   zl = (long) (*bpl++) * (*dlt++);
-  for (i = 1; i < 6; i++)
+  loop5: for (i = 1; i < 6; i++)
     zl += (long) (*bpl++) * (*dlt++);
 
   return ((int) (zl >> 14));	/* x2 here */
@@ -613,7 +613,7 @@ quantl (int el, int detl)
 /* abs of difference signal */
   wd = abs (el);
 /* determine mil based on decision levels and detl gain */
-  for (mil = 0; mil < 30; mil++)
+  loop6: for (mil = 0; mil < 30; mil++)
     {
       decis = (decis_levl[mil] * (long) detl) >> 15L;
       if (wd <= decis)
@@ -665,14 +665,14 @@ upzero (int dlt, int *dlti, int *bli)
 /*if dlt is zero, then no sum into bli */
   if (dlt == 0)
     {
-      for (i = 0; i < 6; i++)
+      loop7: for (i = 0; i < 6; i++)
 	{
 	  bli[i] = (int) ((255L * bli[i]) >> 8L);	/* leak factor of 255/256 */
 	}
     }
   else
     {
-      for (i = 0; i < 6; i++)
+      loop8: for (i = 0; i < 6; i++)
 	{
 	  if ((long) dlt * dlti[i] >= 0)
 	    wd2 = 128;

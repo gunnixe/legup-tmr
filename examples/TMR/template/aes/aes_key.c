@@ -129,13 +129,13 @@ KeySchedule (int type, int key[32])
     default:
       return -1;
     }
-  for (j = 0; j < nk; ++j)
+  loop7: for (j = 0; j < nk; ++j)
     for (i = 0; i < 4; ++i)
 /* 0 word */
       word[i][j] = key[i + j * 4];
 
 /* expanded key is generated */
-  for (j = nk; j < nb * (round + 1); ++j)
+  loop8: for (j = nk; j < nb * (round + 1); ++j)
     {
 
 /* RotByte */

@@ -3,7 +3,7 @@ source ../../config.tcl
 #set_parameter CLOCK_PERIOD 5
 
 #set_parameter LOCAL_RAMS 1
-#loop_pipeline "loop"
+loop_pipeline "loop"
 
 #set_accelerator_function "multiply"
 

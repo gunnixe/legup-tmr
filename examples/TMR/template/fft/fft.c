@@ -280,7 +280,7 @@ int main()
   int sum = 0;
   
   // Set input, each input value consists of a Real and imaginary part
-	for (i=0; i<Input_Size; i++){
+	loop1: for (i=0; i<Input_Size; i++){
 		input_temp = 0;
 		Imag[i] = input_temp;
 		input_temp = 10*i;
@@ -292,7 +292,7 @@ int main()
 //  for (i=0; i<Input_Size; i++)
 //    printf ("%d\t\t%d\n", New_Real[i], New_Imag[i]);
 
-  for (i=0; i<Input_Size; i++) {
+  loop2: for (i=0; i<Input_Size; i++) {
     sum += abs(New_Real[i]);
     sum += abs(New_Imag[i]);
   }

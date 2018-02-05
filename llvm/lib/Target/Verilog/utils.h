@@ -30,7 +30,7 @@ using namespace llvm;
 namespace legup {
 
 #define INF 1000000000
-#define MAX_NODE 16384
+#define MAX_NODE 8192
 
 class State;
 class FiniteStateMachine;
@@ -177,7 +177,7 @@ raw_ostream &mc_debug();
 
 bool fileExists(const std::string &name);
 
-// TMR
+// graph utils
 bool bfs(int n, int start, int target, int capacity[][MAX_NODE], int flow[][MAX_NODE], int pred[]);
 void dfs(int n, int capacity[][MAX_NODE], int flow[][MAX_NODE], int s, bool visited[]);
 int maxFlow(int n, int start, int target, int capacity[][MAX_NODE], int flow[][MAX_NODE]);
@@ -190,17 +190,12 @@ bool findCycles(int v,
                 std::vector<std::vector<int> >& cycles);
 void unblock(int node, std::vector<bool>&blocked, std::vector<std::vector<int> > &B_Fruitless);
 
+//A graph where nodes are represented with integers and edges are represented 
+//with adjacency lists.
 class IntGraph {
 public:
 	int V; //No. of vertices
 	std::list<int> *adj; // An array of adjacency lists
-
-	//Fills Stack with vertices (in increasing oder of finishing time). 
-	//The top element of stack has the maximum finishing time.
-	void fillOrder(int v, bool visited[], std::stack<int> &Stack);
-
-	//A recursive function to print DFS starting from v
-	void getSCC(int v, bool visited[], std::vector<int> &scc);
 
 	IntGraph(int V) {
 		this->V = V;
@@ -208,9 +203,16 @@ public:
 	}
 	void addEdge(int v, int w) { adj[v].push_back(w); }
 	int getSize() { return V; }
+	int getParent(int n);
+	IntGraph* getTranspose();
 
-	IntGraph getTranspose();
+	//Fills Stack with vertices (in increasing oder of finishing time). 
+	//The top element of stack has the maximum finishing time.
+	void fillOrder(int v, bool visited[], std::stack<int> &Stack);
+
+	//A recursive function to print DFS starting from v
 	void getSCCs(std::vector<std::vector<int> > &sccs);
+	void getSCC(int v, bool visited[], std::vector<int> &scc);
 };
 
 // this has to be declared in the header due to templates

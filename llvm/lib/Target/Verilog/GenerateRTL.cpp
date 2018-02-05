@@ -639,16 +639,16 @@ RTLSignal *GenerateRTL::createDivFU(Instruction *instr, RTLSignal *op0, RTLSigna
   Out << "/* " << getValueStr(instr) << "*/";
   d->setBody(Out.str());
 
-  // find the BBModule from the instruction
-  RTLBBModule *bbm = getBBModule(instr);
+  // find the PartModule from the instruction
+  RTLPartModule *pm = getPartModule(instr);
 
   RTLSignal *FU = rtl->addWire("lpm_divide_" + verilogName(instr) + "_temp_out",
 			       RTLWidth(instr->getType()));
-  if(bbm) bbm->add_signal(FU);
+  if(pm) pm->add_signal(FU);
 
   RTLSignal *unused = rtl->addWire(verilogName(instr) + "_unused",
 				   RTLWidth(instr->getType()));
-  if(bbm) bbm->add_signal(unused);
+  if(pm) pm->add_signal(unused);
   
   if (isDiv(instr)) {
     d->addOut(nm["quotient"])->connect(FU);
@@ -660,7 +660,7 @@ RTLSignal *GenerateRTL::createDivFU(Instruction *instr, RTLSignal *op0, RTLSigna
   }
 
   RTLSignal *en = rtl->addWire(getEnableName(instr));
-  if(bbm) bbm->add_signal(en);
+  if(pm) pm->add_signal(en);
 
   d->addIn(nm["clock"])->connect(rtl->find("clk"));
   if (LEGUP_CONFIG->getParameter("DIVIDER_MODULE") == "altera")
@@ -751,11 +751,11 @@ RTLSignal *GenerateRTL::createDivFU(Instruction *instr, RTLSignal *op0, RTLSigna
   RTLWidth w = getOutSizeShared(instr);
   
   RTLSignal *FUout = rtl->addWire("lpm_divide_" + verilogName(instr) + "_out",w);
-  if(bbm) bbm->add_signal(FUout);
+  if(pm) pm->add_signal(FUout);
   FUout->connect(FU);
 
-  //add Div module into RTLBBModule list
-  if(bbm) bbm->add_module(d);
+  //add Div module into RTLPartModule list
+  if(pm) pm->add_module(d);
   return FUout;
 }  
 
@@ -963,14 +963,15 @@ RTLSignal *GenerateRTL::createFU(Instruction *instr, RTLSignal *op0,
 		RTLSignal *op1) {
 
 	if (isDiv(instr) || isRem(instr)) {
+		//The area of operator which has constant integer operands
+		//is much smaller than the area of normal operator.
+		//In the constant integer operation case, it is better to use '/' or '%' 
+		//operations directly in the Verilog code, instead of instantiating generic divider.
     	if (!isa<ConstantInt>(instr->getOperand(1)))
 			return createDivFU(instr, op0, op1);
 	} else if (EXPLICIT_LPM_MULTS && alloc->useExplicitDSP(instr)) {
 		return createMulFU(instr, op0, op1);
 	}
-
-	//FIXME
-	//Currently TLegUp doesnot support FP instructions for the BB instantiation
 
 	//If the instruction is one of the floating point operation, call FP create module
 	//with opCode (unsigned) as additional parameter
@@ -1068,8 +1069,8 @@ RTLSignal *GenerateRTL::createFU(Instruction *instr, RTLSignal *op0,
 		// lpm_* module instantiations
 
 		RTLSignal *en = rtl->addWire(getEnableName(instr));
-		RTLBBModule *bbm = getBBModule(instr);
-		if(bbm) bbm->add_signal(en);
+		RTLPartModule *pm = getPartModule(instr);
+		if(pm) pm->add_signal(en);
 
 		RTLOp *enCond = rtl->addOp(RTLOp::EQ);
 		enCond->setOperand(0, en);
@@ -1088,7 +1089,7 @@ RTLSignal *GenerateRTL::createFU(Instruction *instr, RTLSignal *op0,
 				// first register is driven by FU wire
 				driver = FUoutput;
 			}
-			if(bbm) bbm->add_signal(stage_reg);
+			if(pm) pm->add_signal(stage_reg);
 
 			stage_reg->addCondition(enCond, driver, instr);
 
@@ -1101,17 +1102,18 @@ RTLSignal *GenerateRTL::createFU(Instruction *instr, RTLSignal *op0,
 	return FUoutput;
 }
 
-RTLBBModule *GenerateRTL::getBBModule(const Instruction* instr) {
-	if (rtl->bbModules.size()==0)
+RTLPartModule *GenerateRTL::getPartModule(const Instruction* instr) {
+	if (rtl->partModules.size()==0)
 		return NULL;
 
-	for (std::vector<RTLBBModule *>::const_iterator bbm = rtl->bbModules.begin(),
-	                                                bbme = rtl->bbModules.end();
-	                                                bbm != bbme; ++bbm) {
-		for (RTLBBModule::const_instr_iterator i = (*bbm)->instructions_begin();
-		                                       i != (*bbm)->instructions_end(); ++i) {
-			if (*i == instr)
-				return *bbm;
+	for (std::vector<RTLPartModule *>::const_iterator pm = rtl->partModules.begin(),
+	                                                  pme = rtl->partModules.end();
+	                                                  pm != pme; ++pm) {
+		for (RTLPartModule::const_instr_iterator i = (*pm)->instructions_begin();
+		                                         i != (*pm)->instructions_end(); ++i) {
+			if (*i == instr) {
+				return *pm;
+			}
 		}
 	}
 	return NULL;
@@ -1425,7 +1427,6 @@ void GenerateRTL::visitStoreInst(StoreInst &I) {
         connectSignalToDriverInState(rtl->find(name + "_in_" + port),
                                      getOp(this->state, I.getOperand(0)),
                                      this->state, &I);
-
     } else {
 
         loadStoreCommon(&I, addr);
@@ -2470,7 +2471,7 @@ void GenerateRTL::createFunctionMemorySignals(State *callState, CallInst *CI,
 	}
 
 	PropagatingSignals *ps = alloc->getPropagatingSignals();
-	bool shouldConnectMemorySignals = ps->functionUsesMemory(funcName)
+	bool shouldConnectMemorySignals = ps->functionUsesMemoryForConnection(funcName)
 			|| usesPthreads;
 
     stripInvalidCharacters(funcName);
@@ -3149,8 +3150,8 @@ void GenerateRTL::findAllPipelineStageRegisters(BasicBlock *BB) {
 											+ utostr(stage),
 									RTLWidth(I->getType()));
 					setPipelineSignal(I, i, s);
-					RTLBBModule *bbm = getBBModule(I);
-					if (bbm) bbm->add_signal(s);
+					RTLPartModule *pm = getPartModule(I);
+					if (pm) pm->add_signal(s);
 
 					RTLSignal *ii_state = rtl->find(label + "_ii_state");
 
@@ -3698,6 +3699,7 @@ void GenerateRTL::visitBinaryOperator(Instruction &I) {
 
 	unsigned pipelineStages = Scheduler::getNumInstructionCycles(instr);
 	if (pipelineStages > 0) {
+
 		create_fu_enable_signals(instr);
 
 		// drive the instruction wire signal with the output of the functional
@@ -4783,7 +4785,8 @@ void GenerateRTL::addPropagatingPortsToModule(RTLModule *_rtl) {
         // then an instantiated module uses memory and we don't need to
         // manually add the memory.
         //
-        if (!propagatingMemoryAdded && propSignalCopy.isMemory())
+        if (!propagatingMemoryAdded && propSignalCopy.isMemory()
+				&& propSignalCopy.getName()!="memory_controller_waitrequest")
             propagatingMemoryAdded = true;
     }
 
@@ -4797,13 +4800,15 @@ void GenerateRTL::addPropagatingPortsToModule(RTLModule *_rtl) {
     if (!propagatingMemoryAdded && requiresMemorySignals && !usesPthreads) {
 
         // MATHEW TODO: generalize this for waitrequest signal
-        RTLSignal *waitrequest = _rtl->addIn("memory_controller_waitrequest");
-        waitrequest->setDefaultDriver(ZERO);
-        PropagatingSignal propWaitrequest(waitrequest, true, true);
-        ps->addPropagatingSignalToFunctionNamed(functionName, propWaitrequest);
+		if (!_rtl->findExists("memory_controller_waitrequest")) {
+        	RTLSignal *waitrequest = _rtl->addIn("memory_controller_waitrequest");
+        	waitrequest->setDefaultDriver(ZERO);
+        	PropagatingSignal propWaitrequest(waitrequest, true, true);
+        	ps->addPropagatingSignalToFunctionNamed(functionName, propWaitrequest);
+		}
 
-        if (!(LEGUP_CONFIG->getParameterInt("LOCAL_RAMS") &&
-              alloc->fctOnlyUsesLocalRAMs(Fp))) {
+        if (!LEGUP_CONFIG->getParameterInt("LOCAL_RAMS") ||
+              !alloc->fctOnlyUsesLocalRAMs(Fp)) {
             std::vector<PropagatingSignal> aSignals, bSignals;
             aSignals =
                 addPropagatingMemorySignalsToModuleWithPostfix(_rtl, "_a");
@@ -4992,7 +4997,7 @@ void GenerateRTL::generateModuleInstantiation(Function *F, CallInst *CI,
         RTLSignal *wait = rtl->addReg(
             fctName + "_memory_controller_waitrequest" + instanceName);
         wait->setDefaultDriver(ZERO);
-        t->addOut("memory_controller_waitrequest")->connect(wait);
+        t->addIn("memory_controller_waitrequest")->connect(wait);
     }
 
     for (Function::arg_iterator i = F->arg_begin(), e = F->arg_end(); i != e;
@@ -5012,16 +5017,16 @@ void GenerateRTL::generateModuleInstantiation(Function *F, CallInst *CI,
         if (numThreads && argName == "arg_threadID" &&
             functionType == "omp_function") {
             // for OpenMP
-            t->addOut(argName, RTLWidth(i->getType()))
+            t->addIn(argName, RTLWidth(i->getType()))
                 ->connect(rtl->addConst(utostr(loopIndex), 32));
         } else if (numThreads && argName == "arg_threadMutexID") {
             RTLSignal *arg = rtl->addWire(name, RTLWidth(i->getType()));
-            t->addOut(argName, RTLWidth(i->getType()))
+            t->addIn(argName, RTLWidth(i->getType()))
                 ->connect(rtl->addOp(RTLOp::Add)->setOperands(
                     arg, rtl->addConst(utostr(loopIndex), 32)));
         } else {
             RTLSignal *arg = rtl->addWire(name, RTLWidth(i->getType()));
-            t->addOut(argName, RTLWidth(i->getType()))->connect(arg);
+            t->addIn(argName, RTLWidth(i->getType()))->connect(arg);
         }
     }
 }
@@ -5497,36 +5502,14 @@ RTLSignal* GenerateRTL::getOpNonConstant(State *state, Value *op) {
 		return rtl->find(wire);
 	}
 
-	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3) {
-		std::cerr << "(state=" << state->getName() << ")\t";
-		std::cerr << "op=" << getValueStr(op) << "\n";
-	}
-
 	RTLSignal *signal = NULL;
 	if (fromOtherState(op, state)) {
 		signal = rtl->find(reg);
 	} else {
 		signal = rtl->find(wire);
 	}
-
 	return signal;
 }
-
-RTLSignal *GenerateRTL::getWire(RTLSignal *sig) {
-	if(!sig->isReg())
-		return sig;
-
-	return sig->getDriver(0);
-}	
-
-RTLSignal *GenerateRTL::getReg(RTLSignal *sig) {
-	if(sig->isReg() || sig->getName()=="")
-		return sig;
-
-	std::cerr << "getReg: " << sig->getName() << endl;
-	std::string reg = sig->getName() + "_reg";
-	return rtl->find(reg);
-}	
 
 //NC changes... wrapper
 
@@ -5538,14 +5521,14 @@ RTLSignal *GenerateRTL::getOp(State *state, Value *op) {
 RTLSignal *GenerateRTL::getOp(State *state, Value *op, int &value) {
 	RTLSignal *ret = NULL;
 
-	//std::cerr << "start-getOp - input value: " << value << std::endl;
+	//std::cout << "start-getOp - input value: " << value << std::endl;
 
 	ConstantExpr *CE = dyn_cast<ConstantExpr>(op);
 	if (CE && CE->getOpcode() == Instruction::GetElementPtr) {
 		int gepValue = 0;
 		ret = getGEP(state, CE, gepValue);
 		value = gepValue;
-		//std::cerr << "getOp - GEP - value set to: " << value << std::endl;
+		//std::cout << "getOp - GEP - value set to: " << value << std::endl;
 	} else {
 		if (isa<GlobalVariable>(op) || isa<AllocaInst>(op)) {
 			RAM *ram = getRam(op);
@@ -5576,10 +5559,9 @@ RTLSignal *GenerateRTL::getOp(State *state, Value *op, int &value) {
 			int opConstantValue = 0;
 			ret = getOpConstant(state, c, opConstantValue);
 			value = opConstantValue;
-			//std::cerr << "getOp - constant - value set to: " << value << std::endl;
+			//std::cout << "getOp - constant - value set to: " << value << std::endl;
 		} else {
 			ret = getOpNonConstant(state, op);
-			//std::cerr << "getOp - nonConstant - value set to: " << ret->getName() << std::endl;
 
 		}
 	}
@@ -5627,7 +5609,6 @@ void GenerateRTL::generatePHICopiesForSuccessor(RTLSignal* condition,
 	for (State::const_iterator instr = Successor->begin(), ie =
 			Successor->end(); instr != ie; ++instr) {
 		Instruction *I = *instr;
-
 		if (const PHINode *phi = dyn_cast<PHINode>(I)) {
 			Value *IV = phi->getIncomingValueForBlock(incomingBB);
 			RTLWidth width(I, MBW);
@@ -5638,20 +5619,7 @@ void GenerateRTL::generatePHICopiesForSuccessor(RTLSignal* condition,
 				assert(IVinst);
 				this->time = getMetadataInt(IVinst, "legup.pipeline.avail_time");
 			}
-
 			signal = getOp(CurBlock, IV);
-			if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3) {
-				std::cerr << "Inst: " << getValueStr(I) << "\n";
-				std::cerr << "\tIncoming: " << getValueStr(IV) << "\n";
-				std::cerr << "\tsigName= " << signal->getName() << "\n";
-			}
-
-			//FIXME remove phiRegister
-			// phi registers can be removed if phi use only registered input.
-			// To make phi inputs as all registered inputs, modify the getOp()
-			// function to return always registered op
-			//RTLSignal *sigReg = getReg(signal);
-
 			RTLSignal *phiWire = rtl->addWire(verilogName(I), width);
 			RTLSignal *phiReg = rtl->addReg(verilogName(I) + "_reg", width);
 			phiWire->addCondition(condition, signal, I);
@@ -5693,8 +5661,6 @@ void GenerateRTL::generateTransition(RTLSignal *condition, State* s) {
 		trueCond->setOperand(0, condition);
 		trueCond->setOperand(1, trueBranch);
 
-		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
-			std::cerr << "---true cond---\n";
 		generatePHICopiesForSuccessor(trueCond, s, s->getTransitionState(0));
 		curState->addCondition(trueCond,
 				getStateSignal(s->getTransitionState(0)));
@@ -5707,8 +5673,6 @@ void GenerateRTL::generateTransition(RTLSignal *condition, State* s) {
 		falseCond->setOperand(0, condition);
 		falseCond->setOperand(1, falseBranch);
 
-		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
-			std::cerr << "---false cond---\n";
 		generatePHICopiesForSuccessor(falseCond, s, s->getDefaultTransition());
 		curState->addCondition(falseCond,
 				getStateSignal(s->getDefaultTransition()));
@@ -5769,16 +5733,12 @@ void GenerateRTL::generateDatapath() {
 	bool shouldConnectMemorySignals = usesPthreads
 			|| ps->functionUsesMemory(Fp->getName());
 
-	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
-		std::cerr << "\n\n# DEBUG_TMR=3 - state information\n";
 	for (FiniteStateMachine::iterator state = fsm->begin(), se = fsm->end();
 			state != se; ++state) {
 
 		//const BasicBlock *b = state->getBasicBlock();
-		//errs() << indent << "/* " << b->getParent()->getName() << ": " <<
+		//Out << indent << "/* " << b->getParent()->getName() << ": " <<
 		//    b->getName() << "*/\n";
-		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
-			std::cerr << "-----" << state->getName() << "-----\n";
 
 		RTLOp *transition;
 
@@ -5815,8 +5775,6 @@ void GenerateRTL::generateDatapath() {
 				instr != ie; ++instr) {
 
 			Instruction *I = *instr;
-
-			//std::cerr << getValueStr(I) << std::endl;
 
 			// find the verilog command for this instruction
 			this->state = state;
@@ -6021,22 +5979,6 @@ void GenerateRTL::createRTLSignals() {
     }
 }
 
-void GenerateRTL::relocatePrimitiveModules(RTLBBModule *bbm, Instruction *I) {
-   	for (RTLModule::const_module_iterator m = rtl->instances_begin();
-   	                                      m != rtl->instances_end(); ++m) {
-		RTLModule *mod = *m;
-		errs() << "reloMod: " << mod->getName() << "\n";
-		for (RTLModule::const_signal_iterator i = mod->signals_begin();
-		                                      i != mod->signals_end(); ++i) {
-			errs() << (*i)->getName() << "\n";
-			if ((*i)->getInst(0) == I) {
-				errs() << "Find primitive module: " << getValueStr(I) << "\n";
-				break;
-			}
-		}
-	}
-}
-
 void GenerateRTL::createRTLSignalsForInstructions() {
 
     for (inst_iterator i = inst_begin(Fp), e = inst_end(Fp); i != e; ++i) {
@@ -6049,6 +5991,7 @@ void GenerateRTL::createRTLSignalsForInstructions() {
             continue; // ignore instructions with no uses
 
         std::string wire = verilogName(*I);
+
         std::string reg = wire + "_reg";
 
         RTLWidth w(I, MBW);
@@ -6058,125 +6001,40 @@ void GenerateRTL::createRTLSignalsForInstructions() {
 			rtl->addReg(reg, w);
 	}
 
-	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==0 ||
-			LEGUP_CONFIG->getParameterInt("NUMBER_OF_PARTITIONS")<2 ||
-			LEGUP_CONFIG->getParameterInt("TMR")==0)
-		makeBBModuleWithFunction();
-	else if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")<=2)
-		makeBBModuleWithBBPartitions();
-	else if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")<=5)
-		makeBBModuleWithInstPartitions();
+	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==3) {
+		makePartModuleWithInstPartitions();
 
-	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")<5) {
-		//FSM to BB_0 (or BB_CTRL)
-		RTLBBModule *bbfront = rtl->bbModules.front();
+		RTLPartModule *partfront = rtl->partModules.front();
 		RTLSignal *sig = rtl->find("cur_state");
 		if (sig)
-			bbfront->add_signal(sig);
+			partfront->add_signal(sig);
 	}
 }
 
-void GenerateRTL::makeBBModuleWithFunction() {
-	// only 1 bbm
-	std::string bbModuleName = "BB_" + Fp->front().getParent()->getName().str() + "_0";
-	RTLBBModule *bbm = new RTLBBModule(bbModuleName, 0);
-    for (Function::iterator b = Fp->begin(), be = Fp->end(); b != be; ++b) {
-        for (BasicBlock::iterator instr = b->begin(), ie = b->end();
-		                          instr != ie; ++instr) {
+void GenerateRTL::makePartModuleWithInstPartitions() {
+	int partNumber = 0;
+	for (std::vector<VINST>::iterator p = dag->InstPartitions.begin();
+	                                  p != dag->InstPartitions.end(); ++p) {
+		std::string name = "PART_" + rtl->getName() 
+		                 + "_" + std::to_string(partNumber);
+		RTLPartModule *pm = new RTLPartModule(name, partNumber);
+       	for (VINST::const_iterator instr = (*p).begin(), ie = (*p).end();
+		                           instr != ie; ++instr) {
+			pm->add_instruction(*instr);
 			std::string wire = verilogName(*instr);
 			std::string reg = verilogName(*instr) + "_reg";
 			if (rtl->exists(wire)) {
 				RTLSignal *sig = rtl->find(wire);
 				RTLSignal *sig_reg = rtl->find(reg);
 				if (sig) {
-					bbm->add_signal(sig);
+					pm->add_signal(sig);
 				}
 				if (sig_reg) {
-					bbm->add_signal(sig_reg);
+					pm->add_signal(sig_reg);
 				}
 			}
 		}
-	}
-	rtl->bbModules.push_back(bbm);
-}
-
-void GenerateRTL::makeBBModuleWithInstPartitions() {
-	int partNumber = 0;
-	std::string bbModuleName = "BB_" + rtl->getName() + "_CTRL";
-	if (LEGUP_CONFIG->getParameterInt("SEPERATE_BB_CTRL")) {
-		RTLBBModule *bbCtrl = new RTLBBModule(bbModuleName, partNumber++);
-		rtl->bbModules.push_back(bbCtrl);
-	}
-
-	for (std::vector<VINST>::iterator p = dag->InstPartitions.begin();
-	                                p != dag->InstPartitions.end(); ++p) {
-		VINST ins = *p;
-		bbModuleName = "BB_" + rtl->getName();
-		bbModuleName += "_" + std::to_string(partNumber);
-		RTLBBModule *bbm = new RTLBBModule(bbModuleName, partNumber);
-		bool addedFSMSignal = false;
-       	for (VINST::const_iterator instr = ins.begin(), ie = ins.end();
-		                           instr != ie; ++instr) {
-			if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")==5 
-					&& (isa<BranchInst>(*instr) || isa<SwitchInst>(*instr))) {
-				RTLSignal *sig = rtl->find("cur_state");
-				if (sig && !addedFSMSignal) {
-					bbm->add_signal(sig);
-					addedFSMSignal = true;
-					if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=2) {
-						errs() << "\n\n# DEBUG_TMR=2 - FSM grouping\n";
-						errs() << "  FSM signal is attached to " << bbm->getName() << "\n";
-					}
-				}
-			} else {
-				bbm->add_instruction(*instr);
-				std::string wire = verilogName(*instr);
-				std::string reg = verilogName(*instr) + "_reg";
-				if (rtl->exists(wire)) {
-					RTLSignal *sig = rtl->find(wire);
-					RTLSignal *sig_reg = rtl->find(reg);
-					if (sig) {
-						bbm->add_signal(sig);
-					}
-					if (sig_reg) {
-						bbm->add_signal(sig_reg);
-					}
-				}
-			}
-		}
-		rtl->bbModules.push_back(bbm);
-		partNumber++;
-	}
-}
-
-void GenerateRTL::makeBBModuleWithBBPartitions() {
-	int partNumber = 0;
-	for (std::vector<VBB>::iterator p = dag->Partitions.begin();
-	                                p != dag->Partitions.end(); ++p) {
-		VBB bbs = *p;
-		std::string bbModuleName = "BB_" + bbs.front()->getParent()->getName().str();
-		bbModuleName += "_" + std::to_string(partNumber);
-		RTLBBModule *bbm = new RTLBBModule(bbModuleName, partNumber);
-		for (VBB::const_iterator b = bbs.begin(); b!=bbs.end(); ++b) {
-
-			// add related signals
-        	for (BasicBlock::const_iterator instr = (*b)->begin(), ie = (*b)->end();
-			                          instr != ie; ++instr) {
-				std::string wire = verilogName(*instr);
-				std::string reg = verilogName(*instr) + "_reg";
-				if (rtl->exists(wire)) {
-					RTLSignal *sig = rtl->find(wire);
-					RTLSignal *sig_reg = rtl->find(reg);
-					if (sig) {
-						bbm->add_signal(sig);
-					}
-					if (sig_reg) {
-						bbm->add_signal(sig_reg);
-					}
-				}
-			}
-		}
-		rtl->bbModules.push_back(bbm);
+		rtl->partModules.push_back(pm);
 		partNumber++;
 	}
 }
@@ -6195,14 +6053,16 @@ void GenerateRTL::createRTLSignalsForLocalRams() {
             const RAM *R = *i;
             std::string name = R->getName();
             RTLSignal *s;
-
-            s = rtl->addWire(name + "_address_" + port, RTLWidth(R->getAddrWidth()));
+            s = rtl->addWire(name + "_address_" + port,
+                    RTLWidth(R->getAddrWidth()));
             s->setDefaultDriver(ZERO);
             s = rtl->addWire(name + "_write_enable_" + port);
             s->setDefaultDriver(ZERO);
-            s = rtl->addWire(name + "_in_" + port, RTLWidth(R->getDataWidth()));
+            s = rtl->addWire(name + "_in_" + port,
+                    RTLWidth(R->getDataWidth()));
             s->setDefaultDriver(ZERO);
-            rtl->addWire(name + "_out_" + port, RTLWidth(R->getDataWidth()));
+            rtl->addWire(name + "_out_" + port,
+                    RTLWidth(R->getDataWidth()));
         }
     }
 }
@@ -6493,39 +6353,6 @@ void delete_multicycle_files() {
 	first_visit = false;
 }
 
-void GenerateRTL::printDebugSignal(std::string chr) {
-	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")<3)
-		return;
-
-	std::cerr << "\n\n# DEBUG_TMR=3 - print signals and drivers - " << chr << "\n";
-	for (RTLModule::const_signal_iterator i = rtl->signals_begin(),
-	                                      e = rtl->signals_end();
-	     i != e; ++i) {
-		const RTLSignal *s = *i;
-		if (s->getName()=="cur_state")
-			continue;
-		std::cerr << "\t" << s->getName() << " <- ";
-		for (unsigned int j=0; j<s->getNumDrivers(); j++) {
-			const RTLSignal *d = s->getDriver(j);
-			if (d->isOp()) {
-				const RTLOp* op = (const RTLOp*)d;
-				for (unsigned int k=0; k<op->getNumOperands(); k++) {
-					if (op->getOperand(k)->getValue().empty())
-						std::cerr << op->getOperand(k)->getName() << "/";
-					else
-						std::cerr << "(" << op->getOperand(k)->getValue() << ")/";
-				}
-			} else {
-				if (d->getValue().empty())
-					std::cerr << d->getName() << ", ";
-				else
-					std::cerr << "(" << d->getValue() << "), ";
-			}
-		}
-		std::cerr << "\n";
-	}
-}
-
 RTLModule* GenerateRTL::generateRTL(MinimizeBitwidth *_MBW) {
 
 	EXPLICIT_LPM_MULTS = LEGUP_CONFIG->getParameterInt("EXPLICIT_LPM_MULTS");
@@ -6592,10 +6419,7 @@ RTLModule* GenerateRTL::generateRTL(MinimizeBitwidth *_MBW) {
         createMemoryReaddataStorageForParallelFunction();
     }
 
-	printDebugSignal("before");
 	generateDatapath();
-	printDebugSignal("after");
-
 	updateRTLWithPatterns();
 	shareRegistersFromBinding();
 	delete Patterns;
@@ -6669,104 +6493,15 @@ RTLModule* GenerateRTL::generateRTL(MinimizeBitwidth *_MBW) {
 		}
 	}
 
-	// add voter tag
-	if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==6
-			|| LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==9) {
-		updateSyncVoterWithLatency(dag);
-	} else if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==7) {
-		insertSyncVoterOnMaxFanIn(dag);
-	} else if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==8) {
-		insertSyncVoterOnMaxFanOut(dag);
+	//TMR set synchronization voter flag
+	if (LEGUP_CONFIG->getParameterInt("TMR") &&
+			LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")) {
+		setSyncVoterFlagWithLatency(dag, rtl);
 	}
-	updateVoterSignal(dag);
-
-	// update BB Module input port list
-	//updateBBModuleInputs(dag);
+	if (LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE")>=3)
+		updateVoterSignal(dag);
 
 	return rtl;
-}
-
-void GenerateRTL::addOpToInput(RTLBBModule *bbm, RTLOp *op) {
-	for (unsigned j=0; j<op->getNumOperands(); ++j) {
-		RTLSignal *operand = op->getOperand(j);
-		addSensitiveListToInput(bbm, operand);
-	}
-}
-
-void GenerateRTL::addSensitiveListToInput(RTLBBModule *bbm, RTLSignal *sig) {
-	if (sig->isOp()) {
-		addOpToInput(bbm, (RTLOp*)sig);
-	} else {
-		if (sig->getValue().empty()) {
-			bbm->add_input(sig);
-		}
-	}
-}
-
-void GenerateRTL::updateBBModuleInputs(SchedulerDAG *dag) {
-    //for (Function::iterator b = Fp->begin(), be = Fp->end(); b != be; ++b) {
-	//	BasicBlockNode *bbNode = dag->getBasicBlockNode(b);
-
-	//	std::string bbModuleName = "BB_" + b->getParent()->getName().str() + verilogName(b);
-	//	RTLBBModule *bbm = new RTLBBModule(bbModuleName);
-	//	for (BasicBlockNode::iterator I = bbNode->output_begin(),
-	//	                              IE = bbNode->output_end();
-	//	                              I != IE; ++I) {
-	//		std::string wire = verilogName(*I);
-	//		std::string reg = verilogName(*I) + "_reg";
-	//		if (rtl->exists(wire)) {
-	//			RTLSignal *sig = rtl->find(wire);
-	//			RTLSignal *sig_reg = rtl->find(reg);
-	//			if (isDiv(*I) || isRem(*I)
-	//					|| (*I)->getOpcode()==Instruction::FAdd
-	//					|| (*I)->getOpcode()==Instruction::FSub
-	//					|| (*I)->getOpcode()==Instruction::FMul
-	//					|| (*I)->getOpcode()==Instruction::FDiv
-	//					|| (*I)->getOpcode()==Instruction::FCmp
-	//					|| (*I)->getOpcode()==Instruction::FPTrunc
-	//					|| (*I)->getOpcode()==Instruction::FPExt
-	//					|| (*I)->getOpcode()==Instruction::FPToSI
-	//					|| (*I)->getOpcode()==Instruction::SIToFP) {
-	//				errs() << "bbNode output: " << getValueStr(*I) << "\n";
-	//				relocatePrimitiveModules(bbm, *I);
-	//			}
-	//		}
-	//	}
-	//}
-
-	for (std::vector<RTLBBModule *>::iterator bbm = rtl->bbModules.begin(),
-	                                          bbme = rtl->bbModules.end();
-	                                          bbm != bbme; ++bbm) {
-		// add additional (cannot be detected from instruction analysis)
-		// input ports
-		for (RTLBBModule::signal_iterator i = (*bbm)->signals_begin(),
-		                                  e = (*bbm)->signals_end();
-		                                  i != e; ++i) {
-			RTLSignal *sig = *i;
-			unsigned numConditions = sig->getNumConditions();
-			if (numConditions == 0) { //single driver
-    			RTLSignal *driver = sig->getDriver(0);
-				addSensitiveListToInput(*bbm, driver);
-			} else {
-				for (unsigned i=0; i<numConditions; ++i) {
-    				RTLSignal *driver = sig->getDriver(i);
-					addSensitiveListToInput(*bbm, driver);
-					//if (driver->getName()!="")
-					//	(*bbm)->add_input(driver);
-
-    				RTLSignal *condition = sig->getCondition(i);
-					addSensitiveListToInput(*bbm, condition);
-				}
-			}
-		}
-	}
-}
-
-bool GenerateRTL::isFsmRelatedSignal(std::vector<const Instruction*> V, const Instruction* inst) {
-	if (std::find(V.begin(), V.end(), inst)!=V.end())
-		return true;
-
-	return false;
 }
 
 void GenerateRTL::caseConditions(const RTLSignal *condition,
@@ -6800,8 +6535,8 @@ void GenerateRTL::caseConditions(const RTLSignal *condition,
     }
 }
 
-void GenerateRTL::makeFSMSensitiveList(SchedulerDAG *dag, std::vector<const Instruction*> &fsmSens) {
-	const RTLSignal *curSig = rtl->getCurStateSignal();
+void GenerateRTL::makeFSMSensitiveList(SchedulerDAG *dag, RTLModule *rtl, VINST &fsmSens) {
+	const RTLSignal *curSig = rtl->find("cur_state");
 	assert(curSig);
 
 	unsigned numConditions = curSig->getNumConditions();
@@ -6817,75 +6552,22 @@ void GenerateRTL::makeFSMSensitiveList(SchedulerDAG *dag, std::vector<const Inst
 	//}
 }
 
-void GenerateRTL::insertSyncVoterOnMaxFanIn(SchedulerDAG *dag) {
-	for (std::vector<VINST>::const_iterator i = dag->SCCs.begin();
-	                                        i != dag->SCCs.end(); ++i) {
-		VINST scc = *i;
-		const Instruction *maxFanInInst = NULL;
-		int maxFanInCnt = 0;
-		for (VINST::const_iterator si = scc.begin(); si != scc.end(); ++si) {
-			int fanInCnt = 0;
-			for(const Use &U : (*si)->operands()) {
-				Value *v = U.get();
-				if (!isa<Constant>(v))
-					fanInCnt++;
-			}
-			//errs() << getValueStr(*si) << "(fanInCnt=" << fanInCnt << ")\n";
-    		std::string regName = verilogName(*si) + "_reg";
-    		if (rtl->exists(regName) && maxFanInCnt < fanInCnt) {
-				maxFanInCnt = fanInCnt;
-				maxFanInInst = *si;
-			}
-		}
-		//errs() << "MaxFanInInst = " << getValueStr(maxFanInInst) << "\n";
-		InstructionNode* iNode = dag->getInstructionNode(const_cast<Instruction*>(maxFanInInst));
-		iNode->setBackward(true);//, *scc); //use(phi)
-	}	
-}
-
-void GenerateRTL::insertSyncVoterOnMaxFanOut(SchedulerDAG *dag) {
-	for (std::vector<VINST>::const_iterator i = dag->SCCs.begin();
-	                                        i != dag->SCCs.end(); ++i) {
-		VINST scc = *i;
-		const Instruction *maxFanOutInst = NULL;
-		unsigned maxFanOutCnt = 0;
-		for (VINST::const_iterator si = scc.begin(); si != scc.end(); ++si) {
-			unsigned fanOutCnt = (*si)->getNumUses();
-			//errs() << "def: " << getValueStr(*si) << "\n";
-			//for (const User *U : (*si)->users()) {
-			//	fanOutCnt++;
-			//	//if (const Instruction *Inst = dyn_cast<const Instruction>(U)) {
-			//	//	errs() << " -" << *Inst << "\n";
-			//	//}
-			//}
-    		std::string regName = verilogName(*si) + "_reg";
-    		if (rtl->exists(regName) && maxFanOutCnt < fanOutCnt) {
-				maxFanOutCnt = fanOutCnt;
-				maxFanOutInst = *si;
-			}
-		}
-		//errs() << "MaxFanOutInst = " << getValueStr(maxFanOutInst) << "\n";
-		InstructionNode* iNode = dag->getInstructionNode(const_cast<Instruction*>(maxFanOutInst));
-		iNode->setBackward(true);//, *scc); //use(phi)
-	}
-}
-
-void GenerateRTL::updateSyncVoterWithLatency(SchedulerDAG *dag) {
+void GenerateRTL::setSyncVoterFlagWithLatency(SchedulerDAG *dag, RTLModule *rtl) {
 	VINST FSMSensitiveList;
-	makeFSMSensitiveList(dag, FSMSensitiveList);
+	makeFSMSensitiveList(dag, rtl, FSMSensitiveList);
 
 	// update sync voter
 	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
 		errs() << "\n\n# DEBUG_TMR=3 - SCC Update\n";
 	unsigned cnt = 0;
-	for (std::vector<VINST>::const_iterator i = dag->SCCs.begin(),
-                                            e = dag->SCCs.end(); i != e; ++i) {
+	for (std::vector<VINST>::const_iterator i = dag->InstCycles.begin(),
+                                            e = dag->InstCycles.end(); i != e; ++i) {
 		//FIXME
 		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=3)
-			errs() << "  SCCs[" << cnt++ << "]\n";
-		std::vector<const Instruction*> scc = *i;
+			errs() << "  InstCycles[" << cnt++ << "]\n";
+		std::vector<const Instruction*> cycle = *i;
 		float partialDelay = 0.0;
-		// Default minInst is changed from NULL to scc.back() since an SCC
+		// Default minInst is changed from NULL to cycle.back() since an SCC
 		// which contains Phi function can be treated as combinational loop.
 		// Actually in LegUp, when Phi function is determined to schedule in
 		// 'n' state, it is actually scheduled in 'n-1' state, which results
@@ -6894,27 +6576,21 @@ void GenerateRTL::updateSyncVoterWithLatency(SchedulerDAG *dag) {
 		// Since this looks like have combinational loop, (instructions within
 		// SCCs are all same states), this situation causes conflict with
 		// following algorithm which finds minimum latency between SCC wires.
-		const Instruction* minInst = scc.back();
+		const Instruction* minInst = cycle.back();
 		float minDelay = InstructionNode::getMaxDelay();
-		for (VINST::const_iterator si = scc.begin(),
-		                           se = scc.end(); si != se; ++si) {
+		for (VINST::const_iterator si = cycle.begin(),
+		                           se = cycle.end(); si != se; ++si) {
 			const Instruction* instr = *si;
-			const Instruction* instr_next = si==scc.end()? scc.front() : *(si+1);
+			const Instruction* instr_next = si==cycle.end()? cycle.front() : *(si+1);
 			InstructionNode* iNode = dag->getInstructionNode(const_cast<Instruction*>(instr));
 			float nodeDelay = iNode->getDelay();
 
-			// If there is a partitioning voter in scc, we don't need to insert a sync voter.
-			if (LEGUP_CONFIG->getParameterInt("MERGE_PVOTER_WITH_SVOTER")) {
-				if (iNode->getPartition() || iNode->getBackward()) {
-					minInst = instr;
-					break;
-				}
-			}
-
 			// Make max delay for the signal comes from FSM state since the FSM
 			// register already has a voter and it is likely to be a critical.
-			if (isFsmRelatedSignal(FSMSensitiveList, instr))
+			if (std::find(FSMSensitiveList.begin(), FSMSensitiveList.end(), instr)
+					!=FSMSensitiveList.end()) {
 				nodeDelay = InstructionNode::getMaxDelay();
+			}
 
 			partialDelay += nodeDelay;
 
@@ -6942,37 +6618,12 @@ void GenerateRTL::updateSyncVoterWithLatency(SchedulerDAG *dag) {
 		Instruction *I = const_cast<Instruction*>(minInst);
 		InstructionNode *minNode = dag->getInstructionNode(I);
 		minNode->setBackward(true);
-	} //for (SCCs)
-}
 
-void GenerateRTL::updateBBfinput(Instruction *I) {
-	for (User::op_iterator i = I->op_begin(), e = I->op_end(); i != e; ++i) {
-	    // we only care about operands that are created by other instructions
-	    Instruction *dep = dyn_cast<Instruction>(*i);
-	
-		// also ignore if the dependency is an alloca
-		if (!dep)// || isa<AllocaInst>(dep))
-			continue;
-	
-       	InstructionNode *depNode = dag->getInstructionNode(dep);
-		if (I->getParent()==dep->getParent() &&
-				(depNode->getBackward() || depNode->getPartition())) {
-			BasicBlock *b = dep->getParent();
-			BasicBlockNode *bbNode = dag->getBasicBlockNode(b);
-			if (!bbNode->addFeedbackInput(dep))
-				break;
-	
-			std::string bbModuleName = "BB_" + b->getParent()->getName().str() + verilogName(b);
-			RTLBBModule *bbm = rtl->getRTLBBModule(bbModuleName);
-			std::string reg = verilogName(*dep) + "_reg";
-			if (rtl->exists(reg)) {
-				RTLSignal *sig_reg = rtl->find(reg);
-				if (sig_reg)
-					bbm->add_finput(sig_reg);
-			}
-			break;
-		}
-	}
+		RTLSignal *sig_wire = rtl->find(verilogName(*I));
+		RTLSignal *sig_reg = rtl->find(verilogName(*I) + "_reg");
+		sig_wire->setVoter(RTLSignal::SYNC_VOTER);
+		sig_reg->setVoter(RTLSignal::SYNC_VOTER);
+	} //for (InstCycles)
 }
 
 void GenerateRTL::updateVoterSignal(SchedulerDAG *dag) {
@@ -7013,31 +6664,6 @@ void GenerateRTL::updateVoterSignal(SchedulerDAG *dag) {
 		partNum++;
 	}
 
-	//for (inst_iterator i = inst_begin(Fp), e = inst_end(Fp); i != e; ++i) {
-    //    Instruction *I = &*i;
-	//	InstructionNode *iNode = dag->getInstructionNode(I);
-	//	//updateBBfinput(I);
-
-	//	if (iNode->getBackward()) {
-	//		RTLSignal *sig_wire = rtl->find(verilogName(*I));
-	//		RTLSignal *sig_reg = rtl->find(verilogName(*I) + "_reg");
-	//		sig_wire->setVoter(RTLSignal::SYNC_VOTER);
-	//		sig_reg->setVoter(RTLSignal::SYNC_VOTER);
-
-	//		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
-	//			std::cerr << "    " << getValueStr(I) << endl;
-	//	}
-
-  	//	//for (InstructionNode::iterator i = iNode->back_use_begin(),
-	//	//     e = iNode->back_use_end(); i != e; ++i) {
-	//	//	if (Instruction *use = dyn_cast<Instruction>(*i)) {
-	//	//		std::string wire = verilogName(*use);
-	//	//		RTLSignal *sig = rtl->find(wire);
-	//	//		sig->setVoter(RTLSignal::SYNC_VOTER);
-	//	//	}
-	//	//}
-	//}
-
 	// partitioning voter check
 	if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
 		std::cerr << "\n\n# DEBUG_TMR=1 - Partitioned signal\n";
@@ -7074,21 +6700,6 @@ void GenerateRTL::updateVoterSignal(SchedulerDAG *dag) {
 		errs() << "    Total number of part voters of [" << partNum << "] = " << vNum << "\n";
 		partNum++;
 	}
-
-	//for (inst_iterator i = inst_begin(Fp), e = inst_end(Fp); i != e; ++i) {
-    //    Instruction *I = &*i;
-	//	InstructionNode *iNode = dag->getInstructionNode(I);
-
-	//	if (iNode->getPartition()) {
-	//		RTLSignal *sig_wire = rtl->find(verilogName(*I));
-	//		RTLSignal *sig_reg = rtl->find(verilogName(*I) + "_reg");
-	//		sig_wire->setVoter(RTLSignal::PART_VOTER);
-	//		sig_reg->setVoter(RTLSignal::PART_VOTER);
-
-	//		if (LEGUP_CONFIG->getParameterInt("DEBUG_TMR")>=1)
-	//			std::cerr << "    " << getValueStr(I) << endl;
-	//	}
-	//}
 
 	if (dag->InstPartitions.size()==1) {
 		dag->InstPartitions.clear();

@@ -1,13 +1,11 @@
 source ../../config.tcl
 
-set_parameter LOCAL_RAMS 1
-set_parameter GROUP_RAMS 1
-set_parameter GROUP_RAMS_SIMPLE_OFFSET 1
+#set_parameter LOCAL_RAMS 1
+#set_parameter GROUP_RAMS 1
+#set_parameter GROUP_RAMS_SIMPLE_OFFSET 1
 set_parameter CASE_FSM 1
 
 set_parameter VSIM_NO_ASSERT 1
-#set_parameter PARTITION_AREA_LIMIT 2625
-set_parameter VOTER_BEFORE_FSM 1
 
 set_parameter TMR 0
 set_parameter SYNC_VOTER_MODE 0

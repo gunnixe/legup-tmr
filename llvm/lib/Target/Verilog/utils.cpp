@@ -807,7 +807,6 @@ bool fileExists(const std::string &name) {
     return (stat(name.c_str(), &buffer) == 0);
 }
 
-//TMR partitions
 bool bfs(int n, int start, int target, int capacity[][MAX_NODE], int flow[][MAX_NODE], int pred[]) {
 	bool visited[MAX_NODE];
 	for(int i=0; i<MAX_NODE; i++)
@@ -828,19 +827,6 @@ bool bfs(int n, int start, int target, int capacity[][MAX_NODE], int flow[][MAX_
 			}
 		}
 	}
-	//fprintf(stderr, "---------------------------------------\n");
-	//fprintf(stderr, "         ");
-	//for(int i=start; i<=target; i++)
-	//	fprintf(stderr, "%4d", i);
-	//fprintf(stderr, "\n");
-	//fprintf(stderr, "visited: ");
-	//for(int i=start; i<=target; i++)
-	//	fprintf(stderr, "%4d", visited[i]);
-	//fprintf(stderr, "\n");
-	//fprintf(stderr, "pred   : ");
-	//for(int i=start; i<=target; i++)
-	//	fprintf(stderr, "%4d", pred[i]);
-	//fprintf(stderr, "\n");
 	return (visited[target]==true);
 }
 
@@ -852,11 +838,23 @@ void dfs(int n, int capacity[][MAX_NODE], int flow[][MAX_NODE], int s, bool visi
 	}
 }
 
-IntGraph IntGraph::getTranspose() {
-	IntGraph g(V);
+int IntGraph::getParent(int n) {
+	for (int i=0; i<V; i++) {
+		for (std::list<int>::iterator j=adj[i].begin(); j!=adj[i].end(); ++j) {
+			errs() << i << "->" << *j << "\n";
+			if (n==*j)
+				return i;
+		}
+	}
+	assert(0);
+	return 0;
+}
+
+IntGraph* IntGraph::getTranspose() {
+	IntGraph *g = new IntGraph(V);
 	for (int v=0; v<V; v++) {
 		for (std::list<int>::iterator i = adj[v].begin(); i != adj[v].end(); ++i)
-			g.adj[*i].push_back(v);
+			g->adj[*i].push_back(v);
 	}
 	return g;
 }
@@ -899,7 +897,7 @@ void IntGraph::getSCCs(std::vector<std::vector<int> > &sccs) {
 			fillOrder(i, visited, Stack);
 
 	//Create a reversed graph;
-	IntGraph gr = getTranspose();
+	IntGraph *gr = getTranspose();
 
 	//Mark all the vertices as not visited (For second DFS)
 	for (int i=0; i<V; ++i)
@@ -914,7 +912,7 @@ void IntGraph::getSCCs(std::vector<std::vector<int> > &sccs) {
 		//Print Strongly connected component of the popped vertex
 		if (visited[v] == false) {
 			std::vector<int> scc;
-			gr.getSCC(v, visited, scc);
+			gr->getSCC(v, visited, scc);
 			sccs.push_back(scc);
 		}
 	}
@@ -945,17 +943,17 @@ bool findCycles(int v,
   stackLike.push_front(v);  // insert like a stack:  so at the front
   blocked[v] = true;
 
-// explore all neighbours -- recursively 
+  // explore all neighbours -- recursively
   for (unsigned i = 0; i < adjList[v].size(); i++) {
     int w =  adjList[v][i];
                
     // found cycle through ANY of my neighbours w.
     if (w == s) {
-      std::vector<int>* cycle = new std::vector<int>;
+      std::vector<int> cycle;
       for (unsigned j = 0; j < stackLike.size(); j++) {
-        cycle->push_back( stackLike.at (stackLike.size() - j  - 1) );
+        cycle.push_back( stackLike.at (stackLike.size() - j  - 1) );
       }
-      cycles.push_back(*cycle);
+      cycles.push_back(cycle);
       f = true;
     } else if (!blocked[w]) {
       if (findCycles(w, s, adjList, blocked, stackLike, B_Fruitless, cycles)) {

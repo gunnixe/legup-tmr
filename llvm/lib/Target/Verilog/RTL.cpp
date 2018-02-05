@@ -143,49 +143,14 @@ std::vector<RTLWidth> RTLWidth::widthsFromExclusionWithWidth(const RTLWidth &wid
 }
 
 RTLSignal::RTLSignal() : bitwidth(RTLWidth()), driver(0), defaultDriver(0),
-    checkXs(true), voterInsertionMode(0) {}
+    checkXs(true), voterType(0) {}
 RTLSignal::RTLSignal(std::string name, std::string value, RTLWidth bitwidth)
     : name(name), value(value), bitwidth(bitwidth), driver(0), defaultDriver(0),
-    checkXs(true), voterInsertionMode(0) {}
+    checkXs(true), voterType(0) {}
 
 
 bool RTLSignal::isReg() const {
     return (getType() == "reg" || getType() == "output reg");
-}
-
-bool RTLSignal::isPhi() const {
-	Instruction *I = getInst(0);
-	if(I==NULL) return false;
-	return (isa<PHINode>(I));
-	//std::string str = getValueStr(I);
-	//return (str.find("phi") != std::string::npos);
-}
-
-bool RTLSignal::driveFromVoter() const {
-	bool ret = false;
-	int svoterMode = LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE");
-	int pvoterMode = LEGUP_CONFIG->getParameterInt("PART_VOTER_MODE");
-	bool voterBeforeFsm = (LEGUP_CONFIG->getParameterInt("VOTER_BEFORE_FSM")==1);
-
-	if (!LEGUP_CONFIG->getParameterInt("TMR")) return false;
-	else if (getName()=="cur_state") return !voterBeforeFsm;
-	else if (svoterMode==0 && pvoterMode==0) return false;
-
-	// This mode alway returns 1 when a signal is register
-	if (svoterMode==1)
-		return (isReg());
-
-	// syncvoter check
-	if (svoterMode==2 || svoterMode==4 || svoterMode==5 || svoterMode==6)
-		ret = (isReg() && (getVoter()==SYNC_VOTER || getVoter()==PIPE_VOTER));
-	else if (svoterMode==3)
-		ret = (getVoter()==SYNC_VOTER || getVoter()==PIPE_VOTER);
-
-	// partvoter check
-	if (pvoterMode==1)
-		ret |= (isReg() && getVoter()==PART_VOTER);
-
-	return ret;
 }
 
 RTLOp::RTLOp(Instruction *instr) : castWidth(false) {
@@ -368,15 +333,6 @@ RTLModule::~RTLModule() {
     }
 }
 
-const RTLSignal *RTLModule::getCurStateSignal() const {
-    for (const_signal_iterator i = signals.begin(), e = signals.end(); i != e; ++i) {
-		if ((*i)->getName() == "cur_state") {
-			return *i;
-		}
-    }
-	return 0;
-}
-
 RTLSignal *RTLModule::find(std::string signal) {
     RTLSignal *r = findExists(signal);
     if (!r) {
@@ -432,21 +388,22 @@ void remove_from_vector(std::string name, std::vector<RTLSignal*> &v) {
     }
 }
 
+bool RTLModule::relocateSignalToPort(RTLSignal* sig) {
+	for (std::vector<RTLSignal*>::iterator i = signals.begin();
+	                                       i != signals.end(); ++i) {
+		if (*i==sig) {
+			ports.push_back(sig);
+			signals.erase(i);
+			return true;
+		}
+	}
+	return false;
+}
+
 void RTLModule::remove(std::string name) {
     remove_from_vector(name, params);
     remove_from_vector(name, ports);
     remove_from_vector(name, signals);
-}
-
-void RTLModule::removeModule(std::string name) {
-    std::vector<RTLModule*>::iterator i = instances.begin();
-    while (i != instances.end()) {
-        if ((*i)->getName() == name) {
-            i = instances.erase(i);
-        } else {
-            ++i;
-        }
-    }
 }
 
 RTLOp *RTLModule::addOp(RTLOp::Opcode opcode) {
@@ -853,7 +810,6 @@ void RTLModule::removeSignalsWithoutFanout() {
         assert(c);
         if (!marked.count(c)) {
             //outs() << "Removing signal: " << (*i)->getName() << "\n";
-			removeSignalInBBModule((*i)->getName());
             delete *i;
             i = signals.erase(i);
         } else {
@@ -862,16 +818,6 @@ void RTLModule::removeSignalsWithoutFanout() {
     }
 }
 
-void RTLModule::removeSignalInBBModule(std::string name) {
-	for (std::vector<RTLBBModule *>::iterator bbm = bbModules.begin(),
-	                                          bbme = bbModules.end();
-	                                          bbm != bbme; ++bbm) {
-		(*bbm)->remove_input(name);
-		(*bbm)->remove_finput(name);
-		(*bbm)->remove_output(name);
-		(*bbm)->remove_signal(name);
-	}
-}
 
 void RTLModule::verifyConnections(const Allocation *alloc) const {
 
@@ -1036,61 +982,6 @@ void RTLOp::setOperand(int i, RTLSignal *s) {
     }
 
     operands[i] = s;
-}
-
-void RTLBBModule::remove_input(std::string name) {
-	signal_iterator i = inputs.begin();
-	while (i != inputs.end()) {
-	    if ((*i)->getName() == name) {
-	        i = inputs.erase(i);
-	    } else {
-	        ++i;
-	    }
-	}
-}
-
-void RTLBBModule::remove_finput(std::string name) {
-	signal_iterator i = finputs.begin();
-	while (i != finputs.end()) {
-	    if ((*i)->getName() == name) {
-	        i = finputs.erase(i);
-	    } else {
-	        ++i;
-	    }
-	}
-}
-
-void RTLBBModule::remove_output(std::string name) {
-	signal_iterator i = outputs.begin();
-	while (i != outputs.end()) {
-	    if ((*i)->getName() == name) {
-	        i = outputs.erase(i);
-	    } else {
-	        ++i;
-	    }
-	}
-}
-
-void RTLBBModule::remove_signal(std::string name) {
-	signal_iterator i = signals.begin();
-	while (i != signals.end()) {
-	    if ((*i)->getName() == name) {
-	        i = signals.erase(i);
-	    } else {
-	        ++i;
-	    }
-	}
-}
-
-void RTLBBModule::remove_module(std::string name) {
-	module_iterator i = modules.begin();
-	while (i != modules.end()) {
-	    if ((*i)->getName() == name) {
-	        i = modules.erase(i);
-	    } else {
-	        ++i;
-	    }
-	}
 }
 
 } // End legup namespace

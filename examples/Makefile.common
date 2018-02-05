@@ -109,7 +109,6 @@ endif # LLVM_PROFILE
 
 ifdef ALWAYS_INLINE
 	$(FRONT_END) $(NAME)_labeled.c -emit-llvm -c $(CFLAG) $(CLANG_FLAG) -o $(NAME).prelto.inline.bc
-	#$(LLVM_HOME)opt -always-inline < $(NAME).prelto.inline.bc > $(NAME).prelto.1.bc
 	$(LLVM_HOME)opt -inline -inline-threshold=10000000 < $(NAME).prelto.inline.bc > $(NAME).prelto.1.bc
 else
 	$(FRONT_END) $(NAME)_labeled.c -emit-llvm -c $(CFLAG) $(CLANG_FLAG) -o $(NAME).prelto.1.bc
@@ -173,11 +172,14 @@ endif # DEBUG_KEEP_VARS_IN_MEM
 
 	# produces textual bitcodes: $(NAME).prelto.1.ll $(NAME).prelto.ll $(NAME).ll
 	$(LLVM_HOME)llvm-dis $(NAME).prelto.linked.bc
+	$(LLVM_HOME)llvm-dis $(NAME).prelto.linked.1.bc
 	$(LLVM_HOME)llvm-dis $(NAME).prelto.6.bc
 	$(LLVM_HOME)llvm-dis $(NAME).prelto.bc
-	$(LLVM_HOME)llvm-dis $(NAME).postlto.bc
+
 	$(LLVM_HOME)llvm-dis $(NAME).postlto.6.bc
 	$(LLVM_HOME)llvm-dis $(NAME).postlto.8.bc
+	$(LLVM_HOME)llvm-dis $(NAME).postlto.bc
+
 	$(LLVM_HOME)llvm-dis $(NAME).1.bc
 	$(LLVM_HOME)llvm-dis $(NAME).bc
 
@@ -396,7 +398,11 @@ endif
 # Run FPGA mapper
 q: $(VFILE)
 ifeq ($(XILINX),1)  
+ifeq ($(VIVADO),1)
+	vivado -mode batch -nojournal -nolog -source $(LEVEL)/synth_proj_vivado.tcl -tclargs $(FAMILY) $(FPGA_BOARD) $(NAME)
+else
 	xtclsh <<< "project open top; process run \"Synthesize - XST\" -force rerun_all; if {[lsearch [list \"out_of_date\" \"errors\" \"never_run\" \"aborted\"] [string tolower [process get \"Synthesize - XST\" status]]] >= 0} {exit 1} "
+endif
 else
 	quartus_map $(LEGUP_QUARTUS_64BIT) top -l $(VERILOG_LIB_DIR) --source=$(VFILE) --family=$(FAMILY)	
 endif

@@ -142,8 +142,6 @@ public:
     DebugType* debugType;
 
 	//TMR
-	bool getDependence() const { return dep; }
-	void setDependence(bool _dep) { dep = _dep; }
 	unsigned getPartID() { return partID; }
 	void setPartID(unsigned _id) { partID = _id; }
     
@@ -222,7 +220,6 @@ Allocation *alloc;
     std::string name;
     bool ROM;
     SCOPE scope;
-    bool dep;
     PhysicalRAM *phyRAM;
     // if RAM is used by multiple threads
     // multiple instances are created

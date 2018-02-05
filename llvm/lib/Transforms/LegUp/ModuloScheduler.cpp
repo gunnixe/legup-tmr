@@ -154,13 +154,7 @@ bool ModuloScheduler::check_for_legup_label(BasicBlock *bb) {
 int ModuloScheduler::delay(Instruction *I) {
 
     if (isa<PHINode>(I)) {
-    	//InstructionNode *iNode = dag->getInstructionNode(I);
-		//if(LEGUP_CONFIG->getParameterInt("TMR") &&
-		//		LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4 &&
-		//		iNode->getBackward()) {
-		//	return 1;
-		//else
-        	return 0;
+        return 0;
     }
 
     if (isa<BitCastInst>(I)) {
@@ -183,18 +177,6 @@ int ModuloScheduler::delay(Instruction *I) {
     */
 
     int latency = Scheduler::getNumInstructionCycles(I);
-	//if (LEGUP_CONFIG->getParameterInt("TMR") &&
-	//		LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4 &&
-	//		isa<LoadInst>(I) &&
-	//		LEGUP_CONFIG->getParameterInt("LOCAL_RAMS")) {
-	//	RAM *localRam = alloc->getLocalRamFromInst(I);
-	//	if (localRam) {
-	//		if (localRam->getScope() == RAM::LOCAL) {
-	//			++latency;
-	//		}
-	//	}
-	//}
-
 
     if (latency > 0) {
         return latency;
@@ -775,10 +757,6 @@ int ModuloScheduler::getCycleRecMII(std::list<Instruction *> &path) {
         // operations is 0 then the recMII for that path will be 0...
         if (isa<PHINode>(I)) {
             cycleDelay++;
-			// TMR - registered voter
-			if (LEGUP_CONFIG->getParameterInt("TMR") && 
-			    LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4)
-				cycleDelay++;
         }
         File() << "delay: " << cycleDelay << " I: " << *I << "\n";
     }

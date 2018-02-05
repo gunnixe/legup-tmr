@@ -792,11 +792,6 @@ int RAM::getLatency(Allocation *alloc) {
         if (alloc->isGlobalRams.find(R) == alloc->isGlobalRams.end()) {
             // local ram
             latency = constraint;
-			//if (LEGUP_CONFIG->getParameterInt("TMR") &&
-			//		LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4 &&
-			//		LEGUP_CONFIG->getParameterInt("USE_REG_VOTER_FOR_LOCAL_RAMS")) {
-			//	++latency;
-			//}
 
             // If these local RAMs can be sources of multi-cycle paths, each load
             // will need a unique output register. This can be done by reducing the
@@ -809,9 +804,9 @@ int RAM::getLatency(Allocation *alloc) {
                 --latency;
             }
         } else {
-           	// global RAM take 1 off latency
-           	// (1 cycle is taken by the memory controller)
-           	latency = constraint-1;
+            // global RAM take 1 off latency
+            // (1 cycle is taken by the memory controller)
+            latency = constraint-1;
         }
     }
     return latency;

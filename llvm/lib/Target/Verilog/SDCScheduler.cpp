@@ -38,28 +38,6 @@ SDCScheduler::SDCScheduler(Allocation *alloc) : lp(0), map(0), alloc(alloc) {
   SDCdebug = LEGUP_CONFIG->getParameterInt("SDC_DEBUG");
 }
 
-unsigned SDCScheduler::getNumInstructionCycles(Instruction *instr) {
-	unsigned ret = Scheduler::getNumInstructionCycles(instr);
-
-	InstructionNode *iNode = dag->getInstructionNode(instr);
-	if (LEGUP_CONFIG->getParameterInt("TMR") && 
-			LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==4) {
-		if (isa<PHINode>(instr) && iNode->getBackward())
-			++ret;
-		//else if (isa<LoadInst>(instr)) {
-		//	if (LEGUP_CONFIG->getParameterInt("LOCAL_RAMS") &&
-		//			LEGUP_CONFIG->getParameterInt("USE_REG_VOTER_FOR_LOCAL_RAMS")) {
-		//		RAM *localRam = alloc->getLocalRamFromInst(instr);
-		//		if (localRam) {
-		//			if (localRam->getScope() == RAM::LOCAL)
-		//				++ret;
-		//		}
-		//	}
-		//}
-	}
-	return ret;
-}
-
 void SDCScheduler::createLPVariables(Function *F) {
   
   // iterate over all BBs
@@ -71,12 +49,12 @@ void SDCScheduler::createLPVariables(Function *F) {
       numInst++;
       InstructionNode* iNode = dag->getInstructionNode(i);
       startVariableIndex[iNode] = numVars;
-      int latency = getNumInstructionCycles(i);
+      int latency = Scheduler::getNumInstructionCycles(i);
       endVariableIndex[iNode] = numVars + latency;
       numVars += (1 + latency);
 #if 0
-      if (getNumInstructionCycles(i))
-	printf("OPCODE: %s CYCLES: %d\n", i->getOpcodeName(), getNumInstructionCycles(i));
+      if (Scheduler::getNumInstructionCycles(i))
+	printf("OPCODE: %s CYCLES: %d\n", i->getOpcodeName(), Scheduler::getNumInstructionCycles(i));
 #endif
       
     }
@@ -273,8 +251,8 @@ void SDCScheduler::addTimingConstraints(InstructionNode *Root,
     // don't constraint multi-cycle operations
     // dependency has more than 1 cycle latency, so this dependency will
     // already be in another cycle.
-    if (getNumInstructionCycles(Root->getInst()) > 0) return;
-    if (getNumInstructionCycles(Curr->getInst()) > 0) return;
+    if (Scheduler::getNumInstructionCycles(Root->getInst()) > 0) return;
+    if (Scheduler::getNumInstructionCycles(Curr->getInst()) > 0) return;
 
     // Walk through the dependencies
     for (InstructionNode::iterator i = Curr->dep_begin(),
@@ -282,15 +260,10 @@ void SDCScheduler::addTimingConstraints(InstructionNode *Root,
 
         // dependency from depNode -> Curr
         InstructionNode *depNode = *i;
-        if (getNumInstructionCycles(depNode->getInst()) > 0)
+        if (Scheduler::getNumInstructionCycles(depNode->getInst()) > 0)
             continue;
 
-		float depDelay = depNode->getDelay();
-		// FIXME - special case to reduce application's latency
-		//if (isa<GetElementPtrInst>(Curr->getInst()) && isa<PHINode>(depNode->getInst()))
-		//	depDelay = 0.0;
-
-        float delay = PartialPathDelay + depDelay;
+        float delay = PartialPathDelay + depNode->getDelay();
         unsigned cycleConstraint = ceil(delay / clockPeriodConstraint);
 
         if (cycleConstraint > 0)
@@ -309,15 +282,6 @@ void SDCScheduler::addTimingConstraints(InstructionNode *Root,
 
             add_constraintex(lp, 2, val, col, GE, cycleConstraint);
 
-			// move voter from dep to Curr
-			//if (LEGUP_CONFIG->getParameterInt("TMR")
-			//		&& LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==3
-			//		&& depNode->getBackward()) {
-			//	depNode->setBackward(false);
-			//	Curr->setBackward(true);
-			//}
-
-            //if (isa<PHINode>(depNode->getInst())) printf("CYCLE CONSTRAINT: %u BETWEEN %d %d (delay: %f period: %f)\n",
             if (SDCdebug) printf("CYCLE CONSTRAINT: %u BETWEEN %d %d (delay: %f period: %f)\n",
                     cycleConstraint, col[1], col[0], delay, clockPeriodConstraint);
         } else {
@@ -338,7 +302,6 @@ void SDCScheduler::addTimingConstraints(Function *F) {
     for (BasicBlock::iterator i = b->begin(), ie = b->end(); i != ie; i++) {
 
       InstructionNode* iNode = dag->getInstructionNode(i);
-      //std::cout << getValueStr(i) << "\n";
       addTimingConstraints(iNode, iNode, iNode->getDelay());
 
     }
@@ -619,7 +582,7 @@ void SDCScheduler::addALAPConstraints(Function *F) {
               // this instruction isn't a terminator
               // and it has no dependencies
               REAL endState = endIdx - startIdx;
-              int latency = getNumInstructionCycles(i);
+              int latency = Scheduler::getNumInstructionCycles(i);
               assert(endState == latency);
               add_constraintex(lp, 1, val, col, EQ, endState);
               if (SDCdebug)
@@ -665,7 +628,7 @@ void SDCScheduler::depositSchedule(Function *F) {
       // except for pipelining where iterative modulo scheduling has already
       // handled multi-cycle instructions
       if (!pipelined) {
-          stateAssigned += getNumInstructionCycles(i);
+          stateAssigned += Scheduler::getNumInstructionCycles(i);
       }
 
       if (stateAssigned > numStatesInBB) {

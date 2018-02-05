@@ -60,6 +60,9 @@ int set_dcache_type(ClientData clientData, Tcl_Interp *interp, int
 
 int set_operation_attributes(ClientData clientData, Tcl_Interp *interp, int
 	argc, const char *argv[]);
+
+int set_function_attributes(ClientData clientData, Tcl_Interp *interp, int
+	argc, const char *argv[]);
 	
 int set_device_specs(ClientData clientData, Tcl_Interp *interp, int
 	argc, const char *argv[]);

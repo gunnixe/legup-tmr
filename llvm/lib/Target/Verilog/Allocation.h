@@ -230,6 +230,7 @@ public:
     raw_fd_ostream &getPipeliningRTLFile() { return pipeliningRTLFile; }
     raw_fd_ostream &getGenerateRTLFile() { return generateRTLFile; }
     raw_fd_ostream &getTimingReportFile() { return TimingReportFile; }
+    raw_fd_ostream &getPartitionFile() { return partitionFile; }
 
     bool useExplicitDSP(Instruction *I);
     //void getSynchronizationUsage (std::map<std::string, std::set<std::string> > &syncMap) const;
@@ -256,6 +257,16 @@ public:
 
     // Propagating Signals Functions
     PropagatingSignals *getPropagatingSignals() { return propagatingSignals; }
+	void dbgPrintFunctionToRams(std::string comment);
+
+	//TMR
+	RTLModule *getRTLModule(std::string name) {
+		for (rtl_iterator i = rtlList.begin(); i != rtlList.end(); ++i) {
+			if ((*i)->getName() == name)
+				return *i;
+		}
+		return NULL;
+	}
 
 private:
   void allocateGlobalVarRAMs();
@@ -285,7 +296,8 @@ private:
 
     // map which associates a function to all of the RAMs
     // it needs to connect to
-    std::map<Function *, std::set<RAM *>> functionToRams;
+    std::map<Function *, std::set<RAM *> > functionToRams;
+ 
 
     std::set<Function *> functionsWithNoPointsToSet;
 
@@ -329,7 +341,7 @@ private:
     
     raw_fd_ostream memoryFile, bindingFile, patternFile, schedulingFile,
                    multipumpingFile, pipelineDotFile, pipeliningRTLFile,
-                   TimingReportFile, generateRTLFile;
+                   TimingReportFile, generateRTLFile, partitionFile;
     std::map<Function*, std::set<Instruction*> > same_inputs;
     void detect_multipliers_with_identical_inputs();
     std::list<GenerateRTL::PATH*> pathList;
@@ -507,6 +519,7 @@ public:
     std::vector<PropagatingSignal *> getPropagatingSignalsForFunctionNamed(std::string name);
     std::vector<PropagatingSignal *> getPropagatingSignalsForFunctionsWithNames(std::vector<std::string> names);
     bool functionUsesMemory(std::string name);
+    bool functionUsesMemoryForConnection(std::string name);
 
 private:
     PropagatingSignals(){}

@@ -27,14 +27,6 @@ Allocation* Scheduler::alloc = NULL;
 // complete
 unsigned Scheduler::getNumInstructionCycles(Instruction *instr) {
 
-	// TMR - insert pipelined voter
-	//if (LEGUP_CONFIG->getParameterInt("TMR")) {
-	//	//if (LEGUP_CONFIG->getParameterInt("SYNC_VOTER_MODE")==1 && isa<PHINode>(instr))
-	//	//	return 1;
-	//	if (LEGUP_CONFIG->getParameterInt("LOCAL_RAMS") && isa<LoadInst>(instr))
-	//		return 2;
-	//}
-
     // store should always have 1 cycle of latency (unlike a load)
     if (isa<StoreInst>(instr)) {
         return 1;

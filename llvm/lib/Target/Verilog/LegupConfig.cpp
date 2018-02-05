@@ -23,7 +23,7 @@ static LegupConfig LegupConfigObj;
 
 LegupConfig *LEGUP_CONFIG = &LegupConfigObj;
 
-#define NUM_PARAMETERS 147
+#define NUM_PARAMETERS 142
 const std::string validParameters[NUM_PARAMETERS] = {
     "ALIAS_ANALYSIS", "CLOCK_PERIOD", "DEBUG_MODULO_DEPENDENT",
     "DEBUG_MODULO_TABLE", "DEBUG_PERTURBATION", "DEBUG_VERIFY_INCR_SDC",
@@ -58,15 +58,17 @@ const std::string validParameters[NUM_PARAMETERS] = {
 
 	// Added for TMR
     "TMR", "SYNC_VOTER_MODE", "PART_VOTER_MODE",
-	"DEBUG_TMR", "PARTITION_AREA_LIMIT",
+	"DEBUG_TMR",
 	"PART_AREA_MARGIN_PERCENTAGE",
 	"NUMBER_OF_PARTITIONS", "EXTRACT_PART_VOTERS",
 	"VIVADO_FLOW", "SEQUENTIAL_PART_VOTER",
-	"EBIT_FOR_SYNC_VOTER", "EBIT_FOR_PART_VOTER", "EBIT_MODE",
-	"MERGE_PVOTER_WITH_SVOTER", "SEPERATE_BB_CTRL",
-	"VOTER_BEFORE_FSM", "USE_REG_VOTER_FOR_LOCAL_RAMS",
-	"PARTITION_SHARED_RESOURCES", "EBIT_PIPELINED",
-	"NO_VOTER_AREA_ESTIMATE", "PARTITION_WITH_DATA_WIDTH",
+	"EBIT_MODE",
+	"MERGE_PVOTER_WITH_SVOTER",
+	"USE_REG_VOTER_FOR_LOCAL_RAMS",
+	"NO_VOTER_AREA_ESTIMATE",
+	"FLATTEN_HIERARCHY",
+	"SELECT_TARGET_NODE_MODE",
+	"USER_REPORT",
 
 	// DEBUG
     "INSPECT_DEBUG",                   // Inspect debugger: Populate database.
@@ -313,15 +315,15 @@ bool LegupConfig::populateStringsForBinaryOperator(Instruction *instr,
         errs() << "Invalid operator type!\n";
     }
 
-    switch (instr->getOpcode()) {
-    case Instruction::SRem:
-    case Instruction::SDiv:
-    case Instruction::URem:
-    case Instruction::UDiv:
-        if (isSecondOperandConstant(instr))
-        	params[2] = "const";
-		break;
-	}
+    //switch (instr->getOpcode()) {
+    //case Instruction::SRem:
+    //case Instruction::SDiv:
+    //case Instruction::URem:
+    //case Instruction::UDiv:
+    //    if (isSecondOperandConstant(instr))
+    //    	params[2] = "const";
+	//	break;
+	//}
 
     return !isBinaryOperatorNoOp(instr);
 }
@@ -549,7 +551,7 @@ int findMatchingConstraint(std::string FuName,
         }
     }
     // errs() << FuName << " (closest tcl constraint: " << longestMatch
-    //    << "=" << finalConstraint << ")\n";
+    //    << ")\n";
 
     *constraint = finalConstraint;
 

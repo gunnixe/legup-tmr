@@ -1,6 +1,7 @@
 source ../../config.tcl
 
 #set_parameter CLOCK_PERIOD 5
+set_parameter LOCAL_RAMS 0
 
 
 #set_parameter SDC_NO_CHAINING 1

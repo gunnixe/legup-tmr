@@ -71,6 +71,25 @@ private:
 // passes
 extern LegupConfig *LEGUP_CONFIG;
 
+class FuncOperation {
+public:
+  FuncOperation() {}
+
+  FuncOperation(int LUTs, int REGs, int BRAMs, int DSPs)
+    : LUTs(LUTs), REGs(REGs), BRAMs(BRAMs), DSPs(DSPs) {}
+
+  int getLUTs() { return LUTs; }
+  int getREGs() { return REGs; }
+  int getBRAMs() { return BRAMs; }
+  int getDSPs() { return DSPs; }
+
+private:
+  int LUTs;
+  int REGs;
+  int BRAMs; //BRAM18
+  int DSPs;
+};
+
 class Operation {
 public:
   Operation() {}
@@ -519,6 +538,12 @@ public:
       maxLatency = Latency;
   }
 
+  void addFunction(const std::string func_name, const int LUTs,
+                    const int REGs, const int BRAMs,
+                    const int DSPs) {
+    FuncOperations[func_name] = new FuncOperation(LUTs, REGs, BRAMs, DSPs);
+  }
+
   void setDeviceSpecs(const std::string _DeviceFamily,
                       const std::string _Device, const int _maxLEs,
                       const int _maxM4Ks, const int _maxRAMBits,
@@ -577,6 +602,15 @@ public:
     assert(0);
   }
 
+  void check_func_exists(const std::string func_name) {
+    if (FuncOperations.find(func_name) != FuncOperations.end()) {
+      return;
+    }
+    errs() << "Error: Couldn't find function '" << func_name
+           << "' in function tcl file!\n";
+    assert(0);
+  }
+
   Operation *getOperationRef(const std::string op_name) {
     int latency;
     getOperationLatency(op_name, &latency);
@@ -591,6 +625,11 @@ public:
     check_op_exists(op_name, latency);
     const std::pair<std::string, int> op = std::make_pair(op_name, latency);
     return *Operations[op];
+  }
+
+  FuncOperation *getFuncOperation(const std::string func_name) {
+    check_func_exists(func_name);
+    return FuncOperations[func_name];
   }
 
   int getMaxM4Ks() { return maxM4Ks; }
@@ -632,6 +671,7 @@ private:
   std::map<std::string, std::string> parameters;
   std::map<std::string, std::string> userSpecifiedGlobalRAMs;
   std::map<std::pair<std::string, int>, Operation *> Operations;
+  std::map<std::string, FuncOperation *> FuncOperations;
   std::map<std::string, int> cacheParameters;
   std::string dcacheType;
   std::string DeviceFamily;

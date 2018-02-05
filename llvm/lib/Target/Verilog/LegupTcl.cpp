@@ -331,6 +331,36 @@ int debugger_capture_mode(ClientData clientData, Tcl_Interp *interp, int argc,
   return (TCL_OK);
 }
 
+/// set_function_attributes - tcl command to add hardware function data
+int set_function_attributes(ClientData clientData, Tcl_Interp *interp,
+                             int argc, const char *argv[]) {
+  static char error[100];
+  if (argc != 11) {
+    sprintf(error, "%s", "Expecting 11 arguments.");
+    interp->result = error;
+    return (TCL_ERROR);
+  }
+  LegupConfig *config = (LegupConfig *)clientData;
+
+  // check arguments are correct
+  if (!checkArg(argv, 2, "-Name", error) ||
+      !checkArg2(argv, 4, "-LUTs", "-ALUTs", error) ||
+      !checkArg(argv, 6, "-REGs", error) ||
+      !checkArg(argv, 8, "-BRAMs", error) ||
+      !checkArg(argv, 10, "-DSPs", error)) {
+    interp->result = error;
+    return (TCL_ERROR);
+  }
+
+  int LUTs = atoi(argv[4]);
+  int REGs = atoi(argv[6]);
+  int BRAMs = atoi(argv[8]);
+  int DSPs = atoi(argv[10]);
+
+  config->addFunction(argv[2], LUTs, REGs, BRAMs, DSPs);
+  return (TCL_OK);
+}
+
 /// set_operation_attributes - tcl command to add hardware operation data
 int set_operation_attributes(ClientData clientData, Tcl_Interp *interp,
                              int argc, const char *argv[]) {
@@ -794,6 +824,10 @@ Tcl_Interp *setupTcl(LegupConfig *legupConfig) {
                     legupConfig, 0);
   Tcl_CreateCommand(interp, "set_operation_attributes",
                     set_operation_attributes, legupConfig, 0);
+  //added for TLegUp function-level partitioning
+  Tcl_CreateCommand(interp, "set_function_attributes",
+                    set_function_attributes, legupConfig, 0);
+  //
   Tcl_CreateCommand(interp, "set_device_specs", set_device_specs, legupConfig,
                     0);
   Tcl_CreateCommand(interp, "set_parameter", set_parameter, legupConfig, 0);

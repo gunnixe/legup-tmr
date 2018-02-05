@@ -18,7 +18,6 @@
 #include "Scheduler.h"
 #include "Allocation.h"
 #include "llvm/IR/Instruction.h"
-#include "llvm/Analysis/CFG.h"
 #include <map>
 
 using namespace llvm;
@@ -254,9 +253,6 @@ class SchedulerMapping;
     void addMultipumpConstraints(Function *F);
     bool isDependent(InstructionNode *source, InstructionNode *dest);
     void add_lp_constraints_for_sdc_multipump(Function *F);
-
-	//TMR
-	unsigned getNumInstructionCycles(Instruction *instr);
 
     unsigned* maxCycle;
     Allocation *alloc;

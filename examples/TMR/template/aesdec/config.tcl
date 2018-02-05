@@ -1,6 +1,6 @@
 source ../../config.tcl
 
-set_parameter LOCAL_RAMS 0
+#set_parameter LOCAL_RAMS 0
 set_parameter GROUP_RAMS 1
 set_parameter GROUP_RAMS_SIMPLE_OFFSET 1
 set_parameter CASE_FSM 1
