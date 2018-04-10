@@ -7,7 +7,7 @@ use POSIX;
 #$emode = 0;
 
 my $DEST = output;
-my $START_CNT = 15;
+my $START_CNT = 1;
 my $SYN_TOP = top;
 my $PNR_TOP = top;
 my $TEMPLATE = template;
@@ -404,6 +404,7 @@ sub make_function_library {
 	}
 	close(FHL);
 
+	system("mkdir -p ../../$LIB_DIR") if(!-d "../../$LIB_DIR");
 	my $func_rpt = "../../$LIB_DIR/Artix7_$fname.tcl";
 	open(FHL, '>', $func_rpt) or die "cannot open '$func_rpt' $!";
 	

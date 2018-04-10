@@ -25,6 +25,7 @@
 #include <vector>
 #include <iostream>
 #include <fstream>
+#include <iomanip>
 #include <cmath>
 #include "llvm/Support/FileSystem.h"
 
@@ -3123,12 +3124,21 @@ void VerilogWriter::makePartModuleWithSigPartitions(RTLModule *rtl) {
 
 void VerilogWriter::makeUserReportPartition() {
 	unsigned k = LEGUP_CONFIG->getParameterInt("NUMBER_OF_PARTITIONS");
-	PartFile() << "\n\n# partition result\n";
-	PartFile() << "-------------------------------------------------------\n";
-	PartFile() << "User given k = " << k << "\n";
-	PartFile() << "Calculated area constraint (frames) = " << ConstrainedFrames << "\n";
-	PartFile() << "Final number of partitions = " << Partitions.size() << "\n";
-	PartFile() << "[part_id]function_name(frames/sync_voters/part_voters)\n";
+	std::ostringstream stm;
+	stm << "\n\n# partition result\n";
+	stm << "---------------------------------------------------------------------------\n";
+	stm << "User given k = " << k << "\n";
+	stm << "Calculated area constraint (frames) = " << ConstrainedFrames << "\n";
+	stm << "Final number of partitions = " << Partitions.size() << "\n";
+	stm << "---------------------------------------------------------------------------\n";
+	stm << "| " << std::right << std::setw(7) << "part_id" << " "
+	    << "| " << std::setw(6) << "frames" << " "
+	    << "| " << std::setw(11) << "sync_voters" << " "
+	    << "| " << std::setw(11) << "part_voters" << " "
+	    << "| " << std::left << std::setw(24) << "function_name" << " "
+		<< "|\n";
+	stm << "---------------------------------------------------------------------------\n";
+
 	for (unsigned p=0; p<Partitions.size(); p++) {
 		unsigned tFrm = 0;
 		unsigned tSV = 0;
@@ -3137,24 +3147,26 @@ void VerilogWriter::makeUserReportPartition() {
 			std::string iname = InstanceMap[i]->getModule()->getInstName();
 			unsigned pid = InstanceMap[i]->getPartID();
 			if (pid==p) {
-				PartFile() << "[" << p << "]" << iname << "(" 
-			               << getFunctionArea(iname)
-			               << "/" << getSyncVoterArea(i)
-			               << "/" << getPartVoterArea(i)
-				           << ")\n";
+				stm << "| " << std::right << std::setw(7) << p << " "
+			        << "| " << std::setw(6) << getFunctionArea(iname) << " "
+			        << "| " << std::setw(11) << getSyncVoterArea(i) << " "
+			        << "| " << std::setw(11) << getPartVoterArea(i) << " "
+                    << "| " << std::left << std::setw(24) << iname << " " 
+				    << "|\n";
 				tFrm += getFunctionArea(iname);
 				tSV += getSyncVoterArea(i);
 				tPV += getPartVoterArea(i);
 			}
 		}
-		PartFile() << "    Total frames      of [" << p << "] = " << tFrm << "\n";
-		PartFile() << "    Total sync voters of [" << p << "] = " << tSV << "\n";
-		PartFile() << "    Total part voters of [" << p << "] = " << tPV << "\n";
+		stm << "---------------------------------------------------------------------------\n";
+		stm << "    Total frames      of [" << p << "] = " << std::right << std::setw(6) << tFrm << "\n";
+		stm << "    Total sync voters of [" << p << "] = " << std::setw(6) << tSV << "\n";
+		stm << "    Total part voters of [" << p << "] = " << std::setw(6) << tPV << "\n";
+		stm << "---------------------------------------------------------------------------\n";
 	}
-	PartFile() << "-------------------------------------------------------\n";
 
-	PartFile() << "\n\n# connections between partitions\n";
-	PartFile() << "-------------------------------------------------------\n";
+	stm << "\n\n# connections between partitions\n";
+	stm << "-------------------------------------------------------------------------\n";
 	unsigned size = Partitions.size();
 	unsigned c[64][64] = {0};
 	assert(size<=64);
@@ -3171,16 +3183,26 @@ void VerilogWriter::makeUserReportPartition() {
 	for (unsigned i=0; i<size; i++) {
 		for (unsigned j=0; j<size; j++) {
 			int w = c[i][j] + c[j][i];
-			PartFile() << "[" << i << "][" << j << "] = " << w << "\n";
+			stm << "[" << i << "][" << j << "] = " << w << "\n";
 		}
 	}
-	PartFile() << "-------------------------------------------------------\n";
+	stm << "-------------------------------------------------------------------------\n";
+	PartFile() << stm.str();
 }
 
 void VerilogWriter::makeUserReportCallGraph() {
-	PartFile() << "\n\n# call graph nodes\n";
-	PartFile() << "-------------------------------------------------------\n";
-	PartFile() << "| id | function_name | LUT | REG | DSP | MEM | Frames |\n";
+	std::ostringstream stm;
+	stm << "\n\n# call graph nodes\n";
+	stm << "----------------------------------------------------------------------------------\n";
+	stm << "| " << std::right << std::setw(6) << "id" << " "
+	    << "| " << std::setw(6) << "LUT" << " "
+	    << "| " << std::setw(6) << "REG" << " "
+	    << "| " << std::setw(6) << "DSP" << " "
+	    << "| " << std::setw(6) << "MEM" << " "
+	    << "| " << std::setw(6) << "Frames" << " "
+	    << "| " << std::left << std::setw(24) << "function_name" << " "
+		<< "|\n";
+	stm << "----------------------------------------------------------------------------------\n";
 	for (int v=0; v<CallGraph->getSize(); v++) {
 		std::string name = InstanceMap[v]->getModule()->getInstName();
 		FuncOperation *FuncOp = LEGUP_CONFIG->getFuncOperation(name);
@@ -3189,20 +3211,24 @@ void VerilogWriter::makeUserReportCallGraph() {
 		unsigned MEMs = FuncOp->getBRAMs();
 		unsigned DSPs = FuncOp->getDSPs();
 
-		PartFile() << "| " << v << " ";
-		PartFile() << "| " << name << " ";
-		PartFile() << "| " << LUTs << " ";
-		PartFile() << "| " << REGs << " ";
-		PartFile() << "| " << DSPs << " ";
-		PartFile() << "| " << MEMs << " ";
-		PartFile() << "| " << getFunctionArea(name) << " ";
-		PartFile() << "|\n";
+		stm << "| " << std::right << std::setw(6) << v << " ";
+		stm << "| " << std::setw(6) << LUTs << " ";
+		stm << "| " << std::setw(6) << REGs << " ";
+		stm << "| " << std::setw(6) << DSPs << " ";
+		stm << "| " << std::setw(6) << MEMs << " ";
+		stm << "| " << std::setw(6) << getFunctionArea(name) << " ";
+		stm << "| " << std::left << std::setw(24) << name << " ";
+		stm << "|\n";
 	}
-	PartFile() << "-------------------------------------------------------\n";
+	stm << "----------------------------------------------------------------------------------\n";
 
-	PartFile() << "\n\n# call graph edges\n";
-	PartFile() << "-------------------------------------------------------\n";
-	PartFile() << "| source_id | target_id | edge_weight |\n";
+	stm << "\n\n# call graph edges\n";
+	stm << "-------------------------------------\n";
+	stm << "| " << std::right << std::setw(9) << "source_id" << " "
+	    << "| " << std::setw(9) << "target_id" << " "
+	    << "| " << std::setw(9) << "weight" << " "
+		<< "|\n";
+	stm << "-------------------------------------\n";
 
 	for (int v=0; v<CallGraph->getSize(); v++) {
 		RTLModule *caller = ModuleMap[v];
@@ -3218,13 +3244,14 @@ void VerilogWriter::makeUserReportCallGraph() {
     	    		sigWidth += (*s)->getWidth().numBits(caller, alloc);
 				}
 			}
-			PartFile() << "| " << v << " ";
-			PartFile() << "| " << *i << " ";
-			PartFile() << "| " << sigWidth << " ";
-			PartFile() << "|\n";
+			stm << "| " << std::setw(9) << v << " ";
+			stm << "| " << std::setw(9) << *i << " ";
+			stm << "| " << std::setw(9) << sigWidth << " ";
+			stm << "|\n";
 		}
 	}
-	PartFile() << "-------------------------------------------------------\n";
+	stm << "-------------------------------------\n";
+	PartFile() << stm.str();
 }
 
 
